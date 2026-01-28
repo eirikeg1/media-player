@@ -1,9 +1,9 @@
-import { Image, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { FavoriteStar } from '@/components/domain/live/favorite-star';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
-import { FavoriteStar } from '@/components/domain/live/favorite-star';
 import { getChannelId } from '@/lib/channel-utils';
 import type { Channel } from '@/types/playlist.types';
+import { Image, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 interface ChannelItemProps {
   channel: Channel;

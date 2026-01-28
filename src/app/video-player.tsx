@@ -3,9 +3,9 @@ import { useLayoutEffect, useRef } from 'react';
 import { BackHandler, StatusBar } from 'react-native';
 
 import { VideoPlayer } from '@/components/domain/video/video-player';
-import { ThemedView } from '@/components/ui/display/themed-view';
-import { ThemedText } from '@/components/ui/display/themed-text';
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
+import { ThemedText } from '@/components/ui/display/themed-text';
+import { ThemedView } from '@/components/ui/display/themed-view';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import type { Channel } from '@/types/playlist.types';
 
