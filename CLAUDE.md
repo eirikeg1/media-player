@@ -7,6 +7,7 @@
 - **DRY**: Don't Repeat Yourself - eliminate code duplication
 - **KISS**: Keep It Simple, Stupid - prefer simple solutions over complex ones
 - **Best Practices**: Always follow established patterns and conventions
+- **Avoid Technical Debt**: Ensure the solutions created are scalable, so that it is easy and clean to extend further down the line
 
 ### Development Approach
 - **Incremental Changes**: Do smaller things at one time
