@@ -1,6 +1,6 @@
-# IPTV Player Mobile
+# Mobile Media Player
 
-This is a basic app to view IPTV streams, such as m3u.
+This is a basic app to watch movies and tv streams. Currently supports m3u playlists.
 
 ## Get started
 
