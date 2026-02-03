@@ -5,6 +5,7 @@ import type {
   UpdatePlaylistInput,
 } from '@/types/playlist.types';
 import { PlaylistService } from '@/services/playlist-service';
+import { RustChannelService } from '@/services/rust-channel-service';
 import { playlistRepository } from '@/db/playlist-repository';
 import { generatePlaylistId, sanitizePlaylistName } from '@/lib/playlist-utils';
 
@@ -33,9 +34,10 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
   addPlaylist: async (input: CreatePlaylistInput) => {
     console.log('[PlaylistStore] addPlaylist called with:', {
       name: input.name,
-      url: input.url?.substring(0, 50) + '...',
       hasCredentials: !!input.credentials,
     });
+    // DEBUG: Log full URL to trace potential corruption
+    console.log('[PlaylistStore] addPlaylist - FULL URL:', input.url);
 
     if (!input.name?.trim()) {
       console.error('[PlaylistStore] Validation failed: name is empty');
@@ -68,28 +70,30 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
         throw new Error(`Playlist from this URL already exists: "${existingPlaylist.name}"`);
       }
 
-      console.log('[PlaylistStore] Fetching and parsing playlist...');
-      const parsedData = await PlaylistService.fetchAndParsePlaylist(
+      const playlistId = generatePlaylistId();
+      const playlistName = sanitizePlaylistName(input.name);
+
+      console.log('[PlaylistStore] Fetching and importing playlist via Rust...');
+      const channelCount = await RustChannelService.fetchAndImportPlaylist(
+        playlistId,
+        playlistName,
         input.url,
         input.credentials
       );
-      console.log('[PlaylistStore] Playlist fetched and parsed successfully');
+      console.log('[PlaylistStore] Playlist fetched and imported successfully');
 
-      console.log('[PlaylistStore] Validating parsed data...');
-      const validation = PlaylistService.validateParsedData(parsedData);
-      if (!validation.valid) {
-        console.error('[PlaylistStore] Validation failed:', validation.errors);
-        throw new Error(validation.errors.join(', '));
+      if (channelCount === 0) {
+        throw new Error('No channels found in playlist. Please verify the M3U format.');
       }
 
       const now = new Date();
       const playlist: Playlist = {
-        id: generatePlaylistId(),
-        name: sanitizePlaylistName(input.name),
+        id: playlistId,
+        name: playlistName,
         url: input.url.trim(),
         credentials: input.credentials,
-        parsedData,
-        channelCount: PlaylistService.getChannelCount(parsedData),
+        // parsedData is no longer stored - channels live in Rust DB
+        channelCount,
         createdAt: now,
         updatedAt: now,
         lastFetchedAt: now,
@@ -132,7 +136,9 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
+      // Delete from both JS repository and Rust database
       await playlistRepository.delete(id);
+      await RustChannelService.deletePlaylist(id);
 
       set((state) => ({
         playlists: state.playlists.filter((p) => p.id !== id),
@@ -183,19 +189,20 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
         throw new Error('Playlist not found');
       }
 
-      const parsedData = await PlaylistService.fetchAndParsePlaylist(
+      console.log('[PlaylistStore] Refreshing playlist via Rust:', id);
+      const channelCount = await RustChannelService.fetchAndImportPlaylist(
+        id,
+        playlist.name,
         playlist.url,
         playlist.credentials
       );
 
-      const validation = PlaylistService.validateParsedData(parsedData);
-      if (!validation.valid) {
-        throw new Error(validation.errors.join(', '));
+      if (channelCount === 0) {
+        throw new Error('No channels found in playlist. Please verify the M3U format.');
       }
 
       const updated = await playlistRepository.update(id, {
-        parsedData,
-        channelCount: PlaylistService.getChannelCount(parsedData),
+        channelCount,
         lastFetchedAt: new Date(),
       });
 
@@ -215,15 +222,15 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      let parsedData;
-      let channelCount;
+      let channelCount: number | undefined;
+      let lastFetchedAt: Date | undefined;
+
+      const playlist = get().getPlaylistById(id);
+      if (!playlist) {
+        throw new Error('Playlist not found');
+      }
 
       if (updates.url || updates.credentials) {
-        const playlist = get().getPlaylistById(id);
-        if (!playlist) {
-          throw new Error('Playlist not found');
-        }
-
         const newUrl = updates.url || playlist.url;
         const newCredentials = updates.credentials || playlist.credentials;
 
@@ -231,20 +238,26 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
           throw new Error('Invalid URL format');
         }
 
-        parsedData = await PlaylistService.fetchAndParsePlaylist(
+        console.log('[PlaylistStore] Re-fetching playlist via Rust:', id);
+        channelCount = await RustChannelService.fetchAndImportPlaylist(
+          id,
+          updates.name ? sanitizePlaylistName(updates.name) : playlist.name,
           newUrl,
           newCredentials
         );
 
-        channelCount = PlaylistService.getChannelCount(parsedData);
+        if (channelCount === 0) {
+          throw new Error('No channels found in playlist. Please verify the M3U format.');
+        }
+
+        lastFetchedAt = new Date();
       }
 
       const updateData: Partial<Playlist> = {
         ...updates,
         ...(updates.name && { name: sanitizePlaylistName(updates.name) }),
-        ...(parsedData && { parsedData }),
         ...(channelCount !== undefined && { channelCount }),
-        ...(parsedData && { lastFetchedAt: new Date() }),
+        ...(lastFetchedAt && { lastFetchedAt }),
       };
 
       const updated = await playlistRepository.update(id, updateData);

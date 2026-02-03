@@ -3,6 +3,7 @@ import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { usePlaylistChannels } from '@/hooks/live/use-playlist-channels';
 import { usePlaylistStore } from '@/states/playlist/playlist-store';
 import { memo, useCallback, useMemo } from 'react';
 import { FlatList, StyleSheet } from 'react-native';
@@ -20,7 +21,7 @@ export const ChannelGroupList = memo(function ChannelGroupList() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const activePlaylist = usePlaylistStore((state) => state.getActivePlaylist());
-  const channels = activePlaylist?.parsedData?.items || [];
+  const { channels } = usePlaylistChannels(activePlaylist?.id);
 
   const groups = useMemo(() => {
     const groupMap = new Map<string, number>();

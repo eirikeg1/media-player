@@ -2,6 +2,7 @@ import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { usePlaylistChannels } from '@/hooks/live/use-playlist-channels';
 import { usePlaylistStore } from '@/states/playlist/playlist-store';
 import type { Channel } from '@/types/playlist.types';
 import { memo, useCallback, useMemo } from 'react';
@@ -20,7 +21,7 @@ export const ChannelList = memo(function ChannelList({ group }: ChannelListProps
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const activePlaylist = usePlaylistStore((state) => state.getActivePlaylist());
-  const allChannels = activePlaylist?.parsedData?.items || [];
+  const { channels: allChannels } = usePlaylistChannels(activePlaylist?.id);
 
   const channels = useMemo(() => {
     if (!group) return allChannels;

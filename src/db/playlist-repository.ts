@@ -1,6 +1,6 @@
 import type { Playlist, Channel } from '@/types/playlist.types';
-import { executeQuery, executeQuerySingle, executeStatement, executeTransaction } from './sqlite-client';
-import { randomUUID } from 'expo-crypto';
+import { executeQuery, executeQuerySingle, executeStatement } from './sqlite-client';
+import { RustChannelService } from '@/services/rust-channel-service';
 
 /**
  * Repository interface for playlist data access
@@ -85,23 +85,18 @@ class InMemoryPlaylistRepository implements IPlaylistRepository {
   }
 
   async getChannelsByPlaylistId(playlistId: string): Promise<Channel[]> {
-    const playlist = this.playlists.get(playlistId);
-    return playlist?.parsedData?.items || [];
+    // Channels are now stored in Rust database
+    return RustChannelService.getChannelsByPlaylistId(playlistId);
   }
 
-  async saveChannels(playlistId: string, channels: Channel[]): Promise<void> {
-    // In-memory implementation: channels are stored in parsedData.items
-    const playlist = this.playlists.get(playlistId);
-    if (playlist && playlist.parsedData) {
-      playlist.parsedData.items = channels as any;
-    }
+  async saveChannels(_playlistId: string, _channels: Channel[]): Promise<void> {
+    // Channels are now managed by Rust - this is a no-op
+    console.log('[InMemoryPlaylistRepository] saveChannels - no-op, channels managed by Rust');
   }
 
   async deleteChannelsByPlaylistId(playlistId: string): Promise<void> {
-    const playlist = this.playlists.get(playlistId);
-    if (playlist && playlist.parsedData) {
-      playlist.parsedData.items = [];
-    }
+    // Channels are now stored in Rust database
+    await RustChannelService.deleteChannelsByPlaylist(playlistId);
   }
 }
 
@@ -205,12 +200,8 @@ class SQLitePlaylistRepository implements IPlaylistRepository {
       'SELECT * FROM playlists ORDER BY createdAt DESC'
     );
 
-    const playlists = await Promise.all(
-      rows.map(async (row) => {
-        const channels = await this.getChannelsByPlaylistId(row.id);
-        return this.rowToPlaylist(row, channels);
-      })
-    );
+    // Don't load channels here - they'll be fetched on-demand from Rust DB
+    const playlists = rows.map((row) => this.rowToPlaylist(row));
 
     console.log('[SQLitePlaylistRepository] Found', playlists.length, 'playlists');
     return playlists;
@@ -228,9 +219,9 @@ class SQLitePlaylistRepository implements IPlaylistRepository {
       return null;
     }
 
-    const channels = await this.getChannelsByPlaylistId(id);
-    console.log('[SQLitePlaylistRepository] Found playlist with', channels.length, 'channels');
-    return this.rowToPlaylist(row, channels);
+    // Don't load channels here - they'll be fetched on-demand from Rust DB
+    console.log('[SQLitePlaylistRepository] Found playlist');
+    return this.rowToPlaylist(row);
   }
 
   async create(playlist: Playlist): Promise<Playlist> {
@@ -240,50 +231,22 @@ class SQLitePlaylistRepository implements IPlaylistRepository {
       channelCount: playlist.channelCount,
     });
 
-    await executeTransaction(async (tx) => {
-      // Insert playlist
-      await tx.runAsync(
-        `INSERT INTO playlists (id, name, url, username, password, channelCount, createdAt, updatedAt, lastFetchedAt)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          playlist.id,
-          playlist.name,
-          playlist.url,
-          playlist.credentials?.username || null,
-          playlist.credentials?.password || null,
-          playlist.channelCount || null,
-          playlist.createdAt.toISOString(),
-          playlist.updatedAt.toISOString(),
-          playlist.lastFetchedAt?.toISOString() || null,
-        ]
-      );
-
-      // Insert channels if they exist
-      if (playlist.parsedData?.items && playlist.parsedData.items.length > 0) {
-        for (const item of playlist.parsedData.items) {
-          const channel = item as any as Channel;
-          await tx.runAsync(
-            `INSERT INTO channels (id, playlistId, name, url, tvgId, tvgName, tvgLogo, tvgCountry, tvgLanguage, tvgUrl, groupTitle, httpReferrer, httpUserAgent)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [
-              randomUUID(),
-              playlist.id,
-              channel.name,
-              channel.url,
-              channel.tvg?.id || null,
-              channel.tvg?.name || null,
-              channel.tvg?.logo || null,
-              channel.tvg?.country || null,
-              channel.tvg?.language || null,
-              channel.tvg?.url || null,
-              channel.group?.title || null,
-              channel.http?.referrer || null,
-              channel.http?.userAgent || null,
-            ]
-          );
-        }
-      }
-    });
+    // Only store playlist metadata - channels are stored in Rust database
+    await executeStatement(
+      `INSERT INTO playlists (id, name, url, username, password, channelCount, createdAt, updatedAt, lastFetchedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        playlist.id,
+        playlist.name,
+        playlist.url,
+        playlist.credentials?.username || null,
+        playlist.credentials?.password || null,
+        playlist.channelCount || null,
+        playlist.createdAt.toISOString(),
+        playlist.updatedAt.toISOString(),
+        playlist.lastFetchedAt?.toISOString() || null,
+      ]
+    );
 
     console.log('[SQLitePlaylistRepository] Playlist created successfully');
     return playlist;
@@ -304,54 +267,22 @@ class SQLitePlaylistRepository implements IPlaylistRepository {
       updatedAt: new Date(),
     };
 
-    await executeTransaction(async (tx) => {
-      // Update playlist metadata
-      await tx.runAsync(
-        `UPDATE playlists
-         SET name = ?, url = ?, username = ?, password = ?, channelCount = ?, updatedAt = ?, lastFetchedAt = ?
-         WHERE id = ?`,
-        [
-          updated.name,
-          updated.url,
-          updated.credentials?.username || null,
-          updated.credentials?.password || null,
-          updated.channelCount || null,
-          updated.updatedAt.toISOString(),
-          updated.lastFetchedAt?.toISOString() || null,
-          id,
-        ]
-      );
-
-      // If channels are updated, replace them
-      if (updates.parsedData?.items) {
-        // Delete existing channels
-        await tx.runAsync('DELETE FROM channels WHERE playlistId = ?', [id]);
-
-        // Insert new channels
-        for (const item of updates.parsedData.items) {
-          const channel = item as any as Channel;
-          await tx.runAsync(
-            `INSERT INTO channels (id, playlistId, name, url, tvgId, tvgName, tvgLogo, tvgCountry, tvgLanguage, tvgUrl, groupTitle, httpReferrer, httpUserAgent)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [
-              randomUUID(),
-              id,
-              channel.name,
-              channel.url,
-              channel.tvg?.id || null,
-              channel.tvg?.name || null,
-              channel.tvg?.logo || null,
-              channel.tvg?.country || null,
-              channel.tvg?.language || null,
-              channel.tvg?.url || null,
-              channel.group?.title || null,
-              channel.http?.referrer || null,
-              channel.http?.userAgent || null,
-            ]
-          );
-        }
-      }
-    });
+    // Only update playlist metadata - channels are managed by Rust
+    await executeStatement(
+      `UPDATE playlists
+       SET name = ?, url = ?, username = ?, password = ?, channelCount = ?, updatedAt = ?, lastFetchedAt = ?
+       WHERE id = ?`,
+      [
+        updated.name,
+        updated.url,
+        updated.credentials?.username || null,
+        updated.credentials?.password || null,
+        updated.channelCount || null,
+        updated.updatedAt.toISOString(),
+        updated.lastFetchedAt?.toISOString() || null,
+        id,
+      ]
+    );
 
     console.log('[SQLitePlaylistRepository] Playlist updated successfully');
     return updated;
@@ -378,52 +309,21 @@ class SQLitePlaylistRepository implements IPlaylistRepository {
   }
 
   async getChannelsByPlaylistId(playlistId: string): Promise<Channel[]> {
-    const rows = await executeQuery<ChannelRow>(
-      'SELECT * FROM channels WHERE playlistId = ?',
-      [playlistId]
-    );
-
-    return rows.map(row => this.rowToChannel(row));
+    // Channels are now stored in Rust database
+    console.log('[SQLitePlaylistRepository] getChannelsByPlaylistId - delegating to Rust:', playlistId);
+    return RustChannelService.getChannelsByPlaylistId(playlistId);
   }
 
-  async saveChannels(playlistId: string, channels: Channel[]): Promise<void> {
-    console.log('[SQLitePlaylistRepository] saveChannels called:', playlistId, channels.length);
-
-    await executeTransaction(async (tx) => {
-      // Delete existing channels
-      await tx.runAsync('DELETE FROM channels WHERE playlistId = ?', [playlistId]);
-
-      // Insert new channels
-      for (const channel of channels) {
-        await tx.runAsync(
-          `INSERT INTO channels (id, playlistId, name, url, tvgId, tvgName, tvgLogo, tvgCountry, tvgLanguage, tvgUrl, groupTitle, httpReferrer, httpUserAgent)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            randomUUID(),
-            playlistId,
-            channel.name,
-            channel.url,
-            channel.tvg?.id || null,
-            channel.tvg?.name || null,
-            channel.tvg?.logo || null,
-            channel.tvg?.country || null,
-            channel.tvg?.language || null,
-            channel.tvg?.url || null,
-            channel.group?.title || null,
-            channel.http?.referrer || null,
-            channel.http?.userAgent || null,
-          ]
-        );
-      }
-    });
-
-    console.log('[SQLitePlaylistRepository] Channels saved successfully');
+  async saveChannels(_playlistId: string, _channels: Channel[]): Promise<void> {
+    // Channels are now managed by Rust - this is a no-op
+    // Channel import happens via RustChannelService.fetchAndImportPlaylist()
+    console.log('[SQLitePlaylistRepository] saveChannels - no-op, channels managed by Rust');
   }
 
   async deleteChannelsByPlaylistId(playlistId: string): Promise<void> {
-    console.log('[SQLitePlaylistRepository] deleteChannelsByPlaylistId called:', playlistId);
-    await executeStatement('DELETE FROM channels WHERE playlistId = ?', [playlistId]);
-    console.log('[SQLitePlaylistRepository] Channels deleted successfully');
+    // Channels are now stored in Rust database
+    console.log('[SQLitePlaylistRepository] deleteChannelsByPlaylistId - delegating to Rust:', playlistId);
+    await RustChannelService.deleteChannelsByPlaylist(playlistId);
   }
 }
 

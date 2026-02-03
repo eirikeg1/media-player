@@ -1,6 +1,7 @@
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
+import { usePlaylistChannels } from '@/hooks/live/use-playlist-channels';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { usePlaylistStore } from '@/states/playlist/playlist-store';
 import type { Channel } from '@/types/playlist.types';
@@ -31,9 +32,10 @@ export function ChannelGrid({
 }: ChannelGridProps) {
   const iconColor = useThemeColor({}, 'icon');
   const activePlaylist = usePlaylistStore((state) => state.getActivePlaylist());
+  const { channels: allChannels } = usePlaylistChannels(activePlaylist?.id);
 
   const filteredChannels = useMemo(() => {
-    let channels = activePlaylist?.parsedData?.items || [];
+    let channels = allChannels;
 
     // Filter by group
     if (selectedGroup) {
@@ -52,7 +54,7 @@ export function ChannelGrid({
     }
 
     return channels;
-  }, [activePlaylist, selectedGroup, searchText]);
+  }, [allChannels, selectedGroup, searchText]);
 
   const handleChannelPress = useCallback(
     (channel: Channel) => {

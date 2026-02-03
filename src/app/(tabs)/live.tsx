@@ -4,6 +4,7 @@ import { useCallback } from 'react';
 import { LiveScreenContent } from '@/components/domain/live/live-screen-content';
 import { useChannelFiltering } from '@/hooks/live/use-channel-filtering';
 import { useFavoriteChannels } from '@/hooks/live/use-favorite-channels';
+import { usePlaylistChannels } from '@/hooks/live/use-playlist-channels';
 import { usePlaylistData } from '@/hooks/live/use-playlist-data';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import type { Channel } from '@/types/playlist.types';
@@ -18,6 +19,7 @@ export default function LiveScreen() {
 
   // Custom hooks for data management
   const { activePlaylist, hasLoadedPlaylist } = usePlaylistData();
+  const { channels, isLoading: isLoadingChannels } = usePlaylistChannels(activePlaylist?.id);
   const {
     favoriteChannels,
     hasLoadedFavorites,
@@ -33,7 +35,7 @@ export default function LiveScreen() {
     searchText,
     handleGroupSelect,
     handleSearchTextChange
-  } = useChannelFiltering(activePlaylist?.parsedData?.items || [], favoriteChannels);
+  } = useChannelFiltering(channels, favoriteChannels);
 
   // Event handlers
   const handleChannelPress = useCallback((channel: Channel) => {
@@ -49,7 +51,7 @@ export default function LiveScreen() {
     });
   }, [router]);
 
-  const isLoading = !hasLoadedPlaylist || !hasLoadedFavorites || isInitialLoading;
+  const isLoading = !hasLoadedPlaylist || !hasLoadedFavorites || isInitialLoading || isLoadingChannels;
 
   return (
     <LiveScreenContent

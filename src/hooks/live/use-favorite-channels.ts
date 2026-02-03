@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
+import { RustChannelService } from '@/services/rust-channel-service';
 import { useUserStore } from '@/states/user/user-store';
 import type { Playlist } from '@/types/playlist.types';
 
@@ -30,7 +31,10 @@ export function useFavoriteChannels(activePlaylist: Playlist | null, hasLoadedPl
 
     if (currentUser) {
       try {
-        const channels = activePlaylist?.parsedData?.items || [];
+        // Load channels from Rust database for migration
+        const channels = activePlaylist?.id
+          ? await RustChannelService.getChannelsByPlaylistId(activePlaylist.id)
+          : [];
         if (channels.length > 0) {
           await migrateFavoritesToNewFormat(currentUser.id, channels);
         }
@@ -54,7 +58,7 @@ export function useFavoriteChannels(activePlaylist: Playlist | null, hasLoadedPl
     if (!isMountedRef.current) return;
     setHasLoadedFavorites(true);
     setIsInitialLoading(false);
-  }, [currentUser, getFavoriteChannels, migrateFavoritesToNewFormat, activePlaylist?.parsedData?.items]);
+  }, [currentUser, getFavoriteChannels, migrateFavoritesToNewFormat, activePlaylist?.id]);
 
   const handleRefresh = useCallback(async () => {
     if (!isMountedRef.current) return;
