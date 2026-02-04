@@ -27,6 +27,7 @@ interface InfiniteParallaxGridProps<T> {
   onEndReached?: () => void;
   onEndReachedThreshold?: number;
   ListEmptyComponent?: ReactElement;
+  ListFooterComponent?: ReactElement;
   ListHeaderComponentAfterParallax?: ReactElement;
   padding?: number;
   gap?: number;
@@ -44,6 +45,7 @@ export default function InfiniteParallaxGrid<T>({
   onEndReached,
   onEndReachedThreshold = 0.1,
   ListEmptyComponent,
+  ListFooterComponent,
   ListHeaderComponentAfterParallax,
   padding = DEFAULT_PADDING,
   gap = DEFAULT_GAP,
@@ -131,6 +133,7 @@ export default function InfiniteParallaxGrid<T>({
         numColumns={columns}
         ListHeaderComponent={ParallaxHeader}
         ListEmptyComponent={ListEmptyComponent}
+        ListFooterComponent={ListFooterComponent}
         onEndReached={onEndReached}
         onEndReachedThreshold={onEndReachedThreshold}
         contentContainerStyle={{

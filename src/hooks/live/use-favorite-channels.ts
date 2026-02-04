@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { RustChannelService } from '@/services/rust-channel-service';
 import { useUserStore } from '@/states/user/user-store';
 import type { Playlist } from '@/types/playlist.types';
 
@@ -14,7 +13,6 @@ export function useFavoriteChannels(activePlaylist: Playlist | null, hasLoadedPl
 
   const currentUser = useUserStore((state) => state.currentUser);
   const getFavoriteChannels = useUserStore((state) => state.getFavoriteChannels);
-  const migrateFavoritesToNewFormat = useUserStore((state) => state.migrateFavoritesToNewFormat);
 
   useEffect(() => {
     return () => {
@@ -31,19 +29,7 @@ export function useFavoriteChannels(activePlaylist: Playlist | null, hasLoadedPl
 
     if (currentUser) {
       try {
-        // Load channels from Rust database for migration
-        const channels = activePlaylist?.id
-          ? await RustChannelService.getChannelsByPlaylistId(activePlaylist.id)
-          : [];
-        if (channels.length > 0) {
-          await migrateFavoritesToNewFormat(currentUser.id, channels);
-        }
-
-        if (!isMountedRef.current) return;
-
         const favorites = await getFavoriteChannels(currentUser.id);
-        console.log('[useFavoriteChannels] Loaded', favorites.length, 'favorite channels:', favorites);
-
         if (!isMountedRef.current) return;
         setFavoriteChannels(favorites);
       } catch (error) {
@@ -58,7 +44,7 @@ export function useFavoriteChannels(activePlaylist: Playlist | null, hasLoadedPl
     if (!isMountedRef.current) return;
     setHasLoadedFavorites(true);
     setIsInitialLoading(false);
-  }, [currentUser, getFavoriteChannels, migrateFavoritesToNewFormat, activePlaylist?.id]);
+  }, [currentUser, getFavoriteChannels]);
 
   const handleRefresh = useCallback(async () => {
     if (!isMountedRef.current) return;

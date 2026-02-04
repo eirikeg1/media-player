@@ -10,8 +10,8 @@ import { isChannelFavorite } from '@/lib/channel-utils';
 import type { GroupOption } from '@/lib/group-utils';
 import type { Channel, Playlist } from '@/types/playlist.types';
 import type { ListRenderItemInfo } from '@shopify/flash-list';
-import { useCallback } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { useCallback, useMemo } from 'react';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 interface LiveScreenContentProps {
   isLoading: boolean;
@@ -26,6 +26,9 @@ interface LiveScreenContentProps {
   onSearchChange: (text: string) => void;
   onChannelPress: (channel: Channel) => void;
   onRefresh: () => void;
+  onLoadMore?: () => void;
+  isLoadingMore?: boolean;
+  hasMore?: boolean;
   backgroundColor: string;
   iconColor: string;
   tintColor: string;
@@ -44,6 +47,9 @@ export function LiveScreenContent({
   onSearchChange,
   onChannelPress,
   onRefresh,
+  onLoadMore,
+  isLoadingMore = false,
+  hasMore = true,
   backgroundColor,
   iconColor,
   tintColor,
@@ -82,6 +88,23 @@ export function LiveScreenContent({
       />
     );
   }, [isLoading, tintColor]);
+
+  // Loading more indicator for pagination
+  const LoadingMoreComponent = useMemo(() => {
+    if (!isLoadingMore) return undefined;
+    return (
+      <View style={styles.loadingMoreContainer}>
+        <ActivityIndicator size="small" color={tintColor} />
+      </View>
+    );
+  }, [isLoadingMore, tintColor]);
+
+  // Handler for end reached - only trigger if we have more to load and not already loading
+  const handleEndReached = useCallback(() => {
+    if (hasMore && !isLoadingMore && onLoadMore) {
+      onLoadMore();
+    }
+  }, [hasMore, isLoadingMore, onLoadMore]);
 
   // Show loading spinner if data hasn't loaded yet
   if (isLoading) {
@@ -166,6 +189,9 @@ export function LiveScreenContent({
         }
         columns={4}
         ListEmptyComponent={<EmptyComponent />}
+        ListFooterComponent={LoadingMoreComponent}
+        onEndReached={handleEndReached}
+        onEndReachedThreshold={0.5}
         refreshing={isRefreshing}
         onRefresh={onRefresh}
       />
@@ -207,5 +233,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
+  },
+  loadingMoreContainer: {
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

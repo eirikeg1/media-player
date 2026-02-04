@@ -1,0 +1,175 @@
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { RustChannelService } from '@/services/rust-channel-service';
+import type { Channel } from '@/types/playlist.types';
+
+const DEFAULT_PAGE_SIZE = 50;
+const SEARCH_DEBOUNCE_MS = 300;
+
+interface UsePaginatedChannelsOptions {
+  playlistId: string | null | undefined;
+  group?: string;
+  search?: string;
+  contentType?: 'live' | 'movie' | 'series';
+  favoriteChannelIds: string[];
+  pageSize?: number;
+}
+
+interface UsePaginatedChannelsReturn {
+  channels: Channel[];
+  isLoading: boolean;
+  isLoadingMore: boolean;
+  hasMore: boolean;
+  error: string | null;
+  loadMore: () => void;
+  refresh: () => void;
+  totalCount: number;
+}
+
+/**
+ * Hook for paginated channel loading with server-side filtering.
+ * Uses the Rust backend's getChannelsFiltered API for efficient pagination.
+ */
+export function usePaginatedChannels({
+  playlistId,
+  group,
+  search,
+  contentType,
+  favoriteChannelIds,
+  pageSize = DEFAULT_PAGE_SIZE,
+}: UsePaginatedChannelsOptions): UsePaginatedChannelsReturn {
+  const [channels, setChannels] = useState<Channel[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [totalCount, setTotalCount] = useState(0);
+
+  // Track current offset for pagination
+  const offsetRef = useRef(0);
+  // Track if we're currently loading to prevent duplicate requests
+  const isLoadingRef = useRef(false);
+  // Track the current search term for debouncing
+  const debouncedSearchRef = useRef<string | undefined>(search);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Fetch a page of channels
+  const fetchPage = useCallback(
+    async (offset: number, isInitial: boolean) => {
+      if (!playlistId) {
+        setChannels([]);
+        setHasMore(false);
+        setTotalCount(0);
+        return;
+      }
+
+      if (isLoadingRef.current) {
+        return;
+      }
+
+      isLoadingRef.current = true;
+
+      if (isInitial) {
+        setIsLoading(true);
+      } else {
+        setIsLoadingMore(true);
+      }
+      setError(null);
+
+      try {
+        const result = await RustChannelService.getChannelsFiltered(playlistId, {
+          group: group || undefined,
+          search: debouncedSearchRef.current || undefined,
+          contentType: contentType || undefined,
+          limit: pageSize,
+          offset,
+          sortBy: 'title',
+          sortOrder: 'asc',
+        });
+
+        // Determine if there are more pages
+        const hasMorePages = result.length === pageSize;
+        setHasMore(hasMorePages);
+
+        if (isInitial) {
+          setChannels(result);
+          // Fetch total count for initial load
+          const count = await RustChannelService.countChannelsByPlaylist(playlistId);
+          setTotalCount(count);
+        } else {
+          setChannels((prev) => [...prev, ...result]);
+        }
+
+        offsetRef.current = offset + result.length;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to fetch channels';
+        console.error('[usePaginatedChannels] Error:', message);
+        setError(message);
+        if (isInitial) {
+          setChannels([]);
+        }
+      } finally {
+        isLoadingRef.current = false;
+        if (isInitial) {
+          setIsLoading(false);
+        } else {
+          setIsLoadingMore(false);
+        }
+      }
+    },
+    [playlistId, group, contentType, pageSize]
+  );
+
+  // Reset and fetch first page when filters change
+  useEffect(() => {
+    // Clear any pending debounce timer
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    // Debounce search changes
+    debounceTimerRef.current = setTimeout(() => {
+      debouncedSearchRef.current = search;
+      offsetRef.current = 0;
+      setChannels([]);
+      setHasMore(true);
+      fetchPage(0, true);
+    }, search !== debouncedSearchRef.current ? SEARCH_DEBOUNCE_MS : 0);
+
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, [playlistId, group, search, contentType, fetchPage]);
+
+  // Load more channels (next page)
+  const loadMore = useCallback(() => {
+    if (!hasMore || isLoadingRef.current) {
+      return;
+    }
+    fetchPage(offsetRef.current, false);
+  }, [hasMore, fetchPage]);
+
+  // Refresh - reset to first page
+  const refresh = useCallback(() => {
+    offsetRef.current = 0;
+    setChannels([]);
+    setHasMore(true);
+    fetchPage(0, true);
+  }, [fetchPage]);
+
+  // Mark favorites in the channel list (favorites appear in natural position with star icon)
+  // This is a lightweight client-side operation since favoriteChannelIds is typically small
+  const channelsWithFavoriteInfo = channels;
+
+  return {
+    channels: channelsWithFavoriteInfo,
+    isLoading,
+    isLoadingMore,
+    hasMore,
+    error,
+    loadMore,
+    refresh,
+    totalCount,
+  };
+}
