@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import { useMemo, type ReactElement } from 'react';
 import { Dimensions, RefreshControl, StyleSheet } from 'react-native';
 import Animated, {
   interpolate,
@@ -88,19 +88,22 @@ export default function InfiniteParallaxGrid<T>({
     };
   });
 
-  const ParallaxHeader = () => (
-    <>
-      <Animated.View
-        style={[
-          styles.header,
-          { backgroundColor: headerBackgroundColor[colorScheme] },
-          headerAnimatedStyle,
-        ]}
-      >
-        {headerImage}
-      </Animated.View>
-      {ListHeaderComponentAfterParallax}
-    </>
+  const parallaxHeader = useMemo(
+    () => (
+      <>
+        <Animated.View
+          style={[
+            styles.header,
+            { backgroundColor: headerBackgroundColor[colorScheme] },
+            headerAnimatedStyle,
+          ]}
+        >
+          {headerImage}
+        </Animated.View>
+        {ListHeaderComponentAfterParallax}
+      </>
+    ),
+    [colorScheme, headerBackgroundColor, headerAnimatedStyle, headerImage, ListHeaderComponentAfterParallax]
   );
 
   const wrappedRenderItem: ListRenderItem<T> = (info) => {
@@ -131,7 +134,7 @@ export default function InfiniteParallaxGrid<T>({
         renderItem={wrappedRenderItem}
         keyExtractor={keyExtractor}
         numColumns={columns}
-        ListHeaderComponent={ParallaxHeader}
+        ListHeaderComponent={parallaxHeader}
         ListEmptyComponent={ListEmptyComponent}
         ListFooterComponent={ListFooterComponent}
         onEndReached={onEndReached}
