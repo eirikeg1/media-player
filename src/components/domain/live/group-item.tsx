@@ -1,6 +1,7 @@
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import type { useSelectionColors } from '@/constants/selection-theme';
+import { FAVORITES_GROUP_SENTINEL } from '@/lib/group-utils';
 import React from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 
@@ -63,7 +64,9 @@ export const GroupItemComponent = React.memo(function GroupItemComponent({
     }
   };
 
-  const displayName = item.name || 'All Channels';
+  const isFavoritesSentinel = item.name === FAVORITES_GROUP_SENTINEL;
+  const displayName = isFavoritesSentinel ? 'Favorites' : item.name || 'All Channels';
+  const iconName = isFavoritesSentinel ? 'star.fill' : 'folder';
   const channelText = `${item.channelCount} channel${item.channelCount !== 1 ? 's' : ''}`;
 
   return (
@@ -83,9 +86,9 @@ export const GroupItemComponent = React.memo(function GroupItemComponent({
     >
       <View style={styles.headerContainer}>
         <IconSymbol
-          name="folder"
+          name={iconName}
           size={24}
-          color={colors.icon}
+          color={isFavoritesSentinel ? '#FFD700' : colors.icon}
           style={styles.groupIcon}
         />
         {onToggleFavorite && (

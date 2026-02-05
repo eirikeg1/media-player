@@ -32,6 +32,8 @@ interface LiveScreenContentProps {
   backgroundColor: string;
   iconColor: string;
   tintColor: string;
+  favoriteGroups: string[];
+  onToggleFavoriteGroup: (name: string) => void;
 }
 
 export function LiveScreenContent({
@@ -53,6 +55,8 @@ export function LiveScreenContent({
   backgroundColor,
   iconColor,
   tintColor,
+  favoriteGroups,
+  onToggleFavoriteGroup,
 }: LiveScreenContentProps) {
   const keyExtractor = useCallback((item: Channel, index: number) => {
     return `channel-${item.name}-${index}`;
@@ -131,6 +135,8 @@ export function LiveScreenContent({
                 onGroupSelect={onGroupSelect}
                 searchText={searchText}
                 onSearchTextChange={onSearchChange}
+                favoriteGroups={favoriteGroups}
+                onToggleFavoriteGroup={onToggleFavoriteGroup}
               />
             </ThemedView>
           }
@@ -184,6 +190,8 @@ export function LiveScreenContent({
                 onGroupSelect={onGroupSelect}
                 searchText={searchText}
                 onSearchTextChange={onSearchChange}
+                favoriteGroups={favoriteGroups}
+                onToggleFavoriteGroup={onToggleFavoriteGroup}
               />
           </ThemedView>
         }

@@ -3,9 +3,8 @@ import { ModalHeader } from '@/components/ui/containers/modal/modal-header';
 import { Input } from '@/components/ui/controls/inputs/input';
 import { ThemedView } from '@/components/ui/display/themed-view';
 import { useSelectionColors } from '@/constants/selection-theme';
-import { useFavoriteGroups } from '@/hooks/live/use-favorite-groups';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { isAdultGroup } from '@/lib/group-utils';
+import { FAVORITES_GROUP_SENTINEL, isAdultGroup } from '@/lib/group-utils';
 import { FlashList } from '@shopify/flash-list';
 import { useCallback, useMemo, useState } from 'react';
 import {
@@ -21,6 +20,8 @@ interface GroupSelectionModalProps {
   groups: GroupItem[];
   selectedGroupName?: string;
   onGroupSelect: (groupName: string) => void;
+  favoriteGroups: string[];
+  onToggleFavoriteGroup: (name: string) => void;
 }
 
 
@@ -30,9 +31,10 @@ export function GroupSelectionModal({
   groups,
   selectedGroupName,
   onGroupSelect,
+  favoriteGroups,
+  onToggleFavoriteGroup,
 }: GroupSelectionModalProps) {
   const [filterText, setFilterText] = useState('');
-  const { favoriteGroups, toggleFavorite } = useFavoriteGroups();
   const selectionColors = useSelectionColors();
   const insets = useSafeAreaInsets();
 
@@ -41,18 +43,20 @@ export function GroupSelectionModal({
 
   // Filter and sort groups
   const displayedGroups = useMemo(() => {
-    let result = groups;
+    // Separate pinned entries (Favorites sentinel and "All Channels") from sortable groups
+    const pinned = groups.filter(g => g.name === FAVORITES_GROUP_SENTINEL || g.name === '');
+    let sortable = groups.filter(g => g.name !== FAVORITES_GROUP_SENTINEL && g.name !== '');
 
-    // Filter
+    // Filter sortable groups (pinned entries are always shown)
     if (filterText.trim()) {
-      result = result.filter(group =>
+      sortable = sortable.filter(group =>
         group.name.toLowerCase().includes(filterText.toLowerCase())
       );
     }
 
     // Sort: non-adult favorites > non-adult non-favorites > adult favorites > adult non-favorites
     // Alphabetical within each tier
-    return [...result].sort((a, b) => {
+    const sorted = [...sortable].sort((a, b) => {
       const isAAdult = isAdultGroup(a.name);
       const isBAdult = isAdultGroup(b.name);
 
@@ -68,6 +72,8 @@ export function GroupSelectionModal({
 
       return a.name.localeCompare(b.name);
     });
+
+    return [...pinned, ...sorted];
   }, [groups, filterText, favoriteGroups]);
 
   // Debug logging
@@ -89,16 +95,19 @@ export function GroupSelectionModal({
     onClose();
   }, [onClose]);
 
-  const renderItem = useCallback(({ item }: { item: GroupItem }) => (
-    <GroupItemComponent
-      item={item}
-      isSelected={item.name === selectedGroupName}
-      onPress={handleGroupSelect}
-      selectionColors={selectionColors}
-      isFavorite={favoriteGroups.includes(item.name)}
-      onToggleFavorite={toggleFavorite}
-    />
-  ), [selectedGroupName, handleGroupSelect, selectionColors, favoriteGroups, toggleFavorite]);
+  const renderItem = useCallback(({ item }: { item: GroupItem }) => {
+    const isFavoritesSentinel = item.name === FAVORITES_GROUP_SENTINEL;
+    return (
+      <GroupItemComponent
+        item={item}
+        isSelected={item.name === selectedGroupName}
+        onPress={handleGroupSelect}
+        selectionColors={selectionColors}
+        isFavorite={isFavoritesSentinel || favoriteGroups.includes(item.name)}
+        onToggleFavorite={isFavoritesSentinel ? undefined : onToggleFavoriteGroup}
+      />
+    );
+  }, [selectedGroupName, handleGroupSelect, selectionColors, favoriteGroups, onToggleFavoriteGroup]);
 
   const keyExtractor = useCallback((item: GroupItem) => item.name || 'all-channels', []);
 

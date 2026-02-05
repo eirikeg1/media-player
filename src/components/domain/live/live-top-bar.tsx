@@ -13,6 +13,8 @@ interface LiveTopBarProps {
   onGroupSelect: (groupName: string) => void;
   searchText: string;
   onSearchTextChange: (text: string) => void;
+  favoriteGroups: string[];
+  onToggleFavoriteGroup: (name: string) => void;
 }
 
 export function LiveTopBar({
@@ -21,6 +23,8 @@ export function LiveTopBar({
   onGroupSelect,
   searchText,
   onSearchTextChange,
+  favoriteGroups,
+  onToggleFavoriteGroup,
 }: LiveTopBarProps) {
   return (
     <View style={styles.container}>
@@ -31,6 +35,8 @@ export function LiveTopBar({
             groups={groups}
             selectedGroupName={selectedGroupName}
             onGroupSelect={onGroupSelect}
+            favoriteGroups={favoriteGroups}
+            onToggleFavoriteGroup={onToggleFavoriteGroup}
           />
         </View>
 

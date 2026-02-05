@@ -1,5 +1,7 @@
 import type { Channel } from '@/types/playlist.types';
 
+export const FAVORITES_GROUP_SENTINEL = '__favorites__';
+
 export interface GroupOption {
   name: string;
   channelCount: number;

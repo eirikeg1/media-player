@@ -1,12 +1,17 @@
 import { useState, useEffect } from 'react';
 import { RustChannelService } from '@/services/rust-channel-service';
-import { sortGroupsWithAdultLast, type GroupOption } from '@/lib/group-utils';
+import { FAVORITES_GROUP_SENTINEL, sortGroupsWithAdultLast, type GroupOption } from '@/lib/group-utils';
 
 /**
  * Hook to fetch channel groups from the Rust database.
  * Returns groups with channel counts, sorted alphabetically with "All Channels" first.
+ * When favoriteGroups is provided and non-empty, prepends a Favorites entry.
  */
-export function useGroups(playlistId: string | null | undefined, contentType?: 'live' | 'movie' | 'series') {
+export function useGroups(
+  playlistId: string | null | undefined,
+  contentType?: 'live' | 'movie' | 'series',
+  favoriteGroups?: string[],
+) {
   const [groups, setGroups] = useState<GroupOption[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,8 +46,24 @@ export function useGroups(playlistId: string | null | undefined, contentType?: '
         // Sort alphabetically with adult groups at the bottom
         const sortedGroups = sortGroupsWithAdultLast(groupOptions);
 
-        // Add "All Channels" option at the top (empty string name means "all")
-        setGroups([{ name: '', channelCount: totalCount }, ...sortedGroups]);
+        // Build final list: Favorites (if applicable) → All Channels → sorted groups
+        const result: GroupOption[] = [];
+
+        // Add Favorites entry if there are favorite groups
+        if (favoriteGroups && favoriteGroups.length > 0) {
+          const favoritesCount = groupCounts
+            .filter((g) => favoriteGroups.includes(g.name))
+            .reduce((sum, g) => sum + g.count, 0);
+          result.push({ name: FAVORITES_GROUP_SENTINEL, channelCount: favoritesCount });
+        }
+
+        // Add "All Channels" option (empty string name means "all")
+        result.push({ name: '', channelCount: totalCount });
+
+        // Add sorted groups
+        result.push(...sortedGroups);
+
+        setGroups(result);
       } catch (err) {
         if (cancelled) return;
 
@@ -62,7 +83,8 @@ export function useGroups(playlistId: string | null | undefined, contentType?: '
     return () => {
       cancelled = true;
     };
-  }, [playlistId, contentType]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playlistId, contentType, JSON.stringify(favoriteGroups)]);
 
   return { groups, isLoading, error };
 }

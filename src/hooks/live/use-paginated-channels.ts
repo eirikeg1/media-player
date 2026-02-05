@@ -7,7 +7,7 @@ const SEARCH_DEBOUNCE_MS = 300;
 
 interface UsePaginatedChannelsOptions {
   playlistId: string | null | undefined;
-  group?: string;
+  groups?: string[];
   search?: string;
   contentType?: 'live' | 'movie' | 'series';
   favoriteChannelIds: string[];
@@ -31,7 +31,7 @@ interface UsePaginatedChannelsReturn {
  */
 export function usePaginatedChannels({
   playlistId,
-  group,
+  groups,
   search,
   contentType,
   favoriteChannelIds,
@@ -77,7 +77,7 @@ export function usePaginatedChannels({
 
       try {
         const result = await RustChannelService.getChannelsFilteredWithCount(playlistId, {
-          group: group || undefined,
+          groups: groups && groups.length > 0 ? groups : undefined,
           search: debouncedSearchRef.current || undefined,
           contentType: contentType || undefined,
           limit: pageSize,
@@ -114,7 +114,8 @@ export function usePaginatedChannels({
         }
       }
     },
-    [playlistId, group, contentType, pageSize]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [playlistId, JSON.stringify(groups), contentType, pageSize]
   );
 
   // Reset and fetch first page when filters change
@@ -141,7 +142,8 @@ export function usePaginatedChannels({
         clearTimeout(debounceTimerRef.current);
       }
     };
-  }, [playlistId, group, search, contentType, fetchPage]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playlistId, JSON.stringify(groups), search, contentType, fetchPage]);
 
   // Load more channels (next page)
   const loadMore = useCallback(() => {

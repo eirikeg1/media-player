@@ -174,7 +174,7 @@ export class RustChannelService {
   static async getChannelsFiltered(
     playlistId: string,
     options?: {
-      group?: string;
+      groups?: string[];
       search?: string;
       contentType?: 'live' | 'movie' | 'series';
       limit?: number;
@@ -197,7 +197,7 @@ export class RustChannelService {
   static async getChannelsFilteredWithCount(
     playlistId: string,
     options?: {
-      group?: string;
+      groups?: string[];
       search?: string;
       contentType?: 'live' | 'movie' | 'series';
       limit?: number;

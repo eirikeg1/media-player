@@ -1,12 +1,14 @@
 import { useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { LiveScreenContent } from '@/components/domain/live/live-screen-content';
 import { useFavoriteChannels } from '@/hooks/live/use-favorite-channels';
+import { useFavoriteGroups } from '@/hooks/live/use-favorite-groups';
 import { useGroups } from '@/hooks/live/use-groups';
 import { usePaginatedChannels } from '@/hooks/live/use-paginated-channels';
 import { usePlaylistData } from '@/hooks/live/use-playlist-data';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { FAVORITES_GROUP_SENTINEL } from '@/lib/group-utils';
 import type { Channel } from '@/types/playlist.types';
 
 export default function LiveScreen() {
@@ -31,8 +33,27 @@ export default function LiveScreen() {
     handleRefresh
   } = useFavoriteChannels(activePlaylist, hasLoadedPlaylist);
 
-  // Server-side groups fetching
-  const { groups } = useGroups(activePlaylist?.id, 'live');
+  // Favorite groups (single source of truth — passed down to modal via props)
+  const { favoriteGroups, toggleFavorite: toggleFavoriteGroup } = useFavoriteGroups();
+
+  // Server-side groups fetching (with favorites support)
+  const { groups } = useGroups(activePlaylist?.id, 'live', favoriteGroups);
+
+  // One-time default to Favorites when favorites load
+  const hasSetDefaultGroup = useRef(false);
+  useEffect(() => {
+    if (!hasSetDefaultGroup.current && favoriteGroups.length > 0) {
+      hasSetDefaultGroup.current = true;
+      setSelectedGroupName(FAVORITES_GROUP_SENTINEL);
+    }
+  }, [favoriteGroups]);
+
+  // Translate FAVORITES_GROUP_SENTINEL for the paginated channels query
+  const channelGroups = selectedGroupName === FAVORITES_GROUP_SENTINEL
+    ? favoriteGroups
+    : selectedGroupName
+      ? [selectedGroupName]
+      : undefined;
 
   // Paginated channels with server-side filtering
   const {
@@ -44,7 +65,7 @@ export default function LiveScreen() {
     refresh: refreshChannels,
   } = usePaginatedChannels({
     playlistId: activePlaylist?.id,
-    group: selectedGroupName,
+    groups: channelGroups,
     search: searchText,
     contentType: 'live',
     favoriteChannelIds: favoriteChannels,
@@ -101,6 +122,8 @@ export default function LiveScreen() {
       backgroundColor={backgroundColor}
       iconColor={iconColor}
       tintColor={tintColor}
+      favoriteGroups={favoriteGroups}
+      onToggleFavoriteGroup={toggleFavoriteGroup}
     />
   );
 }
