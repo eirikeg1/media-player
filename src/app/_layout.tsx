@@ -3,6 +3,7 @@ import { PortalHost } from '@rn-primitives/portal';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import 'react-native-reanimated';
 import '../global.css';
@@ -18,24 +19,26 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <GestureHandlerRootView>
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="index" />
-          <Stack.Screen name="user-select" />
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="modal" options={{ presentation: 'modal', headerShown: true, title: 'Modal' }} />
-          <Stack.Screen
-            name="video-player"
-            options={{
-              headerShown: false,
-              orientation: 'landscape',
-              gestureEnabled: false
-            }}
-          />
-        </Stack>
-        <StatusBar style="auto" />
-        <PortalHost />
-      </GestureHandlerRootView>
+      <SafeAreaProvider>
+        <GestureHandlerRootView>
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="index" />
+            <Stack.Screen name="user-select" />
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="modal" options={{ presentation: 'modal', headerShown: true, title: 'Modal' }} />
+            <Stack.Screen
+              name="video-player"
+              options={{
+                headerShown: false,
+                orientation: 'landscape',
+                gestureEnabled: false
+              }}
+            />
+          </Stack>
+          <StatusBar style="auto" />
+          <PortalHost />
+        </GestureHandlerRootView>
+      </SafeAreaProvider>
     </ThemeProvider>
   );
 }

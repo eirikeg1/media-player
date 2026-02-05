@@ -1,5 +1,5 @@
 import type { PropsWithChildren, ReactElement } from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import Animated, {
   interpolate,
   useAnimatedRef,
@@ -9,7 +9,7 @@ import Animated, {
 
 import { ThemedView } from '@/components/ui/display/themed-view';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { useThemeColor } from '@/hooks/use-theme-color';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const HEADER_HEIGHT = 250;
 
@@ -25,8 +25,8 @@ export default function ParallaxScrollView({
   headerBackgroundColor,
   stickyHeaderIndices,
 }: Props) {
-  const backgroundColor = useThemeColor({}, 'background');
   const colorScheme = useColorScheme() ?? 'light';
+  const insets = useSafeAreaInsets();
   const scrollRef = useAnimatedRef<Animated.ScrollView>();
   const scrollOffset = useScrollOffset(scrollRef);
   const headerAnimatedStyle = useAnimatedStyle(() => {
@@ -36,7 +36,7 @@ export default function ParallaxScrollView({
           translateY: interpolate(
             scrollOffset.value,
             [-HEADER_HEIGHT, 0, HEADER_HEIGHT],
-            [-HEADER_HEIGHT / 2, 0, HEADER_HEIGHT * 0.75]
+            [HEADER_HEIGHT / 2, 0, -HEADER_HEIGHT / 4]
           ),
         },
         {
@@ -47,23 +47,27 @@ export default function ParallaxScrollView({
   });
 
   return (
-    <Animated.ScrollView
-      ref={scrollRef}
-      style={{ backgroundColor, flex: 1 }}
-      scrollEventThrottle={16}
-      stickyHeaderIndices={stickyHeaderIndices}
-    >
+    <ThemedView style={[styles.container, { paddingTop: insets.top }]}>
       <Animated.View
         style={[
           styles.header,
+          styles.absoluteHeader,
           { backgroundColor: headerBackgroundColor[colorScheme] },
           headerAnimatedStyle,
         ]}
       >
         {headerImage}
       </Animated.View>
-      <ThemedView style={styles.content}>{children}</ThemedView>
-    </Animated.ScrollView>
+      <Animated.ScrollView
+        ref={scrollRef}
+        style={{ flex: 1 }}
+        scrollEventThrottle={16}
+        stickyHeaderIndices={stickyHeaderIndices}
+      >
+        <View style={styles.headerSpacer} />
+        <ThemedView style={styles.content}>{children}</ThemedView>
+      </Animated.ScrollView>
+    </ThemedView>
   );
 }
 
@@ -74,6 +78,16 @@ const styles = StyleSheet.create({
   header: {
     height: HEADER_HEIGHT,
     overflow: 'hidden',
+  },
+  absoluteHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 0,
+  },
+  headerSpacer: {
+    height: HEADER_HEIGHT,
   },
   content: {
     flex: 1,

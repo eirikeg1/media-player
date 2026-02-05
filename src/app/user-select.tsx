@@ -4,7 +4,8 @@ import { useUserStore } from '@/states/user/user-store';
 import type { UpdateUserInput, User } from '@/types/user.types';
 import { router } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 // Constants
 const PLACEHOLDER_COLOR = '#9CA3AF';
@@ -39,13 +40,11 @@ interface UserSelectionScreenProps {
  */
 function FirstUserScreen({ username, isCreating, onUsernameChange, onSubmit }: UserFormProps) {
   return (
-    <KeyboardAvoidingView
-      className="flex-1 bg-white dark:bg-gray-950"
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <ScrollView
+    <SafeAreaView className="flex-1 bg-white dark:bg-gray-950" edges={['top']}>
+        <ScrollView
         contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
         keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets
       >
         <View className="px-8">
           <View className="mb-12">
@@ -99,8 +98,8 @@ function FirstUserScreen({ username, isCreating, onUsernameChange, onSubmit }: U
             </Text>
           </View>
         </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </ScrollView>
+    </SafeAreaView>
   );
 }
 
@@ -546,7 +545,7 @@ export default function UserSelectScreen() {
 
   // Render user selection screen with optional create modal
   return (
-    <View className="flex-1 bg-white dark:bg-gray-950">
+    <SafeAreaView className="flex-1 bg-white dark:bg-gray-950" edges={['top']}>
       <UserSelectionScreen
         users={users}
         currentUserId={currentUser?.id}
@@ -574,6 +573,6 @@ export default function UserSelectScreen() {
           onCancel={handleCancelEdit}
         />
       )}
-    </View>
+    </SafeAreaView>
   );
 }

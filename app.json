@@ -3,7 +3,7 @@
     "name": "iptv-mobile",
     "slug": "iptv-mobile",
     "version": "1.0.0",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/app-icon.png",
     "scheme": "iptvmobile",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -13,7 +13,8 @@
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
         }
-      }
+      },
+      "bundleIdentifier": "com.anonymous.iptvmobile"
     },
     "android": {
       "adaptiveIcon": {

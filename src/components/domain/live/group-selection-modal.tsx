@@ -11,6 +11,7 @@ import {
     Modal,
     StyleSheet,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 
 interface GroupSelectionModalProps {
@@ -32,6 +33,7 @@ export function GroupSelectionModal({
   const [filterText, setFilterText] = useState('');
   const { favoriteGroups, toggleFavorite } = useFavoriteGroups();
   const selectionColors = useSelectionColors();
+  const insets = useSafeAreaInsets();
 
   // Theme colors
   const borderColor = useThemeColor({ light: '#ddd', dark: '#333' }, 'icon');
@@ -98,30 +100,30 @@ export function GroupSelectionModal({
       presentationStyle="pageSheet"
       onRequestClose={handleClose}
     >
-      <ThemedView style={styles.modalContent}>
-        <ModalHeader
-          title="Select Channel Group"
-          onClose={handleClose}
-        />
+        <ThemedView style={[styles.modalContent, { paddingTop: insets.top }]}>
+          <ModalHeader
+            title="Select Channel Group"
+            onClose={handleClose}
+          />
 
-        {/* Filter Input */}
-        <ThemedView style={[styles.filterContainer, { borderBottomColor: borderColor }]}>
-          <Input
-            placeholder="Filter groups..."
-            value={filterText}
-            onChangeText={setFilterText}
-            style={styles.filterInput}
+          {/* Filter Input */}
+          <ThemedView style={[styles.filterContainer, { borderBottomColor: borderColor }]}>
+            <Input
+              placeholder="Filter groups..."
+              value={filterText}
+              onChangeText={setFilterText}
+              style={styles.filterInput}
+            />
+          </ThemedView>
+
+          <FlashList
+            data={displayedGroups}
+            renderItem={renderItem}
+            keyExtractor={keyExtractor}
+            numColumns={2}
+            contentContainerStyle={styles.listContent}
           />
         </ThemedView>
-
-        <FlashList
-          data={displayedGroups}
-          renderItem={renderItem}
-          keyExtractor={keyExtractor}
-          numColumns={2}
-          contentContainerStyle={styles.listContent}
-        />
-      </ThemedView>
     </Modal>
   );
 }

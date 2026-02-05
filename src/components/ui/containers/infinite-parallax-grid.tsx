@@ -1,5 +1,5 @@
 import { useMemo, type ReactElement } from 'react';
-import { Dimensions, RefreshControl, StyleSheet } from 'react-native';
+import { Dimensions, RefreshControl, StyleSheet, View } from 'react-native';
 import Animated, {
   interpolate,
   useAnimatedRef,
@@ -11,6 +11,7 @@ import { FlashList, type ListRenderItem } from '@shopify/flash-list';
 import { ThemedView } from '@/components/ui/display/themed-view';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const HEADER_HEIGHT = 250;
 const DEFAULT_COLUMNS = 3;
@@ -55,6 +56,7 @@ export default function InfiniteParallaxGrid<T>({
   const backgroundColor = useThemeColor({}, 'background');
   const tintColor = useThemeColor({}, 'tint');
   const colorScheme = useColorScheme() ?? 'light';
+  const insets = useSafeAreaInsets();
 
   // Arrow color (dark arrow for light theme, theme color for dark theme)
   const refreshArrowColor = colorScheme === 'dark' ? tintColor : '#333333';
@@ -74,7 +76,7 @@ export default function InfiniteParallaxGrid<T>({
           translateY: interpolate(
             scrollOffset.value,
             [-HEADER_HEIGHT, 0, HEADER_HEIGHT],
-            [-HEADER_HEIGHT / 2, 0, HEADER_HEIGHT * 0.75]
+            [HEADER_HEIGHT / 2, 0, -HEADER_HEIGHT / 4]
           ),
         },
         {
@@ -88,22 +90,20 @@ export default function InfiniteParallaxGrid<T>({
     };
   });
 
+  const backdropAnimatedStyle = useAnimatedStyle(() => {
+    return {
+      top: Math.max(HEADER_HEIGHT + insets.top - scrollOffset.value, insets.top),
+    };
+  });
+
   const parallaxHeader = useMemo(
     () => (
-      <>
-        <Animated.View
-          style={[
-            styles.header,
-            { backgroundColor: headerBackgroundColor[colorScheme] },
-            headerAnimatedStyle,
-          ]}
-        >
-          {headerImage}
-        </Animated.View>
+      <View style={{ marginHorizontal: -padding }}>
+        <View style={styles.headerSpacer} />
         {ListHeaderComponentAfterParallax}
-      </>
+      </View>
     ),
-    [colorScheme, headerBackgroundColor, headerAnimatedStyle, headerImage, ListHeaderComponentAfterParallax]
+    [ListHeaderComponentAfterParallax, padding]
   );
 
   const wrappedRenderItem: ListRenderItem<T> = (info) => {
@@ -127,7 +127,19 @@ export default function InfiniteParallaxGrid<T>({
   };
 
   return (
-    <ThemedView style={[styles.container, { backgroundColor }]}>
+    <ThemedView style={[styles.container, { backgroundColor, paddingTop: insets.top }]}>
+      <Animated.View
+        style={[
+          styles.header,
+          styles.absoluteHeader,
+          { backgroundColor: headerBackgroundColor[colorScheme] },
+          headerAnimatedStyle,
+        ]}
+      >
+        {headerImage}
+      </Animated.View>
+      {/* Opaque backdrop that tracks the boundary between header spacer and grid content */}
+      <Animated.View style={[styles.headerBackdrop, { backgroundColor }, backdropAnimatedStyle]} />
       <FlashList
         ref={scrollRef}
         data={data}
@@ -168,6 +180,22 @@ const styles = StyleSheet.create({
   header: {
     height: HEADER_HEIGHT,
     overflow: 'hidden',
+  },
+  absoluteHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 0,
+  },
+  headerSpacer: {
+    height: HEADER_HEIGHT,
+  },
+  headerBackdrop: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   gridItem: {
     // Dynamic width and margins applied inline
