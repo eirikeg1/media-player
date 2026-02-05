@@ -42,10 +42,11 @@ function FirstUserScreen({ username, isCreating, onUsernameChange, onSubmit }: U
   return (
     <SafeAreaView className="flex-1 bg-white dark:bg-gray-950" edges={['top']}>
         <ScrollView
-        contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
-        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ flexGrow: 1 }}
+        keyboardShouldPersistTaps="always"
         automaticallyAdjustKeyboardInsets
       >
+        <View className="flex-1" />
         <View className="px-8">
           <View className="mb-12">
             <Text className="text-5xl font-bold text-center mb-4 text-gray-900 dark:text-white">
@@ -98,6 +99,7 @@ function FirstUserScreen({ username, isCreating, onUsernameChange, onSubmit }: U
             </Text>
           </View>
         </View>
+        <View className="flex-1" />
         </ScrollView>
     </SafeAreaView>
   );

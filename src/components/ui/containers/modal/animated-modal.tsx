@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, ReactNode } from 'react';
-import { View, Animated, Keyboard, Platform, Easing, TouchableWithoutFeedback, StyleSheet } from 'react-native';
+import { ReactNode, useEffect, useRef } from 'react';
+import { Animated, Easing, Keyboard, Platform, StyleSheet, TouchableWithoutFeedback, View } from 'react-native';
 
 interface AnimatedModalProps {
   children: ReactNode;
@@ -143,7 +143,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.8)',
   },
   modal: {
-    backgroundColor: '#ffffff',
+    backgroundColor: 'rgb(16, 16, 16)',
     borderRadius: 16,
     padding: 20,
     width: '100%',
