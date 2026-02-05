@@ -2,12 +2,13 @@ import { GroupItemComponent, type GroupItem } from '@/components/domain/live/gro
 import { ModalHeader } from '@/components/ui/containers/modal/modal-header';
 import { Input } from '@/components/ui/controls/inputs/input';
 import { ThemedView } from '@/components/ui/display/themed-view';
+import { useSelectionColors } from '@/constants/selection-theme';
 import { useFavoriteGroups } from '@/hooks/live/use-favorite-groups';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { useMemo, useState } from 'react';
+import { FlashList } from '@shopify/flash-list';
+import { useCallback, useMemo, useState } from 'react';
 import {
     Modal,
-    ScrollView,
     StyleSheet,
 } from 'react-native';
 
@@ -30,6 +31,7 @@ export function GroupSelectionModal({
 }: GroupSelectionModalProps) {
   const [filterText, setFilterText] = useState('');
   const { favoriteGroups, toggleFavorite } = useFavoriteGroups();
+  const selectionColors = useSelectionColors();
 
   // Theme colors
   const borderColor = useThemeColor({ light: '#ddd', dark: '#333' }, 'icon');
@@ -65,16 +67,29 @@ export function GroupSelectionModal({
     console.log('Displayed groups:', displayedGroups.length);
   }
 
-  const handleGroupSelect = (groupName: string) => {
+  const handleGroupSelect = useCallback((groupName: string) => {
     onGroupSelect(groupName);
     setFilterText(''); // Clear filter when selecting a group
     onClose();
-  };
+  }, [onGroupSelect, onClose]);
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     setFilterText(''); // Clear filter when closing modal
     onClose();
-  };
+  }, [onClose]);
+
+  const renderItem = useCallback(({ item }: { item: GroupItem }) => (
+    <GroupItemComponent
+      item={item}
+      isSelected={item.name === selectedGroupName}
+      onPress={handleGroupSelect}
+      selectionColors={selectionColors}
+      isFavorite={favoriteGroups.includes(item.name)}
+      onToggleFavorite={toggleFavorite}
+    />
+  ), [selectedGroupName, handleGroupSelect, selectionColors, favoriteGroups, toggleFavorite]);
+
+  const keyExtractor = useCallback((item: GroupItem) => item.name || 'all-channels', []);
 
   return (
     <Modal
@@ -99,24 +114,13 @@ export function GroupSelectionModal({
           />
         </ThemedView>
 
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={true}
-        >
-          <ThemedView style={styles.grid}>
-            {displayedGroups.map((item) => (
-              <GroupItemComponent
-                key={item.name || 'all-channels'}
-                item={item}
-                isSelected={item.name === selectedGroupName}
-                onPress={handleGroupSelect}
-                isFavorite={favoriteGroups.includes(item.name)}
-                onToggleFavorite={toggleFavorite}
-              />
-            ))}
-          </ThemedView>
-        </ScrollView>
+        <FlashList
+          data={displayedGroups}
+          renderItem={renderItem}
+          keyExtractor={keyExtractor}
+          numColumns={2}
+          contentContainerStyle={styles.listContent}
+        />
       </ThemedView>
     </Modal>
   );
@@ -135,16 +139,9 @@ const styles = StyleSheet.create({
     height: 40,
     fontSize: 16,
   },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 16,
+  listContent: {
+    paddingVertical: 16,
+    paddingHorizontal: 8,
     paddingBottom: 32,
-  },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
   },
 });

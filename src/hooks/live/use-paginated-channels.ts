@@ -54,7 +54,7 @@ export function usePaginatedChannels({
 
   // Fetch a page of channels
   const fetchPage = useCallback(
-    async (offset: number, isInitial: boolean) => {
+    async (offset: number, isInitial: boolean, showLoading: boolean = true) => {
       if (!playlistId) {
         setChannels([]);
         setHasMore(false);
@@ -68,15 +68,15 @@ export function usePaginatedChannels({
 
       isLoadingRef.current = true;
 
-      if (isInitial) {
+      if (isInitial && showLoading) {
         setIsLoading(true);
-      } else {
+      } else if (!isInitial) {
         setIsLoadingMore(true);
       }
       setError(null);
 
       try {
-        const result = await RustChannelService.getChannelsFiltered(playlistId, {
+        const result = await RustChannelService.getChannelsFilteredWithCount(playlistId, {
           group: group || undefined,
           search: debouncedSearchRef.current || undefined,
           contentType: contentType || undefined,
@@ -86,20 +86,18 @@ export function usePaginatedChannels({
           sortOrder: 'asc',
         });
 
-        // Determine if there are more pages
-        const hasMorePages = result.length === pageSize;
+        // Determine if there are more pages using the totalCount from the query
+        const hasMorePages = offset + result.channels.length < result.totalCount;
         setHasMore(hasMorePages);
 
         if (isInitial) {
-          setChannels(result);
-          // Fetch total count for initial load
-          const count = await RustChannelService.countChannelsByPlaylist(playlistId);
-          setTotalCount(count);
+          setChannels(result.channels);
+          setTotalCount(result.totalCount);
         } else {
-          setChannels((prev) => [...prev, ...result]);
+          setChannels((prev) => [...prev, ...result.channels]);
         }
 
-        offsetRef.current = offset + result.length;
+        offsetRef.current = offset + result.channels.length;
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to fetch channels';
         console.error('[usePaginatedChannels] Error:', message);
@@ -109,9 +107,9 @@ export function usePaginatedChannels({
         }
       } finally {
         isLoadingRef.current = false;
-        if (isInitial) {
+        if (isInitial && showLoading) {
           setIsLoading(false);
-        } else {
+        } else if (!isInitial) {
           setIsLoadingMore(false);
         }
       }
@@ -126,14 +124,17 @@ export function usePaginatedChannels({
       clearTimeout(debounceTimerRef.current);
     }
 
+    const isSearchChange = search !== debouncedSearchRef.current;
+
     // Debounce search changes
     debounceTimerRef.current = setTimeout(() => {
       debouncedSearchRef.current = search;
       offsetRef.current = 0;
+
       setChannels([]);
       setHasMore(true);
       fetchPage(0, true);
-    }, search !== debouncedSearchRef.current ? SEARCH_DEBOUNCE_MS : 0);
+    }, isSearchChange ? SEARCH_DEBOUNCE_MS : 0);
 
     return () => {
       if (debounceTimerRef.current) {

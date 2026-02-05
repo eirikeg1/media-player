@@ -1,10 +1,10 @@
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
-import { useSelectionColors } from '@/constants/selection-theme';
-import { Dimensions, StyleSheet, TouchableOpacity, View } from 'react-native';
+import type { useSelectionColors } from '@/constants/selection-theme';
+import React from 'react';
+import { StyleSheet, TouchableOpacity, View } from 'react-native';
 
-const { width } = Dimensions.get('window');
-const ITEM_WIDTH = (width - 64) / 2; // 2 columns with padding
+export type SelectionColors = ReturnType<typeof useSelectionColors>;
 
 export interface GroupItem {
   name: string;
@@ -28,6 +28,11 @@ export interface GroupItemProps {
   onPress: (groupName: string) => void;
 
   /**
+   * Pre-computed selection colors (lifted from parent to avoid per-item hook calls)
+   */
+  selectionColors: SelectionColors;
+
+  /**
    * Whether this group is a favorite
    */
   isFavorite?: boolean;
@@ -38,14 +43,14 @@ export interface GroupItemProps {
   onToggleFavorite?: (groupName: string) => void;
 }
 
-export function GroupItemComponent({
+export const GroupItemComponent = React.memo(function GroupItemComponent({
   item,
   isSelected,
   onPress,
+  selectionColors,
   isFavorite,
   onToggleFavorite,
 }: GroupItemProps) {
-  const selectionColors = useSelectionColors();
   const colors = isSelected ? selectionColors.selected : selectionColors.unselected;
 
   const handlePress = () => {
@@ -118,15 +123,16 @@ export function GroupItemComponent({
       </ThemedText>
     </TouchableOpacity>
   );
-}
+});
 
 const styles = StyleSheet.create({
   groupItem: {
-    width: ITEM_WIDTH,
+    flex: 1,
     padding: 16,
     borderRadius: 12,
     borderWidth: 1,
     marginBottom: 16,
+    marginHorizontal: 8,
     alignItems: 'center',
     minHeight: 120,
   },

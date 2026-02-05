@@ -3,6 +3,7 @@ import {
   Database,
   type Channel as RustChannel,
   type ChannelFilter,
+  type ChannelsWithCount as RustChannelsWithCount,
   type Credentials,
   type PlaylistMetadata,
   type GroupCount,
@@ -187,6 +188,34 @@ export class RustChannelService {
       ...options,
     };
     return this.getChannels(filter);
+  }
+
+  /**
+   * Get channels with filtering, pagination, sorting, and total count.
+   * Uses a single optimized query with COUNT(*) OVER() to avoid separate count call.
+   */
+  static async getChannelsFilteredWithCount(
+    playlistId: string,
+    options?: {
+      group?: string;
+      search?: string;
+      contentType?: 'live' | 'movie' | 'series';
+      limit?: number;
+      offset?: number;
+      sortBy?: 'title' | 'group' | 'tvgName';
+      sortOrder?: 'asc' | 'desc';
+    }
+  ): Promise<{ channels: Channel[]; totalCount: number }> {
+    const db = await getRustDatabase();
+    const filter: ChannelFilter = {
+      playlistId,
+      ...options,
+    };
+    const result: RustChannelsWithCount = await db.getChannelsWithCount(filter);
+    return {
+      channels: result.channels.map(rustChannelToJsChannel),
+      totalCount: result.totalCount,
+    };
   }
 
   /**
