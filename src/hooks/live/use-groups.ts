@@ -6,7 +6,7 @@ import { sortGroupsWithAdultLast, type GroupOption } from '@/lib/group-utils';
  * Hook to fetch channel groups from the Rust database.
  * Returns groups with channel counts, sorted alphabetically with "All Channels" first.
  */
-export function useGroups(playlistId: string | null | undefined) {
+export function useGroups(playlistId: string | null | undefined, contentType?: 'live' | 'movie' | 'series') {
   const [groups, setGroups] = useState<GroupOption[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,7 +25,7 @@ export function useGroups(playlistId: string | null | undefined) {
 
       try {
         // Fetch groups with counts from Rust backend
-        const groupCounts = await RustChannelService.getGroupsWithCountsByPlaylist(playlistId!);
+        const groupCounts = await RustChannelService.getGroupsWithCountsByPlaylist(playlistId!, contentType);
 
         if (cancelled) return;
 
@@ -62,7 +62,7 @@ export function useGroups(playlistId: string | null | undefined) {
     return () => {
       cancelled = true;
     };
-  }, [playlistId]);
+  }, [playlistId, contentType]);
 
   return { groups, isLoading, error };
 }

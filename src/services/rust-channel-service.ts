@@ -241,9 +241,9 @@ export class RustChannelService {
   /**
    * Get groups with channel counts for a playlist
    */
-  static async getGroupsWithCountsByPlaylist(playlistId: string): Promise<GroupCount[]> {
+  static async getGroupsWithCountsByPlaylist(playlistId: string, contentType?: 'live' | 'movie' | 'series'): Promise<GroupCount[]> {
     const db = await getRustDatabase();
-    return db.getGroupsWithCountsByPlaylist(playlistId);
+    return db.getGroupsWithCountsByPlaylist(playlistId, contentType);
   }
 
   /**

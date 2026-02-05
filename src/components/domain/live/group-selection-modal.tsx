@@ -5,6 +5,7 @@ import { ThemedView } from '@/components/ui/display/themed-view';
 import { useSelectionColors } from '@/constants/selection-theme';
 import { useFavoriteGroups } from '@/hooks/live/use-favorite-groups';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { isAdultGroup } from '@/lib/group-utils';
 import { FlashList } from '@shopify/flash-list';
 import { useCallback, useMemo, useState } from 'react';
 import {
@@ -49,8 +50,16 @@ export function GroupSelectionModal({
       );
     }
 
-    // Sort: Favorites first, then alphabetical
+    // Sort: non-adult favorites > non-adult non-favorites > adult favorites > adult non-favorites
+    // Alphabetical within each tier
     return [...result].sort((a, b) => {
+      const isAAdult = isAdultGroup(a.name);
+      const isBAdult = isAdultGroup(b.name);
+
+      // Adult groups always go after non-adult groups
+      if (isAAdult !== isBAdult) return isAAdult ? 1 : -1;
+
+      // Within the same adult/non-adult tier, favorites come first
       const isAFav = favoriteGroups.includes(a.name);
       const isBFav = favoriteGroups.includes(b.name);
 

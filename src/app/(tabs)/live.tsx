@@ -32,7 +32,7 @@ export default function LiveScreen() {
   } = useFavoriteChannels(activePlaylist, hasLoadedPlaylist);
 
   // Server-side groups fetching
-  const { groups } = useGroups(activePlaylist?.id);
+  const { groups } = useGroups(activePlaylist?.id, 'live');
 
   // Paginated channels with server-side filtering
   const {
