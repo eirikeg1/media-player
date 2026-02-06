@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { RustChannelService } from '@/services/rust-channel-service';
 import { FAVORITES_GROUP_SENTINEL, sortGroupsWithAdultLast, type GroupOption } from '@/lib/group-utils';
 
@@ -15,6 +15,16 @@ export function useGroups(
   const [groups, setGroups] = useState<GroupOption[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Stabilize favoriteGroups reference — only update when contents actually change
+  const favoriteGroupsRef = useRef(favoriteGroups);
+  if (
+    favoriteGroups?.length !== favoriteGroupsRef.current?.length ||
+    favoriteGroups?.some((g, i) => g !== favoriteGroupsRef.current?.[i])
+  ) {
+    favoriteGroupsRef.current = favoriteGroups;
+  }
+  const stableFavoriteGroups = favoriteGroupsRef.current;
 
   useEffect(() => {
     if (!playlistId) {
@@ -50,9 +60,9 @@ export function useGroups(
         const result: GroupOption[] = [];
 
         // Add Favorites entry if there are favorite groups
-        if (favoriteGroups && favoriteGroups.length > 0) {
+        if (stableFavoriteGroups && stableFavoriteGroups.length > 0) {
           const favoritesCount = groupCounts
-            .filter((g) => favoriteGroups.includes(g.name))
+            .filter((g) => stableFavoriteGroups.includes(g.name))
             .reduce((sum, g) => sum + g.count, 0);
           result.push({ name: FAVORITES_GROUP_SENTINEL, channelCount: favoritesCount });
         }
@@ -83,8 +93,7 @@ export function useGroups(
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playlistId, contentType, JSON.stringify(favoriteGroups)]);
+  }, [playlistId, contentType, stableFavoriteGroups]);
 
   return { groups, isLoading, error };
 }

@@ -44,6 +44,16 @@ export function usePaginatedChannels({
   const [error, setError] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState(0);
 
+  // Stabilize groups reference — only update when contents actually change
+  const groupsRef = useRef(groups);
+  if (
+    groups?.length !== groupsRef.current?.length ||
+    groups?.some((g, i) => g !== groupsRef.current?.[i])
+  ) {
+    groupsRef.current = groups;
+  }
+  const stableGroups = groupsRef.current;
+
   // Track current offset for pagination
   const offsetRef = useRef(0);
   // Track if we're currently loading to prevent duplicate requests
@@ -77,7 +87,7 @@ export function usePaginatedChannels({
 
       try {
         const result = await RustChannelService.getChannelsFilteredWithCount(playlistId, {
-          groups: groups && groups.length > 0 ? groups : undefined,
+          groups: stableGroups && stableGroups.length > 0 ? stableGroups : undefined,
           search: debouncedSearchRef.current || undefined,
           contentType: contentType || undefined,
           limit: pageSize,
@@ -114,8 +124,7 @@ export function usePaginatedChannels({
         }
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [playlistId, JSON.stringify(groups), contentType, pageSize]
+    [playlistId, stableGroups, contentType, pageSize]
   );
 
   // Reset and fetch first page when filters change
@@ -142,8 +151,7 @@ export function usePaginatedChannels({
         clearTimeout(debounceTimerRef.current);
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playlistId, JSON.stringify(groups), search, contentType, fetchPage]);
+  }, [playlistId, stableGroups, search, contentType, fetchPage]);
 
   // Load more channels (next page)
   const loadMore = useCallback(() => {
