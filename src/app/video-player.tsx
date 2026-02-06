@@ -2,7 +2,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { BackHandler, StatusBar } from 'react-native';
 
-import { VideoPlayer } from '@/components/domain/video/video-player';
+import { VideoPlayer } from '@/features/video/components/video-player';
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';

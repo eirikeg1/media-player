@@ -1,4 +1,4 @@
-import { FavoriteStar } from '@/components/domain/live/favorite-star';
+import { FavoriteStar } from '@/features/live/favorite-star';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
 import { getChannelId } from '@/lib/channel-utils';

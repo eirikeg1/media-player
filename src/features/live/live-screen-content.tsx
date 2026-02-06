@@ -1,7 +1,7 @@
-import { ChannelItem } from '@/components/domain/live/channel-item';
-import { LiveEmptyState } from '@/components/domain/live/live-empty-state';
-import { LiveLoadingSpinner } from '@/components/domain/live/live-loading-spinner';
-import { LiveTopBar } from '@/components/domain/live/live-top-bar';
+import { ChannelItem } from '@/features/live/channel-item';
+import { LiveEmptyState } from '@/features/live/live-empty-state';
+import { LiveLoadingSpinner } from '@/features/live/live-loading-spinner';
+import { LiveTopBar } from '@/features/live/live-top-bar';
 import InfiniteParallaxGrid from '@/components/ui/containers/infinite-parallax-grid';
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';

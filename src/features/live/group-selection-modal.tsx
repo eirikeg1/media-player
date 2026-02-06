@@ -1,4 +1,4 @@
-import { GroupItemComponent, type GroupItem } from '@/components/domain/live/group-item';
+import { GroupItemComponent, type GroupItem } from '@/features/live/group-item';
 import { ModalHeader } from '@/components/ui/containers/modal/modal-header';
 import { Input } from '@/components/ui/controls/inputs/input';
 import { ThemedView } from '@/components/ui/display/themed-view';

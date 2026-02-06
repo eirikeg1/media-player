@@ -1,4 +1,4 @@
-import type { RetryState, VideoError } from '@/components/domain/video/types/video-error.types';
+import type { RetryState, VideoError } from '@/features/video/types/video-error.types';
 import { create } from 'zustand';
 
 interface VideoErrorState {

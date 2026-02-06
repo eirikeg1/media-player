@@ -1,4 +1,4 @@
-import { AddUserCard, UserProfileCard } from '@/components/domain/user/user-profile-card';
+import { AddUserCard, UserProfileCard } from '@/features/user/user-profile-card';
 import { AnimatedModal } from '@/components/ui/containers/modal/animated-modal';
 import { useUserStore } from '@/states/user/user-store';
 import type { UpdateUserInput, User } from '@/types/user.types';

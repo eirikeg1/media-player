@@ -4,8 +4,8 @@ import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import type { Channel } from '@/types/playlist.types';
-import { VIDEO_CONSTANTS } from './constants';
-import type { VideoError } from './types/video-error.types';
+import { VIDEO_CONSTANTS } from '../constants';
+import type { VideoError } from '../types/video-error.types';
 
 interface VideoLoadingStateProps {
   channel: Channel;

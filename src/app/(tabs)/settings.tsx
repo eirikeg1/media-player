@@ -1,7 +1,7 @@
 import { StyleSheet, View } from 'react-native';
 
-import { PlaylistManager } from '@/components/domain/playlist';
-import { UserSettings } from '@/components/domain/user/user-settings';
+import { PlaylistManager } from '@/features/playlist';
+import { UserSettings } from '@/features/user/user-settings';
 import ParallaxScrollView from '@/components/ui/containers/parallax-scroll-view';
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedView } from '@/components/ui/display/themed-view';

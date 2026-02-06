@@ -1,9 +1,9 @@
 import { Image } from 'expo-image';
 import { Platform, StyleSheet } from 'react-native';
 
-import { VideoPreviewCarousel } from '@/components/domain/general-placeholder-components/preview-components/preview-carousel';
-import { VideoPreviewGrid } from '@/components/domain/general-placeholder-components/preview-components/preview-grid';
-import { VideoGridItem } from '@/components/domain/general-placeholder-components/preview-components/video-grid-item';
+import { VideoPreviewCarousel } from '@/features/general-placeholder-components/preview-components/preview-carousel';
+import { VideoPreviewGrid } from '@/features/general-placeholder-components/preview-components/preview-grid';
+import { VideoGridItem } from '@/features/general-placeholder-components/preview-components/video-grid-item';
 import ParallaxScrollView from '@/components/ui/containers/parallax-scroll-view';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';

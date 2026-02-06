@@ -1,4 +1,4 @@
-import type { NetworkState } from '@/components/domain/video/utils/network-utils';
+import type { NetworkState } from '@/features/video/utils/network-utils';
 import { create } from 'zustand';
 
 interface VideoNetworkState {

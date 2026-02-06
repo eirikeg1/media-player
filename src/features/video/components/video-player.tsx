@@ -2,7 +2,7 @@ import { VideoView } from 'expo-video';
 import { View } from 'react-native';
 
 import type { Channel } from '@/types/playlist.types';
-import { useVideoPlayerLogic } from './hooks/use-video-player';
+import { useVideoPlayerLogic } from '../hooks/use-video-player';
 import { LoadingProgress } from './loading-progress';
 import { VideoControls, VideoTapOverlay } from './video-controls';
 import { VideoErrorState } from './video-states';

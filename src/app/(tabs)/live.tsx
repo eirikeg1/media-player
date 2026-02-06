@@ -1,12 +1,12 @@
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { LiveScreenContent } from '@/components/domain/live/live-screen-content';
-import { useFavoriteChannels } from '@/hooks/live/use-favorite-channels';
-import { useFavoriteGroups } from '@/hooks/live/use-favorite-groups';
-import { useGroups } from '@/hooks/live/use-groups';
-import { usePaginatedChannels } from '@/hooks/live/use-paginated-channels';
-import { usePlaylistData } from '@/hooks/live/use-playlist-data';
+import { LiveScreenContent } from '@/features/live/live-screen-content';
+import { useFavoriteChannels } from '@/features/live/hooks/use-favorite-channels';
+import { useFavoriteGroups } from '@/features/live/hooks/use-favorite-groups';
+import { useGroups } from '@/features/live/hooks/use-groups';
+import { usePaginatedChannels } from '@/features/live/hooks/use-paginated-channels';
+import { usePlaylistData } from '@/features/live/hooks/use-playlist-data';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { getChannelId } from '@/lib/channel-utils';
 import { FAVORITES_GROUP_SENTINEL } from '@/lib/group-utils';
