@@ -1,4 +1,4 @@
-import { useVideoUIStore } from '@/states/video/ui-store';
+import { useVideoUIStore } from '@/stores/video/ui-store';
 import { useCallback, useMemo } from 'react';
 import { VIDEO_CONSTANTS } from '../../constants';
 

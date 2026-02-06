@@ -1,6 +1,6 @@
 import { AddUserCard, UserProfileCard } from '@/features/user/user-profile-card';
 import { AnimatedModal } from '@/components/ui/containers/modal/animated-modal';
-import { useUserStore } from '@/states/user/user-store';
+import { useUserStore } from '@/stores/user/user-store';
 import type { UpdateUserInput, User } from '@/types/user.types';
 import { router } from 'expo-router';
 import { useCallback, useState } from 'react';

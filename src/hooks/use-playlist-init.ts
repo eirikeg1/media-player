@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
-import { usePlaylistStore } from '@/states/playlist/playlist-store';
-import { useUserStore } from '@/states/user/user-store';
+import { usePlaylistStore } from '@/stores/playlist/playlist-store';
+import { useUserStore } from '@/stores/user/user-store';
 import { initializeDatabase } from '@/db/migrations';
 
 /**

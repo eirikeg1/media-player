@@ -1,4 +1,4 @@
-import { usePlaylistStore } from '@/states/playlist/playlist-store';
+import { usePlaylistStore } from '@/stores/playlist/playlist-store';
 import { useMemo } from 'react';
 
 export function usePlaylistData() {

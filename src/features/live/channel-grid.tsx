@@ -3,7 +3,7 @@ import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
 import { usePlaylistChannels } from '@/hooks/use-playlist-channels';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { usePlaylistStore } from '@/states/playlist/playlist-store';
+import { usePlaylistStore } from '@/stores/playlist/playlist-store';
 import type { Channel } from '@/types/playlist.types';
 import { useCallback, useMemo } from 'react';
 import {

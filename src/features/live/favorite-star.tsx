@@ -2,7 +2,7 @@ import { TouchableOpacity } from 'react-native';
 import { useCallback, useEffect, useState } from 'react';
 
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
-import { useUserStore } from '@/states/user/user-store';
+import { useUserStore } from '@/stores/user/user-store';
 import { useThemeColor } from '@/hooks/use-theme-color';
 
 interface FavoriteStarProps {

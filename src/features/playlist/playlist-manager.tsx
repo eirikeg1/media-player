@@ -4,7 +4,7 @@ import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { usePlaylistStore } from '@/states/playlist/playlist-store';
+import { usePlaylistStore } from '@/stores/playlist/playlist-store';
 import { memo, useCallback, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { PlaylistList } from './playlist-list';

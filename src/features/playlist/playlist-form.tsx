@@ -2,7 +2,7 @@ import { Input } from '@/components/ui/controls/inputs/input';
 import { Textarea } from '@/components/ui/controls/inputs/textarea';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
-import { usePlaylistStore } from '@/states/playlist/playlist-store';
+import { usePlaylistStore } from '@/stores/playlist/playlist-store';
 import type { Playlist } from '@/types/playlist.types';
 import { memo, useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Switch, TouchableOpacity, View } from 'react-native';

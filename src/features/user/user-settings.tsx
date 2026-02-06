@@ -1,6 +1,6 @@
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
-import { useUserStore } from '@/states/user/user-store';
+import { useUserStore } from '@/stores/user/user-store';
 import { router } from 'expo-router';
 import { memo, useCallback } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';

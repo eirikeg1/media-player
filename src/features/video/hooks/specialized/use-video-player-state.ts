@@ -1,4 +1,4 @@
-import { useVideoPlayerStore } from '@/states/video/player-store';
+import { useVideoPlayerStore } from '@/stores/video/player-store';
 import type { Channel } from '@/types/playlist.types';
 import { useVideoPlayer } from 'expo-video';
 import { useCallback, useMemo } from 'react';

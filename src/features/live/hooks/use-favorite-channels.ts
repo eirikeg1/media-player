@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { useUserStore } from '@/states/user/user-store';
+import { useUserStore } from '@/stores/user/user-store';
 import type { Playlist } from '@/types/playlist.types';
 
 export function useFavoriteChannels(activePlaylist: Playlist | null, hasLoadedPlaylist: boolean) {

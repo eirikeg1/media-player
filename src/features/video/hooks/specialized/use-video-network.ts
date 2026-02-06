@@ -1,4 +1,4 @@
-import { useVideoNetworkStore } from '@/states/video/network-store';
+import { useVideoNetworkStore } from '@/stores/video/network-store';
 import { useCallback, useEffect, useMemo } from 'react';
 import {
     checkNetworkConnectivity,

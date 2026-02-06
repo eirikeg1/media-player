@@ -1,4 +1,4 @@
-import { useVideoErrorStore } from '@/states/video/error-store';
+import { useVideoErrorStore } from '@/stores/video/error-store';
 import { useCallback, useMemo } from 'react';
 import { Alert } from 'react-native';
 import { calculateRetryDelay, getVideoErrorInfo, type RawVideoError } from '../../types/video-error.types';

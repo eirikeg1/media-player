@@ -1,4 +1,4 @@
-import { useUserStore } from '@/states/user/user-store';
+import { useUserStore } from '@/stores/user/user-store';
 import { useCallback, useEffect, useState } from 'react';
 
 export function useFavoriteGroups() {
