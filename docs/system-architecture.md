@@ -14,11 +14,11 @@ The application is structured into three primary layers:
 graph TD
     subgraph "Presentation Layer (UI)"
         Screens["Screens (src/app)"]
-        Components["Components (src/components)"]
+        Components["Components (src/components, src/features)"]
     end
 
     subgraph "Application Layer (State & Logic)"
-        Stores["Zustand Stores (src/states)"]
+        Stores["Zustand Stores (src/stores)"]
         Hooks["Custom Hooks (src/hooks)"]
         Services["Services (src/services)"]
     end
@@ -117,7 +117,7 @@ graph TD
 
 ## 4. State Management (Zustand)
 
-State is decentralized into domain-specific stores located in `src/states/`:
+State is decentralized into domain-specific stores located in `src/stores/`:
 
 - **Playlist Store:** Manages M3U content, parsing status, and list of available playlists.
 - **User Store:** Manages user profiles and global preferences.
@@ -126,5 +126,5 @@ State is decentralized into domain-specific stores located in `src/states/`:
 ## 5. Domain Documentation
 
 For deeper dives into specific domains, refer to:
-- [Playlist Architecture](./PLAYLIST_ARCHITECTURE.md)
-- [Playlist Usage](./PLAYLIST_USAGE.md)
+- [Playlist Architecture](./playlist-architecture.md)
+- [Playlist Usage](./playlist-usage.md)

@@ -52,7 +52,7 @@ The playlist management system is now integrated into your app. Users can access
 ### Using the Playlist Store
 
 ```typescript
-import { usePlaylistStore } from '@/states/playlist-store';
+import { usePlaylistStore } from '@/stores/playlist';
 
 function MyComponent() {
   // Get all playlists
@@ -186,7 +186,7 @@ Now that playlists are set up, you can use the active playlist's channel data th
 ### Example: Display Channels
 
 ```typescript
-import { usePlaylistStore } from '@/states/playlist-store';
+import { usePlaylistStore } from '@/stores/playlist';
 import { FlatList, View, Text } from 'react-native';
 
 export function ChannelsScreen() {
@@ -211,7 +211,7 @@ export function ChannelsScreen() {
 ## Support
 
 For architecture details and migration guides, see:
-- `docs/PLAYLIST_ARCHITECTURE.md`
+- `docs/playlist-architecture.md`
 
 For issues or questions:
 - Check the error messages in the UI

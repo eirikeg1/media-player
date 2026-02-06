@@ -103,28 +103,30 @@
 
 ## 2. Prioritized Action Plan
 
-### Priority 1 — Do Immediately (Bugs & Dead Code)
+### Priority 1 — Do Immediately (Bugs & Dead Code) — DONE
+
 Each can be its own small PR. Zero risk.
 
-| Step | Change | Files |
-|------|--------|-------|
-| 1.1 | Fix `JSON.stringify` in useEffect/useCallback deps | 2 files |
-| 1.2 | Fix `JSON.stringify(channel)` in route params → pass channel ID | 2-3 files |
-| 1.3 | Delete dead `useChannelFiltering` hook | 1 file |
-| 1.4 | Delete dead `InMemoryPlaylistRepository` class | 1 file |
-| 1.5 | Audit for other dead code (`SimpleChannelGrid`, `StickyTopBar`, unused `PlaylistService` methods) | 2-3 files |
+| Step | Change | Files | Status |
+|------|--------|-------|--------|
+| 1.1 | Fix `JSON.stringify` in useEffect/useCallback deps | 2 files | **DONE** |
+| 1.2 | Fix `JSON.stringify(channel)` in route params → pass channel ID | 2-3 files | **DONE** |
+| 1.3 | Delete dead `useChannelFiltering` hook | 1 file | **DONE** |
+| 1.4 | Delete dead `InMemoryPlaylistRepository` class | 1 file | **DONE** |
+| 1.5 | Audit for other dead code (`SimpleChannelGrid`, `StickyTopBar`, unused `PlaylistService` methods) | 2-3 files | **DONE** |
 
-### Priority 2 — Do Before Next Feature (Structural + Documentation)
+### Priority 2 — Do Before Next Feature (Structural + Documentation) — DONE
+
 One focused PR, ideally done before starting EPG/VOD development.
 
-| Step | Change | Files | Order |
-|------|--------|-------|-------|
-| 2.1 | Document architecture conventions (pattern guide, co-location rules, console.log convention) | 1-2 doc files | First |
-| 2.2 | Promote `usePlaylistChannels` to shared `hooks/use-playlist-channels.ts` | 5 files | Second |
-| 2.3 | Move 5 live-only hooks → `components/domain/live/hooks/` (or `features/live/hooks/` if doing 2.4 simultaneously) | 6 files | Third |
-| 2.4 | Rename `components/domain/` → `features/`, restructure video .tsx files into `features/video/components/` | ~16 import updates | Fourth |
+| Step | Change | Files | Order | Status |
+|------|--------|-------|-------|--------|
+| 2.1 | Document architecture conventions (pattern guide, co-location rules, console.log convention) | 1-2 doc files | First | **DONE** (see `docs/conventions.md`) |
+| 2.2 | Promote `usePlaylistChannels` to shared `hooks/use-playlist-channels.ts` | 5 files | Second | **DONE** |
+| 2.3 | Move 5 live-only hooks → `features/live/hooks/` | 6 files | Third | **DONE** |
+| 2.4 | Rename `components/domain/` → `features/`, restructure video .tsx files into `features/video/components/` | ~16 import updates | Fourth | **DONE** |
 
-> Steps 2.2-2.4 can be one PR with 3 commits, or separate PRs. Each commit must pass typecheck.
+> **Note**: `states/` → `stores/` rename was also completed despite the "skip" recommendation in the table below. The rename was bundled with the structural restructure since imports were already changing.
 
 ### Priority 3 — Do When Building New Features (Defer)
 
@@ -140,7 +142,7 @@ One focused PR, ideally done before starting EPG/VOD development.
 
 | Proposal | Why |
 |----------|-----|
-| `states/` → `stores/` rename | Cosmetic — both names are accurate |
+| ~~`states/` → `stores/` rename~~ | ~~Cosmetic — both names are accurate~~ (Completed — bundled with structural reorg) |
 | Pre-creating feature scaffolding | YAGNI |
 | Barrel exports for types/lib/services | Circular dependency risk in Metro |
 | React Query, Zustand shallow, selector factories | No measured need |
@@ -151,7 +153,7 @@ One focused PR, ideally done before starting EPG/VOD development.
 
 ## 3. Folder Structure (Updated)
 
-This reflects the resolved decisions — `features/` replaces `components/domain/`, but `states/` is NOT renamed.
+This reflects the resolved decisions — `features/` replaces `components/domain/`, and `states/` was renamed to `stores/`.
 
 ```
 src/
@@ -197,7 +199,7 @@ src/
 │   └── home/
 │       └── components/                     # From general-placeholder-components/
 │
-├── states/                                 # Zustand stores (NOT renamed)
+├── stores/                                 # Zustand stores (renamed from states/)
 │   ├── index.ts
 │   ├── playlist/
 │   │   ├── playlist-store.ts
@@ -322,6 +324,6 @@ The original proposal left 4 open questions for the project owner to decide. A f
 
 | Topic | Resolution |
 |-------|-----------|
-| `states/` → `stores/` rename | **Skip** — architect conceded after react-expert and devil's advocate both opposed (cosmetic, ~19 files of churn) |
+| `states/` → `stores/` rename | Originally **Skip**, but completed alongside the structural reorg since imports were already changing |
 | Performance optimizations (shallow, factories, React Query) | **Skip all** — fix JSON.stringify bugs only, defer everything else until measured |
 | Console.log `__DEV__` guards | **Incremental** — document convention, clean up when touching files, don't do a sweep |

@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the architecture for managing IPTV playlists in the application. The design follows clean architecture principles with clear separation of concerns, making it easy to maintain and extend (e.g., migrating to SQLite in the future).
+This document describes the architecture for managing IPTV playlists in the application. The design follows clean architecture principles with clear separation of concerns, making it easy to maintain and extend.
 
 ## Architecture Layers
 
@@ -34,16 +34,12 @@ Contains business logic for playlist operations:
 
 Data access layer with abstract interface:
 
-**Current Implementation**: In-Memory Storage
-- Uses JavaScript Map for quick development and testing
-- Same interface as future SQLite implementation
+**Implementation**: SQLite via `SQLitePlaylistRepository`
+- Persists playlists and channels to SQLite database
+- Channel parsing delegated to `RustChannelService`
+- Factory function `createPlaylistRepository()` with singleton export
 
-**Future Implementation**: SQLite
-- Commented placeholder code is ready for SQLite migration
-- Supports encrypted credential storage
-- No changes needed to upper layers when migrating
-
-**Interface Methods**:
+**Interface Methods** (`IPlaylistRepository`):
 - `getAll()`: Retrieve all playlists
 - `getById(id)`: Get specific playlist
 - `create(playlist)`: Create new playlist
@@ -51,7 +47,7 @@ Data access layer with abstract interface:
 - `delete(id)`: Remove playlist
 - `clear()`: Clear all playlists
 
-### 4. State Management (`src/states/playlist-store.ts`)
+### 4. State Management (`src/stores/playlist/playlist-store.ts`)
 
 Zustand store for global playlist state:
 
@@ -84,7 +80,7 @@ Helper functions for playlist management:
 - `extractDomain()`: Extract domain from URL
 - `isValidUrl()`: URL validation
 
-### 6. UI Components (`src/components/domain/playlist/`)
+### 6. UI Components (`src/features/playlist/`)
 
 React components for playlist UI:
 
@@ -157,10 +153,10 @@ UI Re-render
 ### 2. Authentication Support
 - Optional username/password credentials
 - Embedded in URL for authenticated requests
-- Credentials stored securely (encrypted in SQLite future implementation)
+- Credentials stored in SQLite database
 
 ### 3. Caching with Refresh
-- Parsed data stored in memory
+- Parsed data stored in SQLite
 - Manual refresh to re-fetch and re-parse
 - Last updated timestamp tracking
 
@@ -175,54 +171,6 @@ UI Re-render
 - Per-component loading states
 - Disabled interactions during loading
 
-## Migration to SQLite
-
-When ready to migrate to SQLite:
-
-1. **Install Dependencies**:
-   ```bash
-   npm install expo-sqlite
-   npm install expo-secure-store  # for credential encryption
-   ```
-
-2. **Implement SQLite Repository**:
-   - Uncomment `SQLitePlaylistRepository` in `playlist-repository.ts`
-   - Implement all interface methods
-   - Add database schema and migrations
-   - Implement credential encryption using SecureStore
-
-3. **Update Factory Function**:
-   ```typescript
-   export function createPlaylistRepository(): IPlaylistRepository {
-     // Check if SQLite is available
-     if (Platform.OS !== 'web') {
-       return new SQLitePlaylistRepository();
-     }
-     return new InMemoryPlaylistRepository();
-   }
-   ```
-
-4. **Database Schema**:
-   ```sql
-   CREATE TABLE playlists (
-     id TEXT PRIMARY KEY,
-     name TEXT NOT NULL,
-     url TEXT NOT NULL,
-     credentials_encrypted TEXT,
-     parsed_data TEXT,
-     channel_count INTEGER,
-     created_at INTEGER NOT NULL,
-     updated_at INTEGER NOT NULL,
-     last_fetched_at INTEGER
-   );
-   ```
-
-5. **No Other Changes Required**:
-   - Service layer remains unchanged
-   - Zustand store remains unchanged
-   - UI components remain unchanged
-   - Only repository implementation changes
-
 ## File Structure
 
 ```
@@ -231,21 +179,22 @@ src/
 │   └── playlist.types.ts              # Type definitions
 ├── services/
 │   └── playlist-service.ts            # Business logic
-├── states/
-│   └── playlist-store.ts              # Zustand state management
+├── stores/
+│   └── playlist/
+│       ├── playlist-store.ts          # Zustand state management
+│       └── index.ts                   # Barrel export
 ├── db/
-│   └── playlist-repository.ts         # Data access layer
+│   └── playlist-repository.ts         # Data access layer (SQLite)
 ├── lib/
 │   └── playlist-utils.ts              # Utility functions
 ├── hooks/
 │   └── use-playlist-init.ts           # Initialization hook
-├── components/
-│   └── domain/
-│       └── playlist/
-│           ├── playlist-manager.tsx   # Main container
-│           ├── playlist-form.tsx      # Add playlist form
-│           ├── playlist-list.tsx      # Display playlists
-│           └── index.ts               # Exports
+├── features/
+│   └── playlist/
+│       ├── playlist-manager.tsx       # Main container
+│       ├── playlist-form.tsx          # Add playlist form
+│       ├── playlist-list.tsx          # Display playlists
+│       └── index.ts                   # Exports
 └── app/
     ├── _layout.tsx                    # App initialization
     └── (tabs)/
@@ -263,13 +212,9 @@ src/
 
 ## Future Enhancements
 
-1. **SQLite Storage**: Persistent storage with encrypted credentials
-2. **Playlist Groups**: Organize playlists into categories
-3. **Channel Favorites**: Mark favorite channels across playlists
-4. **EPG Support**: Electronic Program Guide integration
-5. **Search**: Search channels across playlists
-6. **Filters**: Filter channels by group, language, country
-7. **Export/Import**: Export playlists to file, import from file
-8. **Auto-refresh**: Automatic periodic playlist updates
-9. **Offline Mode**: Cache channel data for offline viewing
-10. **Statistics**: Track viewing history and preferences
+1. **Playlist Groups**: Organize playlists into categories
+2. **EPG Support**: Electronic Program Guide integration
+3. **Export/Import**: Export playlists to file, import from file
+4. **Auto-refresh**: Automatic periodic playlist updates
+5. **Offline Mode**: Cache channel data for offline viewing
+6. **Statistics**: Track viewing history and preferences
