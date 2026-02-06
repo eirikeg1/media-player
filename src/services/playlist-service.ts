@@ -1,6 +1,4 @@
-import parser from 'iptv-playlist-parser';
-import { getRawChannelId } from '@/lib/channel-utils';
-import type { ParsedPlaylist, PlaylistCredentials } from '@/types/playlist.types';
+import type { PlaylistCredentials } from '@/types/playlist.types';
 
 // HTTP Status codes
 const HTTP_STATUS = {
@@ -93,87 +91,6 @@ export class PlaylistService {
   }
 
   /**
-   * Parse M3U playlist content using iptv-playlist-parser.
-   * Handles various playlist formats and provides detailed error messages.
-   */
-  static parsePlaylistContent(content: string): ParsedPlaylist {
-    console.log('[PlaylistService] Starting parse, content length:', content?.length);
-
-    if (!content || typeof content !== 'string' || content.trim().length === 0) {
-      console.error('[PlaylistService] Invalid content for parsing');
-      throw new Error('Invalid playlist content: content is empty or not a string');
-    }
-
-    try {
-      console.log('[PlaylistService] Calling parser.parse...');
-      const parsed = parser.parse(content);
-      console.log('[PlaylistService] Parser returned:', {
-        hasItems: !!parsed?.items,
-        itemsCount: parsed?.items?.length,
-      });
-
-      // Deduplicate channels at the source
-      if (parsed?.items && Array.isArray(parsed.items)) {
-        const originalCount = parsed.items.length;
-        const seenChannels = new Map<string, any>();
-
-        parsed.items = parsed.items.filter((item: any) => {
-          const channelId = getRawChannelId(item);
-          if (seenChannels.has(channelId)) {
-            return false;
-          }
-          seenChannels.set(channelId, item);
-          return true;
-        });
-
-        if (originalCount !== parsed.items.length) {
-          console.log(`[PlaylistService] Removed ${originalCount - parsed.items.length} duplicate channels during parsing`);
-        }
-      }
-
-      if (!parsed) {
-        console.error('[PlaylistService] Parser returned null/undefined');
-        throw new Error('Failed to parse playlist. The content may not be in M3U format.');
-      }
-
-      if (!parsed.items || !Array.isArray(parsed.items) || parsed.items.length === 0) {
-        console.error('[PlaylistService] No items in parsed data');
-        throw new Error('No channels found in playlist. Please verify the M3U format.');
-      }
-
-      console.log('[PlaylistService] Successfully parsed', parsed.items.length, 'channels');
-      return parsed;
-    } catch (error) {
-      console.error('[PlaylistService] Parse error:', error);
-      if (error instanceof Error) {
-        if (error.message.startsWith('No channels found') ||
-            error.message.startsWith('Invalid playlist') ||
-            error.message.startsWith('Failed to parse')) {
-          throw error;
-        }
-        console.error('[PlaylistService] Wrapping parse error:', error.message);
-        throw new Error(`Playlist parsing failed: ${error.message}`);
-      }
-      throw new Error('Unknown error occurred while parsing playlist');
-    }
-  }
-
-  /**
-   * Fetch and parse playlist in one operation
-   * @param url - The M3U playlist URL
-   * @param credentials - Optional authentication credentials
-   * @returns Parsed playlist data
-   * @throws {Error} If fetch or parse fails
-   */
-  static async fetchAndParsePlaylist(
-    url: string,
-    credentials?: PlaylistCredentials
-  ): Promise<ParsedPlaylist> {
-    const content = await this.fetchPlaylistContent(url, credentials);
-    return this.parsePlaylistContent(content);
-  }
-
-  /**
    * Validate playlist URL format
    * @param url - The URL to validate
    * @returns True if valid HTTP/HTTPS URL
@@ -189,33 +106,6 @@ export class PlaylistService {
     } catch {
       return false;
     }
-  }
-
-  /**
-   * Validate parsed playlist data
-   * @param data - The parsed playlist data to validate
-   * @returns Validation result with errors array
-   */
-  static validateParsedData(data: ParsedPlaylist): {
-    valid: boolean;
-    errors: string[];
-  } {
-    const errors: string[] = [];
-
-    if (!data) {
-      errors.push('Parsed data is null or undefined');
-    } else {
-      if (!data.items || !Array.isArray(data.items)) {
-        errors.push('Items array is missing or invalid');
-      } else if (data.items.length === 0) {
-        errors.push('No channels found in playlist');
-      }
-    }
-
-    return {
-      valid: errors.length === 0,
-      errors,
-    };
   }
 
   /**
@@ -244,31 +134,4 @@ export class PlaylistService {
     }
   }
 
-  /**
-   * Extract channel count from parsed playlist
-   * @param parsedData - The parsed playlist data
-   * @returns Number of channels in the playlist
-   */
-  static getChannelCount(parsedData: ParsedPlaylist): number {
-    return parsedData?.items?.length || 0;
-  }
-
-  /**
-   * Get unique channel groups from parsed playlist
-   * @param parsedData - The parsed playlist data
-   * @returns Sorted array of unique group names
-   */
-  static getChannelGroups(parsedData: ParsedPlaylist): string[] {
-    if (!parsedData?.items) return [];
-
-    const groups = new Set<string>();
-    parsedData.items.forEach((item: ParsedPlaylist['items'][0]) => {
-      const groupTitle = item.group?.title;
-      if (groupTitle && groupTitle.trim().length > 0) {
-        groups.add(groupTitle.trim());
-      }
-    });
-
-    return Array.from(groups).sort();
-  }
 }
