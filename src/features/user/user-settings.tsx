@@ -10,7 +10,6 @@ import { Pressable, StyleSheet, View } from 'react-native';
  */
 export const UserSettings = memo(function UserSettings() {
   const currentUser = useUserStore((state) => state.currentUser);
-  const users = useUserStore((state) => state.users);
 
   const handleSwitchUser = useCallback(() => {
     // Navigate to the user selection screen

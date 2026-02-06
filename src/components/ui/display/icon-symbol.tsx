@@ -3,12 +3,7 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { SymbolViewProps, SymbolWeight } from 'expo-symbols';
 import { ComponentProps } from 'react';
-import { OpaqueColorValue, TextStyle, View, type StyleProp } from 'react-native';
-import Animated from 'react-native-reanimated';
-
-// Create animated components for use with reanimated
-const AnimatedView = Animated.createAnimatedComponent(View);
-
+import { OpaqueColorValue, TextStyle, type StyleProp } from 'react-native';
 type IconMapping = Record<SymbolViewProps['name'], ComponentProps<typeof MaterialIcons>['name']>;
 export type IconSymbolName = keyof typeof MAPPING;
 

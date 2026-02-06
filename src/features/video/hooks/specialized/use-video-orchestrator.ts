@@ -127,6 +127,7 @@ export function useVideoOrchestrator({
       statusSubscription?.remove();
       playingSubscription?.remove();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playerState.player]); // Only depend on the player itself, not the actions
 
   // Network state monitoring for error recovery
@@ -164,6 +165,7 @@ export function useVideoOrchestrator({
         }
         onStopVideo?.();
       };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [playerState.player, onStopVideo]) // Removed playerState.actions from deps
   );
 

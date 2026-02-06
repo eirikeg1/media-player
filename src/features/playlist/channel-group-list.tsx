@@ -79,7 +79,7 @@ export const ChannelGroupList = memo(function ChannelGroupList() {
         <IconSymbol name="tv" size={64} color={isDark ? '#555' : '#ccc'} />
         <ThemedText style={styles.emptyTitle}>No Channels</ThemedText>
         <ThemedText style={styles.emptyText}>
-          This playlist doesn't contain any channels
+          This playlist doesn&apos;t contain any channels
         </ThemedText>
       </ThemedView>
     );

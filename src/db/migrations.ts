@@ -309,7 +309,7 @@ async function getCurrentVersion(db: any): Promise<number> {
       'SELECT MAX(version) as version FROM migrations'
     ) as { version: number } | null;
     return result?.version || 0;
-  } catch (error) {
+  } catch {
     // migrations table doesn't exist yet
     return 0;
   }

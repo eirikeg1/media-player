@@ -53,7 +53,7 @@ function FirstUserScreen({ username, isCreating, onUsernameChange, onSubmit }: U
               Welcome!
             </Text>
             <Text className="text-lg text-center text-gray-600 dark:text-gray-400">
-              Let's create your profile to get started
+              Let&apos;s create your profile to get started
             </Text>
           </View>
 
@@ -139,7 +139,7 @@ function UserSelectionScreen({
       <View className="px-8">
         <View className="mb-16">
           <Text className="text-5xl font-bold text-center text-gray-900 dark:text-white">
-            Who's watching?
+            Who&apos;s watching?
           </Text>
         </View>
 
