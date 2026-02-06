@@ -29,7 +29,7 @@ export function ChannelGroupButton({
 
   const getDisplayText = () => {
     if (isFavorites) {
-      return 'Favorites';
+      return 'Favorite Groups';
     }
     if (!selectedGroupName) {
       return 'All Channels';

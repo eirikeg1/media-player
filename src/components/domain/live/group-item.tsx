@@ -65,7 +65,7 @@ export const GroupItemComponent = React.memo(function GroupItemComponent({
   };
 
   const isFavoritesSentinel = item.name === FAVORITES_GROUP_SENTINEL;
-  const displayName = isFavoritesSentinel ? 'Favorites' : item.name || 'All Channels';
+  const displayName = isFavoritesSentinel ? 'Favorite Groups' : item.name || 'All Channels';
   const iconName = isFavoritesSentinel ? 'star.fill' : 'folder';
   const channelText = `${item.channelCount} channel${item.channelCount !== 1 ? 's' : ''}`;
 
