@@ -1,18 +1,27 @@
 # Future Tasks
 
-## Architecture
-- Resolve folder structure inconsistency (video domain vs other domains)
-- Decide on feature-based vs layer-based organization for the full codebase
+## Refactor video player gui architecture and features
+- Layer based layout (names/terms might need some rework)
+  - Base layout:
+    - Allows attaching component groups in top left, top center, top right, etc.
+    - Center can maybe have a customizable component, or be reserved for only play/pause (to be discussed)
+  - Component group:
+    - Can either be a list of smaller widgets, or some kind of slider
+  - Components (overall group which includes the following types):
+    - Widget: buttons or similar, user can interact with for a specific task (cast, resolution change, open video settings, toggle cc, etc.)
+    - Slider: slider to configure some setting (e.g. slide finger up or down to change volume or brightness)
+    - Other useful components?
 
 ## Features
-- **EPG Guide** — Electronic Program Guide with schedule data. Should include filtering, search, etc.
-- **VOD Library** — Separate Movie and Series browsing with genre filtering, search, season/episode grouping
-- **Sports/Football Schedule** — Match schedules and dedicated sports tracking
-- **Catch-up TV** — Watch previously aired content
-- **User Show Tracking** — Track watch progress per show/movie
-- **Favorite Sports Team Tracking** — Track schedule, results and channels for favorite team
-- **Likes & Recommendations** — User likes feed recommendations for shows, movies, and sports
-- **Multi-user Profiles** — Expand existing partial implementation
+- **Cast Video to Chromecast etc.** - Essential and simple feature
+- **EPG Guide** - Electronic Program Guide with schedule data. Should include filtering, search, etc.
+- **VOD Library** - Separate Movie and Series browsing with genre filtering, search, season/episode grouping
+- **Sports/Football Schedule** - Match schedules and dedicated sports tracking
+- **Catch-up TV** - Watch previously aired content
+- **User Show Tracking** - Track watch progress per show/movie
+- **Favorite Sports Team Tracking** - Track schedule, results and channels for favorite team
+- **Likes & Recommendations** - User likes feed recommendations for shows, movies, and sports
+- **Multi-user Profiles** - Expand existing partial implementation
 
 ## React Native App
 - VOD UI for movies and TV series browsing
