@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { BackHandler, StatusBar } from 'react-native';
 
 import { VideoPlayer } from '@/components/domain/video/video-player';
@@ -7,26 +7,32 @@ import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { RustChannelService } from '@/services/rust-channel-service';
 import type { Channel } from '@/types/playlist.types';
 
 export default function VideoPlayerScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams();
+  const params = useLocalSearchParams<{ channelId: string; playlistId: string }>();
   const iconColor = useThemeColor({}, 'icon');
   const stopVideoRef = useRef<(() => void) | null>(null);
 
-  // Parse channel data from route params
-  const channel: Channel | null = (() => {
-    try {
-      if (typeof params.channel === 'string') {
-        return JSON.parse(params.channel);
-      }
-      return null;
-    } catch (error) {
-      console.error('Failed to parse channel data:', error);
-      return null;
+  // Look up channel from route params
+  const [channel, setChannel] = useState<Channel | null>(null);
+  const [isLoadingChannel, setIsLoadingChannel] = useState(true);
+
+  useEffect(() => {
+    if (!params.channelId || !params.playlistId) {
+      setIsLoadingChannel(false);
+      return;
     }
-  })();
+
+    RustChannelService.getChannelById(params.playlistId, params.channelId)
+      .then(setChannel)
+      .catch((error) => {
+        console.error('Failed to load channel:', error);
+      })
+      .finally(() => setIsLoadingChannel(false));
+  }, [params.channelId, params.playlistId]);
 
   useLayoutEffect(() => {
     const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -52,6 +58,14 @@ export default function VideoPlayerScreen() {
   const handleRegisterStopFunction = (stopFn: () => void) => {
     stopVideoRef.current = stopFn;
   };
+
+  if (isLoadingChannel) {
+    return (
+      <ThemedView style={styles.errorContainer}>
+        <StatusBar hidden />
+      </ThemedView>
+    );
+  }
 
   if (!channel) {
     return (

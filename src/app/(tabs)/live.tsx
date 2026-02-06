@@ -8,6 +8,7 @@ import { useGroups } from '@/hooks/live/use-groups';
 import { usePaginatedChannels } from '@/hooks/live/use-paginated-channels';
 import { usePlaylistData } from '@/hooks/live/use-playlist-data';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { getChannelId } from '@/lib/channel-utils';
 import { FAVORITES_GROUP_SENTINEL } from '@/lib/group-utils';
 import type { Channel } from '@/types/playlist.types';
 
@@ -89,10 +90,11 @@ export default function LiveScreen() {
     router.push({
       pathname: '/video-player',
       params: {
-        channel: JSON.stringify(channel),
+        channelId: getChannelId(channel),
+        playlistId: activePlaylist?.id ?? '',
       },
     });
-  }, [router]);
+  }, [router, activePlaylist?.id]);
 
   const isLoading = !hasLoadedPlaylist || !hasLoadedFavorites || isInitialLoading || isLoadingChannels;
 
