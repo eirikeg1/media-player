@@ -53,6 +53,52 @@ export function VideoLoadingState({ channel }: VideoLoadingStateProps) {
   );
 }
 
+interface VideoCastingStateProps {
+  channel: Channel;
+}
+
+export function VideoCastingState({ channel }: VideoCastingStateProps) {
+  const iconColor = useThemeColor({}, 'icon');
+  const overlayBackground = useThemeColor({ light: 'rgba(0, 0, 0, 0.8)', dark: 'rgba(0, 0, 0, 0.8)' }, 'background');
+  const titleColor = useThemeColor({ light: '#fff', dark: '#fff' }, 'background');
+  const subtitleColor = useThemeColor({ light: '#ccc', dark: '#ccc' }, 'background');
+
+  return (
+    <View
+      className="absolute inset-0 justify-center items-center"
+      style={{
+        backgroundColor: overlayBackground,
+        padding: VIDEO_CONSTANTS.STATE_CONTAINER_PADDING,
+      }}
+    >
+      <IconSymbol name="airplayvideo" size={VIDEO_CONSTANTS.STATE_ICON_SIZE} color={iconColor} />
+      <ThemedText
+        style={{
+          fontSize: VIDEO_CONSTANTS.LOADING_TITLE_SIZE,
+          fontWeight: '600',
+          marginTop: VIDEO_CONSTANTS.STATE_TITLE_MARGIN_TOP,
+          marginBottom: VIDEO_CONSTANTS.STATE_TITLE_MARGIN_BOTTOM,
+          color: titleColor,
+          textAlign: 'center',
+        }}
+      >
+        Casting to TV
+      </ThemedText>
+      <ThemedText
+        type="subtitle"
+        style={{
+          fontSize: VIDEO_CONSTANTS.SUBTITLE_SIZE,
+          color: subtitleColor,
+          textAlign: 'center',
+          lineHeight: VIDEO_CONSTANTS.SUBTITLE_LINE_HEIGHT,
+        }}
+      >
+        {channel.name}
+      </ThemedText>
+    </View>
+  );
+}
+
 interface VideoErrorStateProps {
   channel: Channel;
   error: VideoError;

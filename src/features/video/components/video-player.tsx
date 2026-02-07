@@ -1,12 +1,13 @@
 import { VideoView } from 'expo-video';
 import { View } from 'react-native';
 
+import { useVideoPlayerStore } from '@/stores/video/player-store';
 import type { Channel } from '@/types/playlist.types';
 import { useCastPlayback } from '../hooks/use-cast-playback';
 import { useVideoPlayerLogic } from '../hooks/use-video-player';
 import { LoadingProgress } from './loading-progress';
 import { VideoControls, VideoTapOverlay } from './video-controls';
-import { VideoErrorState } from './video-states';
+import { VideoCastingState, VideoErrorState } from './video-states';
 
 interface VideoPlayerProps {
   channel: Channel;
@@ -42,6 +43,7 @@ export function VideoPlayer({ channel, onBack, onStopVideo, onRegisterStopFuncti
   });
 
   useCastPlayback({ channel });
+  const isCasting = useVideoPlayerStore(s => s.isCasting);
 
   return (
     <View style={{ flex: 1, backgroundColor: '#000' }}>
@@ -55,7 +57,8 @@ export function VideoPlayer({ channel, onBack, onStopVideo, onRegisterStopFuncti
           contentFit="contain"
         />
 
-        {isLoading && (
+        {isCasting && <VideoCastingState channel={channel} />}
+        {isLoading && !isCasting && (
           <LoadingProgress
             channel={channel}
             stage={loadingStage}
@@ -63,7 +66,7 @@ export function VideoPlayer({ channel, onBack, onStopVideo, onRegisterStopFuncti
             networkType={networkState.type}
           />
         )}
-        {hasError && videoError && (
+        {hasError && videoError && !isCasting && (
           <VideoErrorState
             channel={channel}
             error={videoError}
@@ -71,7 +74,19 @@ export function VideoPlayer({ channel, onBack, onStopVideo, onRegisterStopFuncti
             isRetrying={retryState.isRetrying}
           />
         )}
-        {showControls && !hasError && (
+        {isCasting && (
+          <VideoControls
+            channel={channel}
+            player={player}
+            isLoading={false}
+            isPlaying={false}
+            onBack={onBack}
+            onTogglePlayPause={togglePlayPause}
+            onClearTimeout={clearHideControlsTimeout}
+            onToggleControls={toggleControls}
+          />
+        )}
+        {showControls && !hasError && !isCasting && (
           <VideoControls
             channel={channel}
             player={player}
@@ -83,7 +98,7 @@ export function VideoPlayer({ channel, onBack, onStopVideo, onRegisterStopFuncti
             onToggleControls={toggleControls}
           />
         )}
-        {!showControls && !hasError && !isLoading && (
+        {!showControls && !hasError && !isLoading && !isCasting && (
           <VideoTapOverlay onTap={() => showControlsTemporarily()} />
         )}
       </View>

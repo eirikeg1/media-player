@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
+import { Alert } from 'react-native';
 import {
   CastState,
   MediaHlsSegmentFormat,
@@ -85,8 +86,7 @@ export function useCastPlayback({ channel }: UseCastPlaybackProps) {
   const client = useRemoteMediaClient();
   const castState = useCastState();
   const isLoadingMedia = useRef(false);
-  const wasCastingRef = useRef(false);
-  const isCasting = castState === CastState.CONNECTED;
+  const didUnloadForCastRef = useRef(false);
 
   const castMedia = useCallback(
     async (ch: Channel) => {
@@ -141,6 +141,11 @@ export function useCastPlayback({ channel }: UseCastPlaybackProps) {
           });
         } catch (error) {
           console.error('[Cast] loadMedia FAILED:', error);
+          Alert.alert(
+            'Cast Failed',
+            'Failed to load media on the TV. Please try again.',
+            [{ text: 'OK' }],
+          );
         }
       } finally {
         isLoadingMedia.current = false;
@@ -149,17 +154,36 @@ export function useCastPlayback({ channel }: UseCastPlaybackProps) {
     [client],
   );
 
-  // Unload local player as soon as a cast device is selected (CONNECTING phase)
-  // This fully releases the stream before Chromecast tries to connect,
-  // avoiding Xtream Codes rejecting the concurrent connection.
+  // Manage local player lifecycle across all cast state transitions.
+  // Consolidates CONNECTING unload, CONNECTED load, and recovery into one effect
+  // so the player is always restored — even if the connection fails before CONNECTED.
   useEffect(() => {
+    const connected = castState === CastState.CONNECTED;
+    useVideoPlayerStore.getState().setIsCasting(connected);
+
     if (castState === CastState.CONNECTING) {
       const localPlayer = useVideoPlayerStore.getState().player;
       if (localPlayer) {
         localPlayer.replaceAsync(null);
       }
+      didUnloadForCastRef.current = true;
+    } else if (connected) {
+      didUnloadForCastRef.current = true;
+    } else if (didUnloadForCastRef.current) {
+      // Cast ended or connection failed — restore local player
+      didUnloadForCastRef.current = false;
+      const localPlayer = useVideoPlayerStore.getState().player;
+      if (localPlayer) {
+        localPlayer.replaceAsync(channel.url);
+      }
     }
-  }, [castState]);
+
+    return () => {
+      if (didUnloadForCastRef.current) {
+        useVideoPlayerStore.getState().setIsCasting(false);
+      }
+    };
+  }, [castState, channel.url]);
 
   // Auto-load channel when cast state is fully connected
   useEffect(() => {
@@ -168,26 +192,5 @@ export function useCastPlayback({ channel }: UseCastPlaybackProps) {
     }
   }, [client, castState, channel, castMedia]);
 
-  // Sync isCasting state with the store and manage local player
-  useEffect(() => {
-    useVideoPlayerStore.getState().setIsCasting(isCasting);
-
-    if (isCasting) {
-      wasCastingRef.current = true;
-    } else if (wasCastingRef.current) {
-      wasCastingRef.current = false;
-      const localPlayer = useVideoPlayerStore.getState().player;
-      if (localPlayer) {
-        localPlayer.replaceAsync(channel.url);
-      }
-    }
-
-    return () => {
-      if (wasCastingRef.current) {
-        useVideoPlayerStore.getState().setIsCasting(false);
-      }
-    };
-  }, [isCasting, channel.url]);
-
-  return { isCasting, castMedia };
+  return { castMedia };
 }
