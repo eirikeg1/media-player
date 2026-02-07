@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "iptv-mobile",
-    "slug": "iptv-mobile",
+    "name": "Media Player",
+    "slug": "media-player",
     "version": "1.0.0",
     "icon": "./assets/images/app-icon.png",
     "scheme": "iptvmobile",
@@ -18,9 +18,9 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE88",
+        "backgroundColor": "#FFA6EB",
         "foregroundImage": "./assets/images/app-icon.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
@@ -41,7 +41,8 @@
           "resizeMode": "contain"
         }
       ],
-      "expo-video"
+      "expo-video",
+      "react-native-google-cast"
     ],
     "experiments": {
       "typedRoutes": true,

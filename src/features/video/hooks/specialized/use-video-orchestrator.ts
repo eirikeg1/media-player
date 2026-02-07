@@ -1,3 +1,4 @@
+import { useVideoPlayerStore } from '@/stores/video/player-store';
 import type { Channel } from '@/types/playlist.types';
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useEffect, useRef } from 'react';
@@ -100,7 +101,10 @@ export function useVideoOrchestrator({
         console.log('Video ready to play - auto starting');
         playerState.actions.setIsLoading(false);
         errorHandling.actions.onRetrySuccess();
-        playerState.actions.playVideo();
+        const { isCasting } = useVideoPlayerStore.getState();
+        if (!isCasting) {
+          playerState.actions.playVideo();
+        }
 
         // Use a shorter timeout initially, then switch to temporary showing
         setTimeout(() => {
@@ -210,6 +214,7 @@ export function useVideoOrchestrator({
     // Actions
     togglePlayPause,
     stopVideo,
+    pauseVideo: playerState.actions.pauseVideo,
     retryPlayback,
     showControlsTemporarily: controls.actions.showControlsTemporarily,
     clearHideControlsTimeout: controls.actions.clearHideControlsTimeout,

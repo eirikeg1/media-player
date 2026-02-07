@@ -8,6 +8,7 @@ interface VideoPlayerState {
   // Playback state
   isPlaying: boolean;
   isLoading: boolean;
+  isCasting: boolean;
   loadingStage: 'connecting' | 'buffering' | 'preparing';
   loadingProgress?: number;
 
@@ -15,6 +16,7 @@ interface VideoPlayerState {
   setPlayer: (player: VideoPlayer | null) => void;
   setIsPlaying: (playing: boolean) => void;
   setIsLoading: (loading: boolean) => void;
+  setIsCasting: (casting: boolean) => void;
   setLoadingStage: (stage: 'connecting' | 'buffering' | 'preparing') => void;
   setLoadingProgress: (progress?: number) => void;
   reset: () => void;
@@ -24,6 +26,7 @@ const initialState = {
   player: null,
   isPlaying: false,
   isLoading: true,
+  isCasting: false,
   loadingStage: 'connecting' as const,
   loadingProgress: undefined,
 };
@@ -34,6 +37,7 @@ export const useVideoPlayerStore = create<VideoPlayerState>((set) => ({
   setPlayer: (player) => set({ player }),
   setIsPlaying: (isPlaying) => set({ isPlaying }),
   setIsLoading: (isLoading) => set({ isLoading }),
+  setIsCasting: (isCasting) => set({ isCasting }),
   setLoadingStage: (loadingStage) => set({ loadingStage }),
   setLoadingProgress: (loadingProgress) => set({ loadingProgress }),
   reset: () => set(initialState),

@@ -2,6 +2,7 @@ import { VideoView } from 'expo-video';
 import { View } from 'react-native';
 
 import type { Channel } from '@/types/playlist.types';
+import { useCastPlayback } from '../hooks/use-cast-playback';
 import { useVideoPlayerLogic } from '../hooks/use-video-player';
 import { LoadingProgress } from './loading-progress';
 import { VideoControls, VideoTapOverlay } from './video-controls';
@@ -39,6 +40,8 @@ export function VideoPlayer({ channel, onBack, onStopVideo, onRegisterStopFuncti
     onStopVideo,
     onRegisterStopFunction,
   });
+
+  useCastPlayback({ channel });
 
   return (
     <View style={{ flex: 1, backgroundColor: '#000' }}>

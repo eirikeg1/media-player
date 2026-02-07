@@ -1,5 +1,6 @@
 import type { VideoPlayer } from 'expo-video';
 import { TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
+import { CastButton } from 'react-native-google-cast';
 
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
@@ -34,87 +35,107 @@ export function VideoControls({
   const textColor = useThemeColor({ light: '#fff', dark: '#fff' }, 'background');
 
   return (
-    <TouchableWithoutFeedback onPress={onToggleControls}>
-      <View
-        className="absolute inset-0 justify-between"
-        style={{
-          backgroundColor: overlayColor,
-          paddingTop: VIDEO_CONSTANTS.OVERLAY_PADDING_TOP,
-          paddingBottom: VIDEO_CONSTANTS.OVERLAY_PADDING_BOTTOM,
-          paddingHorizontal: VIDEO_CONSTANTS.OVERLAY_PADDING_HORIZONTAL,
-        }}
-      >
-        <TouchableOpacity
-          className="flex-row items-center self-start"
+    <View className="absolute inset-0">
+      <TouchableWithoutFeedback onPress={onToggleControls}>
+        <View
+          className="absolute inset-0 justify-between"
           style={{
-            paddingVertical: VIDEO_CONSTANTS.BACK_BUTTON_PADDING_VERTICAL,
-            paddingHorizontal: VIDEO_CONSTANTS.BACK_BUTTON_PADDING_HORIZONTAL,
-            backgroundColor: buttonBackground,
-            borderRadius: VIDEO_CONSTANTS.BACK_BUTTON_BORDER_RADIUS,
+            backgroundColor: overlayColor,
+            paddingTop: VIDEO_CONSTANTS.OVERLAY_PADDING_TOP,
+            paddingBottom: VIDEO_CONSTANTS.OVERLAY_PADDING_BOTTOM,
+            paddingHorizontal: VIDEO_CONSTANTS.OVERLAY_PADDING_HORIZONTAL,
           }}
-          onPress={(e) => {
-            e.stopPropagation();
-            onClearTimeout();
-            onBack?.();
-          }}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
         >
-          <IconSymbol name="chevron.left" size={VIDEO_CONSTANTS.BACK_ICON_SIZE} color={iconColor} />
-          <ThemedText
-            style={{
-              marginLeft: VIDEO_CONSTANTS.BACK_TEXT_MARGIN_LEFT,
-              fontSize: VIDEO_CONSTANTS.BACK_TEXT_SIZE,
-              fontWeight: '600',
-              color: textColor,
-            }}
-          >
-            Back
-          </ThemedText>
-        </TouchableOpacity>
-
-        <View className="flex-1 justify-center items-center bg-transparent">
-          {!isLoading && (
+          <View className="flex-row items-center">
             <TouchableOpacity
-              className="justify-center items-center"
+              className="flex-row items-center"
               style={{
-                width: VIDEO_CONSTANTS.PLAY_BUTTON_SIZE,
-                height: VIDEO_CONSTANTS.PLAY_BUTTON_SIZE,
-                borderRadius: VIDEO_CONSTANTS.PLAY_BUTTON_RADIUS,
+                paddingVertical: VIDEO_CONSTANTS.BACK_BUTTON_PADDING_VERTICAL,
+                paddingHorizontal: VIDEO_CONSTANTS.BACK_BUTTON_PADDING_HORIZONTAL,
                 backgroundColor: buttonBackground,
+                borderRadius: VIDEO_CONSTANTS.BACK_BUTTON_BORDER_RADIUS,
               }}
               onPress={(e) => {
                 e.stopPropagation();
-                onClearTimeout(); // Clear existing timeout
-                onTogglePlayPause(); // This will reschedule the timeout
+                onClearTimeout();
+                onBack?.();
               }}
               accessibilityRole="button"
-              accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
+              accessibilityLabel="Go back"
             >
-              <IconSymbol
-                name={isPlaying ? 'pause.fill' : 'play.fill'}
-                size={VIDEO_CONSTANTS.PLAY_ICON_SIZE}
-                color={iconColor}
-              />
+              <IconSymbol name="chevron.left" size={VIDEO_CONSTANTS.BACK_ICON_SIZE} color={iconColor} />
+              <ThemedText
+                style={{
+                  marginLeft: VIDEO_CONSTANTS.BACK_TEXT_MARGIN_LEFT,
+                  fontSize: VIDEO_CONSTANTS.BACK_TEXT_SIZE,
+                  fontWeight: '600',
+                  color: textColor,
+                }}
+              >
+                Back
+              </ThemedText>
             </TouchableOpacity>
-          )}
-        </View>
+          </View>
 
-        <View className="bg-transparent items-center">
-          <ThemedText
-            style={{
-              fontSize: VIDEO_CONSTANTS.CHANNEL_NAME_SIZE,
-              fontWeight: '600',
-              color: textColor,
-              textAlign: 'center',
-            }}
-            numberOfLines={1}
-          >
-            {channel.name}
-          </ThemedText>
+          <View className="flex-1 justify-center items-center bg-transparent">
+            {!isLoading && (
+              <TouchableOpacity
+                className="justify-center items-center"
+                style={{
+                  width: VIDEO_CONSTANTS.PLAY_BUTTON_SIZE,
+                  height: VIDEO_CONSTANTS.PLAY_BUTTON_SIZE,
+                  borderRadius: VIDEO_CONSTANTS.PLAY_BUTTON_RADIUS,
+                  backgroundColor: buttonBackground,
+                }}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  onClearTimeout(); // Clear existing timeout
+                  onTogglePlayPause(); // This will reschedule the timeout
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
+              >
+                <IconSymbol
+                  name={isPlaying ? 'pause.fill' : 'play.fill'}
+                  size={VIDEO_CONSTANTS.PLAY_ICON_SIZE}
+                  color={iconColor}
+                />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          <View className="bg-transparent items-center">
+            <ThemedText
+              style={{
+                fontSize: VIDEO_CONSTANTS.CHANNEL_NAME_SIZE,
+                fontWeight: '600',
+                color: textColor,
+                textAlign: 'center',
+              }}
+              numberOfLines={1}
+            >
+              {channel.name}
+            </ThemedText>
+          </View>
         </View>
+      </TouchableWithoutFeedback>
+
+      {/* CastButton outside TouchableWithoutFeedback — receives native touches */}
+      <View
+        style={{
+          position: 'absolute',
+          top: VIDEO_CONSTANTS.OVERLAY_PADDING_TOP,
+          right: VIDEO_CONSTANTS.OVERLAY_PADDING_HORIZONTAL,
+          backgroundColor: buttonBackground,
+          borderRadius: VIDEO_CONSTANTS.BACK_BUTTON_BORDER_RADIUS,
+          padding: VIDEO_CONSTANTS.BACK_BUTTON_PADDING_VERTICAL,
+        }}
+      >
+        <CastButton
+          style={{ width: 28, height: 28, tintColor: iconColor }}
+        />
       </View>
-    </TouchableWithoutFeedback>
+    </View>
   );
 }
 
