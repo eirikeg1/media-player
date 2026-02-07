@@ -1,7 +1,9 @@
+import { BottomTabBar } from '@react-navigation/bottom-tabs';
 import { Tabs } from 'expo-router';
 
 import { HapticTab } from '@/components/ui/controls/haptic-tab';
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
+import { CastMiniPlayerBar } from '@/features/video/components/cast-mini-player-bar';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/lib/theme';
 
@@ -10,6 +12,12 @@ export default function TabLayout() {
 
   return (
     <Tabs
+      tabBar={(props) => (
+        <>
+          <CastMiniPlayerBar />
+          <BottomTabBar {...props} />
+        </>
+      )}
       screenOptions={{
         tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
         headerShown: false,

@@ -1,5 +1,10 @@
 # Future Tasks
 
+## Small TODOS:
+* Add clear button to input fields. If there is content in an input field, there should appear a circled x icon in the right of the input field. Clicking this should clear the value
+* Add graphics to paralax scroll headers
+* If a playlist is not selected, and on the live screen: notify the user, and add a button which navigates the user to the settings page
+
 ## Investivate
 * Does `expo-video` for IOS support mpeg ts streams? If not consider a native fmpeg solution
 
@@ -23,12 +28,23 @@
 * **User Show Tracking** - Track watch progress per show/movie
 * **Favorite Sports Team Tracking** - Track schedule, results and channels for favorite team
 * **Likes & Recommendations** - User likes feed recommendations for shows, movies, and sports
-* **Multi-user Profiles** - Expand existing partial implementation
+* **Multi-user Profiles** - Expand existing partial home page
+* View history. For tv shows: show a "continue watching" link to next episode on 
 
 ## React Native App
 * VOD UI for movies and TV series browsing
 * EPG grid/timeline component
 * Sports schedule views
+* Add profile picture support
+* Enhance error messages in GUI
+* Allow data processing (playlist parsing etc.) happen in the background (perhaps show the status message the same place as the mini player?)
+* Select colors for theme
+* Make more advanced parallax scroll functionalty, will randomly generated collages of video images
+
+### UI tweaks
+* selected user should not get a "current" pill, instead the name should get the pill around it
+* When setting up the user for the first time, the centered input field becomes hidden behind the keyboard. Use a keyboard avoiding view for this
+* Change the "switch" text button to change user to an icon (icon with one arrow up and one arrow down)
 
 ## Rust Backend
 * Infinite scroll: evict old items when exceeding window size
@@ -40,3 +56,7 @@
 ## Both
 * Recommendations fetched from backend, displayed to the user
 * Watch history sync between app and backend
+
+## Bugs
+* Channel groups are not cleared when changing playlist. Changing a playlist should fetch everything again from the backend. Backend should store data for all the playlists, and frontend should fetch data with playlist id
+

@@ -8,6 +8,8 @@ import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { RustChannelService } from '@/services/rust-channel-service';
+import { useCastMiniPlayerStore } from '@/stores/video/cast-mini-player-store';
+import { useVideoPlayerStore } from '@/stores/video/player-store';
 import type { Channel } from '@/types/playlist.types';
 
 export default function VideoPlayerScreen() {
@@ -19,6 +21,11 @@ export default function VideoPlayerScreen() {
   // Look up channel from route params
   const [channel, setChannel] = useState<Channel | null>(null);
   const [isLoadingChannel, setIsLoadingChannel] = useState(true);
+
+  // Dismiss mini-player when this screen mounts (expanding from bar or new channel)
+  useEffect(() => {
+    useCastMiniPlayerStore.getState().dismiss();
+  }, []);
 
   useEffect(() => {
     if (!params.channelId || !params.playlistId) {
@@ -36,18 +43,26 @@ export default function VideoPlayerScreen() {
 
   useLayoutEffect(() => {
     const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
-      // Stop video before navigating back
-      stopVideoRef.current?.();
+      const isCasting = useVideoPlayerStore.getState().isCasting;
+      if (isCasting && channel && params.playlistId) {
+        useCastMiniPlayerStore.getState().activate(channel, params.playlistId);
+      } else {
+        stopVideoRef.current?.();
+      }
       router.back();
       return true;
     });
 
     return () => backHandler.remove();
-  }, [router]);
+  }, [router, channel, params.playlistId]);
 
   const handleGoBack = () => {
-    // Stop video before navigating back
-    stopVideoRef.current?.();
+    const isCasting = useVideoPlayerStore.getState().isCasting;
+    if (isCasting && channel && params.playlistId) {
+      useCastMiniPlayerStore.getState().activate(channel, params.playlistId);
+    } else {
+      stopVideoRef.current?.();
+    }
     router.back();
   };
 
