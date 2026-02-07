@@ -4,8 +4,10 @@ import {
   CastState,
   MediaHlsSegmentFormat,
   MediaHlsVideoSegmentFormat,
+  MediaPlayerState,
   MediaStreamType,
   useCastState,
+  useMediaStatus,
   useRemoteMediaClient,
 } from 'react-native-google-cast';
 
@@ -85,8 +87,26 @@ async function queryXtreamHlsUrl(info: XtreamUrlInfo): Promise<string | null> {
 export function useCastPlayback({ channel }: UseCastPlaybackProps) {
   const client = useRemoteMediaClient();
   const castState = useCastState();
+  const mediaStatus = useMediaStatus();
   const isLoadingMedia = useRef(false);
   const didUnloadForCastRef = useRef(false);
+
+  const isCastPlaying =
+    mediaStatus?.playerState === MediaPlayerState.PLAYING ||
+    mediaStatus?.playerState === MediaPlayerState.BUFFERING;
+
+  const toggleCastPlayPause = useCallback(async () => {
+    if (!client) return;
+    try {
+      if (isCastPlaying) {
+        await client.pause();
+      } else {
+        await client.play();
+      }
+    } catch (error) {
+      console.warn('[Cast] play/pause failed:', error);
+    }
+  }, [client, isCastPlaying]);
 
   const castMedia = useCallback(
     async (ch: Channel) => {
@@ -192,5 +212,5 @@ export function useCastPlayback({ channel }: UseCastPlaybackProps) {
     }
   }, [client, castState, channel, castMedia]);
 
-  return { castMedia };
+  return { castMedia, toggleCastPlayPause, isCastPlaying };
 }

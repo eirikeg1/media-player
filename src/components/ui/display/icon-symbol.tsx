@@ -151,6 +151,7 @@ const MAPPING = {
   // System & Connectivity
   'wifi': 'wifi',
   'wifi.slash': 'wifi-off',
+  'airplayvideo': 'airplay',
   'antenna.radiowaves.left.and.right': 'signal-cellular-alt',
   'bolt': 'flash-on',
   'bolt.fill': 'flash-on',

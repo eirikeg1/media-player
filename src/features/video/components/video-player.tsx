@@ -42,20 +42,22 @@ export function VideoPlayer({ channel, onBack, onStopVideo, onRegisterStopFuncti
     onRegisterStopFunction,
   });
 
-  useCastPlayback({ channel });
+  const { toggleCastPlayPause, isCastPlaying } = useCastPlayback({ channel });
   const isCasting = useVideoPlayerStore(s => s.isCasting);
 
   return (
     <View style={{ flex: 1, backgroundColor: '#000' }}>
       <View style={{ flex: 1 }}>
-        <VideoView
-          style={{ flex: 1, width: '100%', height: '100%' }}
-          player={player}
-          nativeControls={false}
-          fullscreenOptions={{ enable: true }}
-          allowsPictureInPicture
-          contentFit="contain"
-        />
+        {!isCasting && (
+          <VideoView
+            style={{ flex: 1, width: '100%', height: '100%' }}
+            player={player}
+            nativeControls={false}
+            fullscreenOptions={{ enable: true }}
+            allowsPictureInPicture
+            contentFit="contain"
+          />
+        )}
 
         {isCasting && <VideoCastingState channel={channel} />}
         {isLoading && !isCasting && (
@@ -79,9 +81,9 @@ export function VideoPlayer({ channel, onBack, onStopVideo, onRegisterStopFuncti
             channel={channel}
             player={player}
             isLoading={false}
-            isPlaying={false}
+            isPlaying={isCastPlaying}
             onBack={onBack}
-            onTogglePlayPause={togglePlayPause}
+            onTogglePlayPause={toggleCastPlayPause}
             onClearTimeout={clearHideControlsTimeout}
             onToggleControls={toggleControls}
           />

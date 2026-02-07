@@ -71,6 +71,9 @@ export function VideoCastingState({ channel }: VideoCastingStateProps) {
         padding: VIDEO_CONSTANTS.STATE_CONTAINER_PADDING,
       }}
     >
+      <View className="absolute inset-0 justify-center items-center" pointerEvents="none">
+        <IconSymbol name="play.tv.fill" size={160} color="#fff" style={{ opacity: 0.08 }} />
+      </View>
       <IconSymbol name="airplayvideo" size={VIDEO_CONSTANTS.STATE_ICON_SIZE} color={iconColor} />
       <ThemedText
         style={{

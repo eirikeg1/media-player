@@ -16,7 +16,6 @@
     * Other useful components?
 
 ## Features
-* **Cast Video to Chromecast etc.** - Essential and simple feature
 * **EPG Guide** - Electronic Program Guide with schedule data. Should include filtering, search, etc.
 * **VOD Library** - Separate Movie and Series browsing with genre filtering, search, season/episode grouping
 * **Sports/Football Schedule** - Match schedules and dedicated sports tracking
