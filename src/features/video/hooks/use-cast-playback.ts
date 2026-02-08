@@ -90,6 +90,7 @@ export function useCastPlayback({ channel }: UseCastPlaybackProps) {
   const mediaStatus = useMediaStatus();
   const isLoadingMedia = useRef(false);
   const didUnloadForCastRef = useRef(false);
+  const castChannelUrlRef = useRef<string | null>(null);
 
   const isCastPlaying =
     mediaStatus?.playerState === MediaPlayerState.PLAYING ||
@@ -159,7 +160,9 @@ export function useCastPlayback({ channel }: UseCastPlaybackProps) {
               streamType: MediaStreamType.LIVE,
             },
           });
+          castChannelUrlRef.current = castUrl;
         } catch (error) {
+          castChannelUrlRef.current = null;
           console.error('[Cast] loadMedia FAILED:', error);
           Alert.alert(
             'Cast Failed',
@@ -191,6 +194,7 @@ export function useCastPlayback({ channel }: UseCastPlaybackProps) {
       didUnloadForCastRef.current = true;
     } else if (didUnloadForCastRef.current) {
       // Cast ended or connection failed — restore local player
+      castChannelUrlRef.current = null;
       didUnloadForCastRef.current = false;
       const localPlayer = useVideoPlayerStore.getState().player;
       if (localPlayer) {
@@ -198,16 +202,11 @@ export function useCastPlayback({ channel }: UseCastPlaybackProps) {
       }
     }
 
-    return () => {
-      if (didUnloadForCastRef.current) {
-        useVideoPlayerStore.getState().setIsCasting(false);
-      }
-    };
   }, [castState, channel.url]);
 
   // Auto-load channel when cast state is fully connected
   useEffect(() => {
-    if (client && castState === CastState.CONNECTED) {
+    if (client && castState === CastState.CONNECTED && !castChannelUrlRef.current) {
       castMedia(channel);
     }
   }, [client, castState, channel, castMedia]);

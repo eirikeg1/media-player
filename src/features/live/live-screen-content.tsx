@@ -3,6 +3,7 @@ import { LiveEmptyState } from '@/features/live/live-empty-state';
 import { LiveLoadingSpinner } from '@/features/live/live-loading-spinner';
 import { LiveTopBar } from '@/features/live/live-top-bar';
 import InfiniteParallaxGrid from '@/components/ui/containers/infinite-parallax-grid';
+import { Image } from 'expo-image';
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
@@ -120,11 +121,10 @@ export function LiveScreenContent({
           keyExtractor={keyExtractor}
           headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
           headerImage={
-            <IconSymbol
-              size={310}
-              color="#808080"
-              name="play.tv"
+            <Image
+              source={require('../../../assets/images/parallax-headers/live/header-champions-league.jpg')}
               style={styles.headerImage}
+              contentFit="cover"
             />
           }
           ListHeaderComponentAfterParallax={
@@ -175,11 +175,10 @@ export function LiveScreenContent({
         keyExtractor={keyExtractor}
         headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
         headerImage={
-          <IconSymbol
-            size={310}
-            color="#808080"
-            name="play.tv"
+          <Image
+            source={require('../../../assets/images/parallax-headers/live/header-champions-league.jpg')}
             style={styles.headerImage}
+            contentFit="cover"
           />
         }
         ListHeaderComponentAfterParallax={
@@ -212,10 +211,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerImage: {
-    color: '#808080',
-    bottom: -90,
-    left: -35,
-    position: 'absolute',
+    width: '100%',
+    height: '100%',
   },
   contentContainer: {
     paddingHorizontal: 0,

@@ -56,7 +56,3 @@
 ## Both
 * Recommendations fetched from backend, displayed to the user
 * Watch history sync between app and backend
-
-## Bugs
-* Channel groups are not cleared when changing playlist. Changing a playlist should fetch everything again from the backend. Backend should store data for all the playlists, and frontend should fetch data with playlist id
-
