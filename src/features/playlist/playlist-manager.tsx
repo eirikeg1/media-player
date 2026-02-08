@@ -52,8 +52,6 @@ export const PlaylistManager = memo(function PlaylistManager() {
 
       </View>
 
-      <View style={[styles.separator, { backgroundColor: isDark ? '#333' : '#ddd' }]} />
-
       {error && (
         <View style={[styles.errorBanner, { backgroundColor: isDark ? '#4a1a1a' : '#fee' }]}>
           <IconSymbol name="exclamationmark.triangle" size={20} color="#c33" />
@@ -89,11 +87,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     flexWrap: 'wrap',
-  },
-  separator: {
-    height: 1,
-    marginHorizontal: 16,
-    marginBottom: 16,
   },
   errorBanner: {
     flexDirection: 'row',

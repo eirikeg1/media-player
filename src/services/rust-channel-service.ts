@@ -3,6 +3,7 @@ import {
   Database,
   type Channel as RustChannel,
   type ChannelFilter,
+  type ChannelMetadata,
   type ChannelsWithCount as RustChannelsWithCount,
   type Credentials,
   type PlaylistMetadata,
@@ -206,6 +207,7 @@ export class RustChannelService {
       offset?: number;
       sortBy?: 'title' | 'group' | 'tvgName';
       sortOrder?: 'asc' | 'desc';
+      excludeAdult?: boolean;
     }
   ): Promise<{ channels: Channel[]; totalCount: number }> {
     const db = await getRustDatabase();
@@ -230,6 +232,7 @@ export class RustChannelService {
       search?: string;
       limit?: number;
       offset?: number;
+      excludeAdult?: boolean;
     }
   ): Promise<{ series: SeriesInfo[]; totalCount: number }> {
     const db = await getRustDatabase();
@@ -268,6 +271,28 @@ export class RustChannelService {
   }
 
   /**
+   * Get rich metadata for a channel by its Xtream stream ID
+   */
+  static async getMetadataByStreamId(
+    playlistId: string,
+    streamId: number
+  ): Promise<ChannelMetadata | null> {
+    const db = await getRustDatabase();
+    return db.getMetadataByStreamId(playlistId, streamId);
+  }
+
+  /**
+   * Get rich metadata for a series by its name
+   */
+  static async getMetadataBySeriesName(
+    playlistId: string,
+    seriesName: string
+  ): Promise<ChannelMetadata | null> {
+    const db = await getRustDatabase();
+    return db.getMetadataBySeriesName(playlistId, seriesName);
+  }
+
+  /**
    * Get all unique groups for a playlist
    */
   static async getGroupsByPlaylist(playlistId: string): Promise<string[]> {
@@ -278,9 +303,13 @@ export class RustChannelService {
   /**
    * Get groups with channel counts for a playlist
    */
-  static async getGroupsWithCountsByPlaylist(playlistId: string, contentType?: 'live' | 'movie' | 'series'): Promise<GroupCount[]> {
+  static async getGroupsWithCountsByPlaylist(
+    playlistId: string,
+    contentType?: 'live' | 'movie' | 'series',
+    excludeAdult?: boolean
+  ): Promise<GroupCount[]> {
     const db = await getRustDatabase();
-    return db.getGroupsWithCountsByPlaylist(playlistId, contentType);
+    return db.getGroupsWithCountsByPlaylist(playlistId, contentType, excludeAdult);
   }
 
   /**

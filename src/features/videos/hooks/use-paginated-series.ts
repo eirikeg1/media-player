@@ -10,6 +10,7 @@ interface UsePaginatedSeriesOptions {
   groups?: string[];
   search?: string;
   pageSize?: number;
+  excludeAdult?: boolean;
 }
 
 interface UsePaginatedSeriesReturn {
@@ -32,6 +33,7 @@ export function usePaginatedSeries({
   groups,
   search,
   pageSize = DEFAULT_PAGE_SIZE,
+  excludeAdult,
 }: UsePaginatedSeriesOptions): UsePaginatedSeriesReturn {
   const [series, setSeries] = useState<SeriesInfo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -80,6 +82,7 @@ export function usePaginatedSeries({
           search: debouncedSearchRef.current || undefined,
           limit: pageSize,
           offset,
+          excludeAdult,
         });
 
         const hasMorePages = offset + result.series.length < result.totalCount;
@@ -109,7 +112,7 @@ export function usePaginatedSeries({
         }
       }
     },
-    [playlistId, stableGroups, pageSize]
+    [playlistId, stableGroups, pageSize, excludeAdult]
   );
 
   // Reset and fetch first page when filters change

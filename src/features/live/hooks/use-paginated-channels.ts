@@ -12,6 +12,7 @@ interface UsePaginatedChannelsOptions {
   contentType?: 'live' | 'movie' | 'series';
   favoriteChannelIds: string[];
   pageSize?: number;
+  excludeAdult?: boolean;
 }
 
 interface UsePaginatedChannelsReturn {
@@ -36,6 +37,7 @@ export function usePaginatedChannels({
   contentType,
   favoriteChannelIds,
   pageSize = DEFAULT_PAGE_SIZE,
+  excludeAdult,
 }: UsePaginatedChannelsOptions): UsePaginatedChannelsReturn {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -94,6 +96,7 @@ export function usePaginatedChannels({
           offset,
           sortBy: 'title',
           sortOrder: 'asc',
+          excludeAdult,
         });
 
         // Determine if there are more pages using the totalCount from the query
@@ -124,7 +127,7 @@ export function usePaginatedChannels({
         }
       }
     },
-    [playlistId, stableGroups, contentType, pageSize]
+    [playlistId, stableGroups, contentType, pageSize, excludeAdult]
   );
 
   // Reset and fetch first page when filters change

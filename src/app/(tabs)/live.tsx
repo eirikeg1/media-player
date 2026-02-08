@@ -10,6 +10,7 @@ import { usePlaylistData } from '@/features/live/hooks/use-playlist-data';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { getChannelId } from '@/lib/channel-utils';
 import { FAVORITES_GROUP_SENTINEL } from '@/lib/group-utils';
+import { useUserStore } from '@/stores/user/user-store';
 import type { Channel } from '@/types/playlist.types';
 
 export default function LiveScreen() {
@@ -19,6 +20,9 @@ export default function LiveScreen() {
   const iconColor = useThemeColor({}, 'icon');
   const tintColor = useThemeColor({}, 'tint');
   const backgroundColor = useThemeColor({}, 'background');
+
+  // Parental control: exclude adult content when enabled
+  const excludeAdult = useUserStore((s) => s.currentUser?.settings?.parentalControlEnabled ?? false);
 
   // Filter state managed locally, passed to paginated hook
   const [selectedGroupName, setSelectedGroupName] = useState<string>('');
@@ -38,7 +42,7 @@ export default function LiveScreen() {
   const { favoriteGroups, isLoading: isLoadingFavoriteGroups, toggleFavorite: toggleFavoriteGroup } = useFavoriteGroups();
 
   // Server-side groups fetching (with favorites support)
-  const { groups } = useGroups(activePlaylist?.id, 'live', favoriteGroups);
+  const { groups } = useGroups(activePlaylist?.id, 'live', favoriteGroups, excludeAdult);
 
   // Reset filter state when switching playlists
   const activePlaylistId = activePlaylist?.id;
@@ -80,6 +84,7 @@ export default function LiveScreen() {
     search: searchText,
     contentType: 'live',
     favoriteChannelIds: favoriteChannels,
+    excludeAdult,
   });
 
   // Event handlers for filters

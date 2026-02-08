@@ -11,6 +11,7 @@ export function useGroups(
   playlistId: string | null | undefined,
   contentType?: 'live' | 'movie' | 'series',
   favoriteGroups?: string[],
+  excludeAdult?: boolean,
 ) {
   const [groups, setGroups] = useState<GroupOption[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -40,7 +41,7 @@ export function useGroups(
 
       try {
         // Fetch groups with counts from Rust backend
-        const groupCounts = await RustChannelService.getGroupsWithCountsByPlaylist(playlistId!, contentType);
+        const groupCounts = await RustChannelService.getGroupsWithCountsByPlaylist(playlistId!, contentType, excludeAdult);
 
         if (cancelled) return;
 
@@ -93,7 +94,7 @@ export function useGroups(
     return () => {
       cancelled = true;
     };
-  }, [playlistId, contentType, stableFavoriteGroups]);
+  }, [playlistId, contentType, stableFavoriteGroups, excludeAdult]);
 
   return { groups, isLoading, error };
 }

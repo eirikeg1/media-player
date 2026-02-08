@@ -13,6 +13,7 @@ import { VideosScreenContent } from '@/features/videos/videos-screen-content';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { getChannelId } from '@/lib/channel-utils';
 import { FAVORITES_GROUP_SENTINEL } from '@/lib/group-utils';
+import { useUserStore } from '@/stores/user/user-store';
 import type { Channel } from '@/types/playlist.types';
 
 export default function VideosScreen() {
@@ -22,6 +23,9 @@ export default function VideosScreen() {
   const iconColor = useThemeColor({}, 'icon');
   const tintColor = useThemeColor({}, 'tint');
   const backgroundColor = useThemeColor({}, 'background');
+
+  // Parental control: exclude adult content when enabled
+  const excludeAdult = useUserStore((s) => s.currentUser?.settings?.parentalControlEnabled ?? false);
 
   // Content type toggle state
   const [contentType, setContentType] = useState<'movie' | 'series'>('movie');
@@ -48,7 +52,7 @@ export default function VideosScreen() {
   const { favoriteGroups, isLoading: isLoadingFavoriteGroups, toggleFavorite: toggleFavoriteGroup } = useFavoriteGroups();
 
   // Server-side groups fetching (with favorites support)
-  const { groups } = useGroups(activePlaylist?.id, contentType, favoriteGroups);
+  const { groups } = useGroups(activePlaylist?.id, contentType, favoriteGroups, excludeAdult);
 
   // Reset filter state when switching playlists
   const activePlaylistId = activePlaylist?.id;
@@ -97,6 +101,7 @@ export default function VideosScreen() {
     search: searchText,
     contentType: 'movie',
     favoriteChannelIds: favoriteChannels,
+    excludeAdult,
   });
 
   // Paginated series (active for series)
@@ -111,6 +116,7 @@ export default function VideosScreen() {
     playlistId: contentType === 'series' ? activePlaylist?.id : undefined,
     groups: channelGroups,
     search: searchText,
+    excludeAdult,
   });
 
   // Event handlers for filters
