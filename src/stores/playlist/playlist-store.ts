@@ -296,6 +296,11 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
         console.error('[PlaylistStore] Failed to load active playlist from user settings:', error);
       }
 
+      // Auto-select first playlist if none is active
+      if (!activePlaylistId && playlists.length > 0) {
+        activePlaylistId = playlists[0].id;
+      }
+
       set({
         playlists,
         activePlaylistId,

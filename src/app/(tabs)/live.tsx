@@ -40,6 +40,14 @@ export default function LiveScreen() {
   // Server-side groups fetching (with favorites support)
   const { groups } = useGroups(activePlaylist?.id, 'live', favoriteGroups);
 
+  // Reset filter state when switching playlists
+  const activePlaylistId = activePlaylist?.id;
+  useEffect(() => {
+    setSelectedGroupName('');
+    setSearchText('');
+    hasSetDefaultGroup.current = false;
+  }, [activePlaylistId]);
+
   // One-time default to Favorites when favorites load
   const hasSetDefaultGroup = useRef(false);
   useEffect(() => {

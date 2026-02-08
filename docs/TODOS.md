@@ -3,7 +3,6 @@
 ## Small TODOS:
 * Add clear button to input fields. If there is content in an input field, there should appear a circled x icon in the right of the input field. Clicking this should clear the value
 * Add graphics to paralax scroll headers
-* If a playlist is not selected, and on the live screen: notify the user, and add a button which navigates the user to the settings page
 
 ## Investivate
 * Does `expo-video` for IOS support mpeg ts streams? If not consider a native fmpeg solution
