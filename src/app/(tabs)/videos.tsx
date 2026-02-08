@@ -1,24 +1,27 @@
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { LiveScreenContent } from '@/features/live/live-screen-content';
 import { useFavoriteChannels } from '@/features/live/hooks/use-favorite-channels';
 import { useFavoriteGroups } from '@/features/live/hooks/use-favorite-groups';
 import { useGroups } from '@/features/live/hooks/use-groups';
 import { usePaginatedChannels } from '@/features/live/hooks/use-paginated-channels';
 import { usePlaylistData } from '@/features/live/hooks/use-playlist-data';
+import { VideosScreenContent } from '@/features/videos/videos-screen-content';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { getChannelId } from '@/lib/channel-utils';
 import { FAVORITES_GROUP_SENTINEL } from '@/lib/group-utils';
 import type { Channel } from '@/types/playlist.types';
 
-export default function LiveScreen() {
+export default function VideosScreen() {
   const router = useRouter();
 
   // Theme colors
   const iconColor = useThemeColor({}, 'icon');
   const tintColor = useThemeColor({}, 'tint');
   const backgroundColor = useThemeColor({}, 'background');
+
+  // Content type toggle state
+  const [contentType, setContentType] = useState<'movie' | 'series'>('movie');
 
   // Filter state managed locally, passed to paginated hook
   const [selectedGroupName, setSelectedGroupName] = useState<string>('');
@@ -38,7 +41,7 @@ export default function LiveScreen() {
   const { favoriteGroups, isLoading: isLoadingFavoriteGroups, toggleFavorite: toggleFavoriteGroup } = useFavoriteGroups();
 
   // Server-side groups fetching (with favorites support)
-  const { groups } = useGroups(activePlaylist?.id, 'live', favoriteGroups);
+  const { groups } = useGroups(activePlaylist?.id, contentType, favoriteGroups);
 
   // Reset filter state when switching playlists
   const activePlaylistId = activePlaylist?.id;
@@ -47,6 +50,13 @@ export default function LiveScreen() {
     setSearchText('');
     hasSetDefaultGroup.current = false;
   }, [activePlaylistId]);
+
+  // Reset filter state when switching content type
+  useEffect(() => {
+    setSelectedGroupName('');
+    setSearchText('');
+    hasSetDefaultGroup.current = false;
+  }, [contentType]);
 
   // One-time default: Favorites if available, otherwise All Channels
   const hasSetDefaultGroup = useRef(false);
@@ -78,7 +88,7 @@ export default function LiveScreen() {
     playlistId: activePlaylist?.id,
     groups: channelGroups,
     search: searchText,
-    contentType: 'live',
+    contentType,
     favoriteChannelIds: favoriteChannels,
   });
 
@@ -91,10 +101,14 @@ export default function LiveScreen() {
     setSearchText(text);
   }, []);
 
+  const handleContentTypeChange = useCallback((type: 'movie' | 'series') => {
+    setContentType(type);
+  }, []);
+
   // Event handlers
   const handleChannelPress = useCallback((channel: Channel) => {
     if (__DEV__) {
-      console.log('Channel pressed:', channel.name);
+      console.log('Video pressed:', channel.name);
     }
 
     router.push({
@@ -115,7 +129,9 @@ export default function LiveScreen() {
   }, [handleRefresh, refreshChannels]);
 
   return (
-    <LiveScreenContent
+    <VideosScreenContent
+      contentType={contentType}
+      onContentTypeChange={handleContentTypeChange}
       isLoading={isLoading}
       playlist={activePlaylist}
       channels={channels}
@@ -139,4 +155,3 @@ export default function LiveScreen() {
     />
   );
 }
-
