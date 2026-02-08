@@ -1,4 +1,5 @@
 import { useRouter } from 'expo-router';
+import type { SeriesInfo } from 'expo-m3u-parser';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useFavoriteChannels } from '@/features/live/hooks/use-favorite-channels';
@@ -6,6 +7,8 @@ import { useFavoriteGroups } from '@/features/live/hooks/use-favorite-groups';
 import { useGroups } from '@/features/live/hooks/use-groups';
 import { usePaginatedChannels } from '@/features/live/hooks/use-paginated-channels';
 import { usePlaylistData } from '@/features/live/hooks/use-playlist-data';
+import { usePaginatedSeries } from '@/features/videos/hooks/use-paginated-series';
+import { SeriesDetailModal } from '@/features/videos/series-detail-modal';
 import { VideosScreenContent } from '@/features/videos/videos-screen-content';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { getChannelId } from '@/lib/channel-utils';
@@ -22,6 +25,10 @@ export default function VideosScreen() {
 
   // Content type toggle state
   const [contentType, setContentType] = useState<'movie' | 'series'>('movie');
+
+  // Series detail modal state
+  const [selectedSeries, setSelectedSeries] = useState<SeriesInfo | null>(null);
+  const [seriesModalVisible, setSeriesModalVisible] = useState(false);
 
   // Filter state managed locally, passed to paginated hook
   const [selectedGroupName, setSelectedGroupName] = useState<string>('');
@@ -76,20 +83,34 @@ export default function VideosScreen() {
       ? [selectedGroupName]
       : undefined;
 
-  // Paginated channels with server-side filtering
+  // Paginated channels with server-side filtering (active for movies)
   const {
     channels,
     isLoading: isLoadingChannels,
-    isLoadingMore,
-    hasMore,
-    loadMore,
+    isLoadingMore: isLoadingMoreChannels,
+    hasMore: hasMoreChannels,
+    loadMore: loadMoreChannels,
     refresh: refreshChannels,
   } = usePaginatedChannels({
-    playlistId: activePlaylist?.id,
+    playlistId: contentType === 'movie' ? activePlaylist?.id : undefined,
     groups: channelGroups,
     search: searchText,
-    contentType,
+    contentType: 'movie',
     favoriteChannelIds: favoriteChannels,
+  });
+
+  // Paginated series (active for series)
+  const {
+    series: seriesList,
+    isLoading: isLoadingSeries,
+    isLoadingMore: isLoadingMoreSeries,
+    hasMore: hasMoreSeries,
+    loadMore: loadMoreSeries,
+    refresh: refreshSeries,
+  } = usePaginatedSeries({
+    playlistId: contentType === 'series' ? activePlaylist?.id : undefined,
+    groups: channelGroups,
+    search: searchText,
   });
 
   // Event handlers for filters
@@ -120,38 +141,73 @@ export default function VideosScreen() {
     });
   }, [router, activePlaylist?.id]);
 
-  const isLoading = !hasLoadedPlaylist || !hasLoadedFavorites || isInitialLoading || isLoadingChannels;
+  const handleSeriesPress = useCallback((series: SeriesInfo) => {
+    setSelectedSeries(series);
+    setSeriesModalVisible(true);
+  }, []);
+
+  const handleSeriesModalClose = useCallback(() => {
+    setSeriesModalVisible(false);
+  }, []);
+
+  const handleEpisodePress = useCallback((channel: Channel) => {
+    setSeriesModalVisible(false);
+    handleChannelPress(channel);
+  }, [handleChannelPress]);
+
+  // Determine loading/pagination state based on content type
+  const isSeries = contentType === 'series';
+  const isLoading = !hasLoadedPlaylist || !hasLoadedFavorites || isInitialLoading
+    || (isSeries ? isLoadingSeries : isLoadingChannels);
+  const isLoadingMore = isSeries ? isLoadingMoreSeries : isLoadingMoreChannels;
+  const hasMore = isSeries ? hasMoreSeries : hasMoreChannels;
+  const loadMore = isSeries ? loadMoreSeries : loadMoreChannels;
 
   // Combined refresh handler
   const handleCombinedRefresh = useCallback(() => {
     handleRefresh();
-    refreshChannels();
-  }, [handleRefresh, refreshChannels]);
+    if (isSeries) {
+      refreshSeries();
+    } else {
+      refreshChannels();
+    }
+  }, [handleRefresh, refreshChannels, refreshSeries, isSeries]);
 
   return (
-    <VideosScreenContent
-      contentType={contentType}
-      onContentTypeChange={handleContentTypeChange}
-      isLoading={isLoading}
-      playlist={activePlaylist}
-      channels={channels}
-      favoriteChannels={favoriteChannels}
-      groups={groups}
-      selectedGroup={selectedGroupName}
-      searchText={searchText}
-      isRefreshing={isRefreshing}
-      onGroupSelect={handleGroupSelect}
-      onSearchChange={handleSearchTextChange}
-      onChannelPress={handleChannelPress}
-      onRefresh={handleCombinedRefresh}
-      onLoadMore={loadMore}
-      isLoadingMore={isLoadingMore}
-      hasMore={hasMore}
-      backgroundColor={backgroundColor}
-      iconColor={iconColor}
-      tintColor={tintColor}
-      favoriteGroups={favoriteGroups}
-      onToggleFavoriteGroup={toggleFavoriteGroup}
-    />
+    <>
+      <VideosScreenContent
+        contentType={contentType}
+        onContentTypeChange={handleContentTypeChange}
+        isLoading={isLoading}
+        playlist={activePlaylist}
+        channels={channels}
+        favoriteChannels={favoriteChannels}
+        groups={groups}
+        selectedGroup={selectedGroupName}
+        searchText={searchText}
+        isRefreshing={isRefreshing}
+        onGroupSelect={handleGroupSelect}
+        onSearchChange={handleSearchTextChange}
+        onChannelPress={handleChannelPress}
+        onRefresh={handleCombinedRefresh}
+        onLoadMore={loadMore}
+        isLoadingMore={isLoadingMore}
+        hasMore={hasMore}
+        backgroundColor={backgroundColor}
+        iconColor={iconColor}
+        tintColor={tintColor}
+        favoriteGroups={favoriteGroups}
+        onToggleFavoriteGroup={toggleFavoriteGroup}
+        seriesList={seriesList}
+        onSeriesPress={handleSeriesPress}
+      />
+      <SeriesDetailModal
+        visible={seriesModalVisible}
+        onClose={handleSeriesModalClose}
+        series={selectedSeries}
+        playlistId={activePlaylist?.id}
+        onEpisodePress={handleEpisodePress}
+      />
+    </>
   );
 }

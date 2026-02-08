@@ -1,16 +1,18 @@
-import { ChannelItem } from '@/features/live/channel-item';
-import { LiveLoadingSpinner } from '@/features/live/live-loading-spinner';
-import { VideosEmptyState } from '@/features/videos/videos-empty-state';
-import { VideosTopBar } from '@/features/videos/videos-top-bar';
 import InfiniteParallaxGrid from '@/components/ui/containers/infinite-parallax-grid';
-import { Image } from 'expo-image';
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
+import { ChannelItem } from '@/features/live/channel-item';
+import { LiveLoadingSpinner } from '@/features/live/live-loading-spinner';
+import { SeriesItem } from '@/features/videos/series-item';
+import { VideosEmptyState } from '@/features/videos/videos-empty-state';
+import { VideosTopBar } from '@/features/videos/videos-top-bar';
 import { isChannelFavorite } from '@/lib/channel-utils';
 import type { GroupOption } from '@/lib/group-utils';
 import type { Channel, Playlist } from '@/types/playlist.types';
 import type { ListRenderItemInfo } from '@shopify/flash-list';
+import { Image } from 'expo-image';
+import type { SeriesInfo } from 'expo-m3u-parser';
 import { useCallback, useMemo } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
@@ -37,6 +39,8 @@ interface VideosScreenContentProps {
   tintColor: string;
   favoriteGroups: string[];
   onToggleFavoriteGroup: (name: string) => void;
+  seriesList?: SeriesInfo[];
+  onSeriesPress?: (series: SeriesInfo) => void;
 }
 
 export function VideosScreenContent({
@@ -62,9 +66,17 @@ export function VideosScreenContent({
   tintColor,
   favoriteGroups,
   onToggleFavoriteGroup,
+  seriesList,
+  onSeriesPress,
 }: VideosScreenContentProps) {
-  const keyExtractor = useCallback((item: Channel, index: number) => {
+  const isSeries = contentType === 'series';
+
+  const channelKeyExtractor = useCallback((item: Channel, index: number) => {
     return `channel-${item.name}-${index}`;
+  }, []);
+
+  const seriesKeyExtractor = useCallback((item: SeriesInfo, index: number) => {
+    return `series-${item.seriesName}-${index}`;
   }, []);
 
   const renderChannelItem = useCallback(({ item: channel }: ListRenderItemInfo<Channel>) => {
@@ -78,6 +90,15 @@ export function VideosScreenContent({
       />
     );
   }, [favoriteChannels, onChannelPress]);
+
+  const renderSeriesItem = useCallback(({ item: series }: ListRenderItemInfo<SeriesInfo>) => {
+    return (
+      <SeriesItem
+        series={series}
+        onPress={onSeriesPress!}
+      />
+    );
+  }, [onSeriesPress]);
 
   const EmptyComponent = useCallback(() => {
     return (
@@ -134,28 +155,42 @@ export function VideosScreenContent({
 
   const headerImage = (
     <Image
-      source={require('../../../assets/images/parallax-headers/videos/jack-sparrow.jpg')}
+      source={require('../../../assets/images/parallax-headers/movies/jack-sparrow.jpg')}
       style={styles.headerImage}
       contentFit="cover"
     />
   );
 
+  const gridProps = {
+    headerBackgroundColor: { light: '#D0D0D0' as const, dark: '#353636' as const },
+    headerImage,
+    ListHeaderComponentAfterParallax: topBar,
+    columns: 4,
+    refreshing: isRefreshing,
+    onRefresh,
+  };
+
   // Show loading spinner if data hasn't loaded yet
   if (isLoading) {
     return (
       <View style={[styles.container, { backgroundColor }]}>
-        <InfiniteParallaxGrid
-          data={[]}
-          renderItem={renderChannelItem}
-          keyExtractor={keyExtractor}
-          headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
-          headerImage={headerImage}
-          ListHeaderComponentAfterParallax={topBar}
-          columns={4}
-          ListEmptyComponent={<LoadingComponent />}
-          refreshing={isRefreshing}
-          onRefresh={onRefresh}
-        />
+        {isSeries ? (
+          <InfiniteParallaxGrid
+            data={[] as SeriesInfo[]}
+            renderItem={renderSeriesItem}
+            keyExtractor={seriesKeyExtractor}
+            {...gridProps}
+            ListEmptyComponent={<LoadingComponent />}
+          />
+        ) : (
+          <InfiniteParallaxGrid
+            data={[] as Channel[]}
+            renderItem={renderChannelItem}
+            keyExtractor={channelKeyExtractor}
+            {...gridProps}
+            ListEmptyComponent={<LoadingComponent />}
+          />
+        )}
       </View>
     );
   }
@@ -177,23 +212,35 @@ export function VideosScreenContent({
     );
   }
 
-  // Show channels with full functionality
+  // Show content with full functionality
+  if (isSeries) {
+    return (
+      <View style={[styles.container, { backgroundColor }]}>
+        <InfiniteParallaxGrid
+          data={seriesList ?? []}
+          renderItem={renderSeriesItem}
+          keyExtractor={seriesKeyExtractor}
+          {...gridProps}
+          ListEmptyComponent={<EmptyComponent />}
+          ListFooterComponent={LoadingMoreComponent}
+          onEndReached={handleEndReached}
+          onEndReachedThreshold={0.5}
+        />
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.container, { backgroundColor }]}>
       <InfiniteParallaxGrid
         data={channels}
         renderItem={renderChannelItem}
-        keyExtractor={keyExtractor}
-        headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
-        headerImage={headerImage}
-        ListHeaderComponentAfterParallax={topBar}
-        columns={4}
+        keyExtractor={channelKeyExtractor}
+        {...gridProps}
         ListEmptyComponent={<EmptyComponent />}
         ListFooterComponent={LoadingMoreComponent}
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
-        refreshing={isRefreshing}
-        onRefresh={onRefresh}
       />
     </View>
   );

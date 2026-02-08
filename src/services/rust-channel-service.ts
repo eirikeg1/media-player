@@ -7,6 +7,8 @@ import {
   type Credentials,
   type PlaylistMetadata,
   type GroupCount,
+  type SeriesInfo,
+  type SeriesListResult,
 } from 'expo-m3u-parser';
 import type { Channel, PlaylistCredentials } from '@/types/playlist.types';
 
@@ -216,6 +218,41 @@ export class RustChannelService {
       channels: result.channels.map(rustChannelToJsChannel),
       totalCount: result.totalCount,
     };
+  }
+
+  /**
+   * Get series list with filtering and pagination (grouped by tvg_name)
+   */
+  static async getSeriesList(
+    playlistId: string,
+    options?: {
+      groups?: string[];
+      search?: string;
+      limit?: number;
+      offset?: number;
+    }
+  ): Promise<{ series: SeriesInfo[]; totalCount: number }> {
+    const db = await getRustDatabase();
+    const result: SeriesListResult = await db.getSeriesList({
+      playlistId,
+      ...options,
+    });
+    return {
+      series: result.series,
+      totalCount: result.totalCount,
+    };
+  }
+
+  /**
+   * Get all episodes for a specific series
+   */
+  static async getSeriesEpisodes(
+    playlistId: string,
+    seriesName: string
+  ): Promise<Channel[]> {
+    const db = await getRustDatabase();
+    const rustChannels = await db.getSeriesEpisodes(playlistId, seriesName);
+    return rustChannels.map(rustChannelToJsChannel);
   }
 
   /**

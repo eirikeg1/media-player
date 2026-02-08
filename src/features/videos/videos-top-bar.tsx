@@ -80,7 +80,7 @@ export function VideosTopBar({
 const styles = StyleSheet.create({
   container: {
     paddingTop: 8,
-    paddingBottom: 12,
+    paddingBottom: 2,
   },
   content: {
     flexDirection: 'column',
