@@ -51,7 +51,7 @@ export const PlaylistManager = memo(function PlaylistManager() {
 
         <View style={styles.preferenceRow}>
           <View style={styles.labelContainer}>
-            <ThemedText style={styles.label}>Share Playlists</ThemedText>
+            <ThemedText style={styles.label}>Share Playlists With Other Users</ThemedText>
           </View>
           <Switch
             value={playlistSharingEnabled}

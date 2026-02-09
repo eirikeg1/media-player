@@ -1,15 +1,15 @@
-import { GroupItemComponent, type GroupItem } from '@/features/live/group-item';
 import { ModalHeader } from '@/components/ui/containers/modal/modal-header';
 import { Input } from '@/components/ui/controls/inputs/input';
 import { ThemedView } from '@/components/ui/display/themed-view';
 import { useSelectionColors } from '@/constants/selection-theme';
-import { useThemeColor } from '@/hooks/use-theme-color';
+import { GroupItemComponent, type GroupItem } from '@/features/live/group-item';
 import { FAVORITES_GROUP_SENTINEL, isAdultGroup } from '@/lib/group-utils';
 import { FlashList } from '@shopify/flash-list';
 import { useCallback, useMemo, useState } from 'react';
 import {
-    Modal,
-    StyleSheet,
+  Modal,
+  StyleSheet,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -37,9 +37,6 @@ export function GroupSelectionModal({
   const [filterText, setFilterText] = useState('');
   const selectionColors = useSelectionColors();
   const insets = useSafeAreaInsets();
-
-  // Theme colors
-  const borderColor = useThemeColor({ light: '#ddd', dark: '#333' }, 'icon');
 
   // Filter and sort groups
   const displayedGroups = useMemo(() => {
@@ -125,22 +122,26 @@ export function GroupSelectionModal({
           />
 
           {/* Filter Input */}
-          <ThemedView style={[styles.filterContainer, { borderBottomColor: borderColor }]}>
-            <Input
-              placeholder="Filter groups..."
-              value={filterText}
-              onChangeText={setFilterText}
-              style={styles.filterInput}
-            />
+          <ThemedView style={styles.filterContainer}>
+            <View style={styles.inputWrapper}>
+              <Input
+                placeholder="Filter groups..."
+                value={filterText}
+                onChangeText={setFilterText}
+                style={styles.filterInput}
+              />
+            </View>
           </ThemedView>
 
-          <FlashList
-            data={displayedGroups}
-            renderItem={renderItem}
-            keyExtractor={keyExtractor}
-            numColumns={2}
-            contentContainerStyle={styles.listContent}
-          />
+          <View style={styles.listWrapper}>
+            <FlashList
+              data={displayedGroups}
+              renderItem={renderItem}
+              keyExtractor={keyExtractor}
+              numColumns={2}
+              contentContainerStyle={styles.listContent}
+            />
+          </View>
         </ThemedView>
     </Modal>
   );
@@ -152,12 +153,19 @@ const styles = StyleSheet.create({
   },
   filterContainer: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
+    paddingTop: 16,
+    zIndex: 1,
+  },
+  inputWrapper: {
+    height: 44,
   },
   filterInput: {
     height: 40,
     fontSize: 16,
+  },
+  listWrapper: {
+    flex: 1,
+    overflow: 'hidden',
   },
   listContent: {
     paddingVertical: 16,
