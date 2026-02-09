@@ -166,6 +166,7 @@ export function VideosScreenContent({
     headerImage,
     ListHeaderComponentAfterParallax: topBar,
     columns: 4,
+    padding: 5,
     refreshing: isRefreshing,
     onRefresh,
   };
@@ -255,7 +256,7 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   contentContainer: {
-    paddingHorizontal: 0,
+    paddingHorizontal: 5,
   },
   gridBackground: {
     flex: 1,

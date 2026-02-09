@@ -60,7 +60,6 @@ export function SeasonAccordion({
               <ThemedText style={styles.episodeTitle} numberOfLines={1}>
                 {ep.episodeTitle}
               </ThemedText>
-              <IconSymbol name="play.fill" size={16} color={tintColor} />
             </TouchableOpacity>
           ))}
         </ThemedView>

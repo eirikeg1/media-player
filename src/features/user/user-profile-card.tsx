@@ -3,13 +3,14 @@ import { Pressable, Text, View } from 'react-native';
 
 interface UserProfileCardProps {
   user: User;
+  isCurrentUser?: boolean;
   onPress: () => void;
 }
 
 /**
  * User profile card component for selection screen
  */
-export function UserProfileCard({ user, onPress }: UserProfileCardProps) {
+export function UserProfileCard({ user, isCurrentUser, onPress }: UserProfileCardProps) {
   // Get initials from username
   const getInitials = (name: string) => {
     return name
@@ -46,9 +47,17 @@ export function UserProfileCard({ user, onPress }: UserProfileCardProps) {
           </View>
         )}
       </View>
-      <Text className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-        {user.username}
-      </Text>
+      {isCurrentUser ? (
+        <View className="px-3 py-1 bg-blue-600 rounded-full">
+          <Text className="text-lg font-semibold text-white">
+            {user.username}
+          </Text>
+        </View>
+      ) : (
+        <Text className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+          {user.username}
+        </Text>
+      )}
     </Pressable>
   );
 }

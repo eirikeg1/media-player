@@ -251,10 +251,11 @@ export class RustChannelService {
    */
   static async getSeriesEpisodes(
     playlistId: string,
-    seriesName: string
+    seriesName: string,
+    groupName: string
   ): Promise<Channel[]> {
     const db = await getRustDatabase();
-    const rustChannels = await db.getSeriesEpisodes(playlistId, seriesName);
+    const rustChannels = await db.getSeriesEpisodes(playlistId, seriesName, groupName);
     return rustChannels.map(rustChannelToJsChannel);
   }
 

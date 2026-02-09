@@ -14,7 +14,8 @@ interface UseSeriesEpisodesReturn {
  */
 export function useSeriesEpisodes(
   playlistId: string | null | undefined,
-  seriesName: string | null | undefined
+  seriesName: string | null | undefined,
+  groupName: string | null | undefined
 ): UseSeriesEpisodesReturn {
   const [episodes, setEpisodes] = useState<Channel[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -29,7 +30,7 @@ export function useSeriesEpisodes(
   }, []);
 
   useEffect(() => {
-    if (!playlistId || !seriesName) {
+    if (!playlistId || !seriesName || !groupName) {
       setEpisodes([]);
       return;
     }
@@ -38,7 +39,7 @@ export function useSeriesEpisodes(
     setIsLoading(true);
     setError(null);
 
-    RustChannelService.getSeriesEpisodes(playlistId, seriesName)
+    RustChannelService.getSeriesEpisodes(playlistId, seriesName, groupName)
       .then((result) => {
         if (!cancelled && isMountedRef.current) {
           setEpisodes(result);
@@ -61,7 +62,7 @@ export function useSeriesEpisodes(
     return () => {
       cancelled = true;
     };
-  }, [playlistId, seriesName]);
+  }, [playlistId, seriesName, groupName]);
 
   return { episodes, isLoading, error };
 }

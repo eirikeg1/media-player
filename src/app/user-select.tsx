@@ -111,14 +111,7 @@ function FirstUserScreen({ username, isCreating, onUsernameChange, onSubmit }: U
 function UserGridItem({ user, isCurrentUser, onSelect }: UserGridItemProps) {
   return (
     <View className="w-32">
-      <UserProfileCard user={user} onPress={() => onSelect(user.id)} />
-      {isCurrentUser && (
-        <View className="mt-2 items-center">
-          <View className="px-3 py-1 bg-blue-600 rounded-full">
-            <Text className="text-xs font-semibold text-white">Current</Text>
-          </View>
-        </View>
-      )}
+      <UserProfileCard user={user} isCurrentUser={isCurrentUser} onPress={() => onSelect(user.id)} />
     </View>
   );
 }

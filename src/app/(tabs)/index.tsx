@@ -17,6 +17,8 @@ export default function HomeScreen() {
   return (
     <ParallaxScrollView
       headerBackgroundColor={{ light: '#2D2D2D', dark: '#1A1A1A' }}
+      padding={0}
+      showsVerticalScrollIndicator={false}
       headerImage={
         <View style={styles.headerContainer}>
           <Image
