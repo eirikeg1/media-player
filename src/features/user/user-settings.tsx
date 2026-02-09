@@ -1,3 +1,4 @@
+import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
 import { useUserStore } from '@/stores/user/user-store';
@@ -28,34 +29,27 @@ export const UserSettings = memo(function UserSettings() {
           Profile
         </ThemedText>
 
-        <View style={styles.userCard}>
-          <View style={[styles.avatar, { backgroundColor: '#007AFF' }]}>
-            <ThemedText style={styles.avatarText}>
-              {currentUser.username
-                .split(' ')
-                .map((n) => n[0])
-                .join('')
-                .toUpperCase()
-                .slice(0, 2)}
-            </ThemedText>
-          </View>
-          <View style={styles.userInfo}>
+        <Pressable
+          onPress={handleSwitchUser}
+          style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+          accessibilityLabel="Switch user profile"
+          accessibilityRole="button"
+        >
+          <View style={styles.userCard}>
+            <View style={[styles.avatar, { backgroundColor: '#007AFF' }]}>
+              <ThemedText style={styles.avatarText}>
+                {currentUser.username
+                  .split(' ')
+                  .map((n) => n[0])
+                  .join('')
+                  .toUpperCase()
+                  .slice(0, 2)}
+              </ThemedText>
+            </View>
             <ThemedText style={styles.username}>{currentUser.username}</ThemedText>
+            <IconSymbol name="arrow.up.arrow.down" size={28} color="#007AFF" />
           </View>
-          <Pressable
-            onPress={handleSwitchUser}
-            style={({ pressed }) => [
-              styles.switchTouchable,
-              {
-                opacity: pressed ? 0.7 : 1,
-              },
-            ]}
-            accessibilityLabel="Switch user profile"
-            accessibilityRole="button"
-          >
-            <ThemedText style={styles.switchButtonText}>Switch</ThemedText>
-          </Pressable>
-        </View>
+        </Pressable>
       </View>
     </ThemedView>
   );
@@ -93,22 +87,8 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
   },
-  userInfo: {
-    flex: 1,
-  },
   username: {
     fontSize: 17,
     fontWeight: '600',
-    marginBottom: 2,
-  },
-  switchTouchable: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    margin: -12,
-  },
-  switchButtonText: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#007AFF',
   },
 });

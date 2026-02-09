@@ -139,6 +139,7 @@ export default function InfiniteParallaxGrid<T>({
           paddingHorizontal: padding,
           paddingBottom: padding,
         }}
+        keyboardShouldPersistTaps="handled"
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
         onLoad={handleLoad}

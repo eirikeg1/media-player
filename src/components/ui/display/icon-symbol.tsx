@@ -189,6 +189,7 @@ const MAPPING = {
   'link.circle': 'link',
   'flag': 'flag',
   'flag.fill': 'flag',
+  'arrow.up.arrow.down': 'swap-vert',
 } as IconMapping;
 
 /**

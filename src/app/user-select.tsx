@@ -4,7 +4,7 @@ import { useUserStore } from '@/stores/user/user-store';
 import type { UpdateUserInput, User } from '@/types/user.types';
 import { router } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 // Constants
@@ -41,66 +41,70 @@ interface UserSelectionScreenProps {
 function FirstUserScreen({ username, isCreating, onUsernameChange, onSubmit }: UserFormProps) {
   return (
     <SafeAreaView className="flex-1 bg-white dark:bg-gray-950" edges={['top']}>
-        <ScrollView
-        contentContainerStyle={{ flexGrow: 1 }}
-        keyboardShouldPersistTaps="always"
-        automaticallyAdjustKeyboardInsets
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <View className="flex-1" />
-        <View className="px-8">
-          <View className="mb-12">
-            <Text className="text-5xl font-bold text-center mb-4 text-gray-900 dark:text-white">
-              Welcome!
-            </Text>
-            <Text className="text-lg text-center text-gray-600 dark:text-gray-400">
-              Let&apos;s create your profile to get started
-            </Text>
-          </View>
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1 }}
+          keyboardShouldPersistTaps="always"
+        >
+          <View className="flex-1" />
+          <View className="px-8">
+            <View className="mb-12">
+              <Text className="text-5xl font-bold text-center mb-4 text-gray-900 dark:text-white">
+                Welcome!
+              </Text>
+              <Text className="text-lg text-center text-gray-600 dark:text-gray-400">
+                Let&apos;s create your profile to get started
+              </Text>
+            </View>
 
-          <View className="items-center mb-8">
-            <View className="w-32 h-32 rounded-full bg-blue-600 items-center justify-center">
-              <Text className="text-6xl">{PROFILE_ICON}</Text>
+            <View className="items-center mb-8">
+              <View className="w-32 h-32 rounded-full bg-blue-600 items-center justify-center">
+                <Text className="text-6xl">{PROFILE_ICON}</Text>
+              </View>
+            </View>
+
+            <View className="max-w-md w-full mx-auto">
+              <Text className="text-lg font-semibold mb-3 text-gray-900 dark:text-white">
+                Your Name
+              </Text>
+
+              <TextInput
+                className="bg-gray-100 dark:bg-gray-800 px-5 py-4 rounded-xl text-lg text-gray-900 dark:text-white mb-6 border border-gray-200 dark:border-gray-700"
+                placeholder="Enter your name"
+                placeholderTextColor={PLACEHOLDER_COLOR}
+                value={username}
+                onChangeText={onUsernameChange}
+                autoFocus
+                editable={!isCreating}
+                returnKeyType="done"
+                onSubmitEditing={onSubmit}
+              />
+
+              <Pressable
+                onPress={onSubmit}
+                disabled={isCreating || !username.trim()}
+                className="bg-blue-600 py-4 rounded-xl disabled:opacity-50"
+                accessibilityRole="button"
+                accessibilityLabel="Create profile and continue"
+              >
+                <Text className="text-center text-lg font-semibold text-white">
+                  {isCreating ? 'Creating Profile...' : 'Continue'}
+                </Text>
+              </Pressable>
+            </View>
+
+            <View className="mt-12">
+              <Text className="text-center text-sm text-gray-500 dark:text-gray-400">
+                You can add more profiles later in settings
+              </Text>
             </View>
           </View>
-
-          <View className="max-w-md w-full mx-auto">
-            <Text className="text-lg font-semibold mb-3 text-gray-900 dark:text-white">
-              Your Name
-            </Text>
-
-            <TextInput
-              className="bg-gray-100 dark:bg-gray-800 px-5 py-4 rounded-xl text-lg text-gray-900 dark:text-white mb-6 border border-gray-200 dark:border-gray-700"
-              placeholder="Enter your name"
-              placeholderTextColor={PLACEHOLDER_COLOR}
-              value={username}
-              onChangeText={onUsernameChange}
-              autoFocus
-              editable={!isCreating}
-              returnKeyType="done"
-              onSubmitEditing={onSubmit}
-            />
-
-            <Pressable
-              onPress={onSubmit}
-              disabled={isCreating || !username.trim()}
-              className="bg-blue-600 py-4 rounded-xl disabled:opacity-50"
-              accessibilityRole="button"
-              accessibilityLabel="Create profile and continue"
-            >
-              <Text className="text-center text-lg font-semibold text-white">
-                {isCreating ? 'Creating Profile...' : 'Continue'}
-              </Text>
-            </Pressable>
-          </View>
-
-          <View className="mt-12">
-            <Text className="text-center text-sm text-gray-500 dark:text-gray-400">
-              You can add more profiles later in settings
-            </Text>
-          </View>
-        </View>
-        <View className="flex-1" />
+          <View className="flex-1" />
         </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

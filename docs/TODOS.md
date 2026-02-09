@@ -1,4 +1,4 @@
-# Future Tasks
+# Future Tasks*
 
 ## Small TODOS:
 * Add clear button to input fields. If there is content in an input field, there should appear a circled x icon in the right of the input field. Clicking this should clear the value
@@ -28,7 +28,11 @@
 * **Favorite Sports Team Tracking** - Track schedule, results and channels for favorite team
 * **Likes & Recommendations** - User likes feed recommendations for shows, movies, and sports
 * **Multi-user Profiles** - Expand existing partial home page
-* View history. For tv shows: show a "continue watching" link to next episode on 
+* View history. For tv shows: show a "continue watching" link to next episode on
+* When opening match stream through sports schedule: show lineups and match info on screen, either through gui button press, or as main view on phone while casting
+* Skip intro/recap/trailer
+* Playbaack-speed control and general playback control (choose where to play from a bottom bar/line which tells you where in the video you are)
+* Catch up feature; show highlights/similar if starting to what from middle of game
 
 ## React Native App
 * VOD UI for movies and TV series browsing
@@ -39,11 +43,12 @@
 * Allow data processing (playlist parsing etc.) happen in the background (perhaps show the status message the same place as the mini player?)
 * Select colors for theme
 * Make more advanced parallax scroll functionalty, will randomly generated collages of video images
+* Custom bitrate (quality)
+* Subtitles
+* Create movie detail modal (similar to as in `series-detail-modal.tsx`)
 
 ### UI tweaks
 * selected user should not get a "current" pill, instead the name should get the pill around it
-* When setting up the user for the first time, the centered input field becomes hidden behind the keyboard. Use a keyboard avoiding view for this
-* Change the "switch" text button to change user to an icon (icon with one arrow up and one arrow down)
 
 ## Rust Backend
 * Infinite scroll: evict old items when exceeding window size
@@ -51,6 +56,7 @@
 * Recommendation engine
 * EPG data ingestion and storage
 * VOD catalog indexing (movies, series, seasons, episodes)
+* Advanced filtering
 
 ## Both
 * Recommendations fetched from backend, displayed to the user
