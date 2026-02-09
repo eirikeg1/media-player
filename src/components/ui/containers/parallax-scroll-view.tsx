@@ -16,6 +16,8 @@ type Props = PropsWithChildren<{
   headerImage: ReactElement;
   headerBackgroundColor: { dark: string; light: string };
   stickyHeaderIndices?: number[];
+  padding?: number;
+  showsVerticalScrollIndicator?: boolean;
 }>;
 
 export default function ParallaxScrollView({
@@ -23,6 +25,8 @@ export default function ParallaxScrollView({
   headerImage,
   headerBackgroundColor,
   stickyHeaderIndices,
+  padding = 8,
+  showsVerticalScrollIndicator = true,
 }: Props) {
   const colorScheme = useColorScheme() ?? 'light';
   const insets = useSafeAreaInsets();
@@ -47,9 +51,10 @@ export default function ParallaxScrollView({
         scrollEventThrottle={16}
         stickyHeaderIndices={stickyHeaderIndices}
         contentOffset={{ x: 0, y: INITIAL_SCROLL_OFFSET }}
+        showsVerticalScrollIndicator={showsVerticalScrollIndicator}
       >
         <View style={parallaxStyles.headerSpacer} />
-        <ThemedView style={styles.content}>{children}</ThemedView>
+        <ThemedView style={[styles.content, { padding }]}>{children}</ThemedView>
       </Animated.ScrollView>
     </ThemedView>
   );
@@ -58,7 +63,6 @@ export default function ParallaxScrollView({
 const styles = StyleSheet.create({
   content: {
     flex: 1,
-    padding: 8,
     gap: 16,
     overflow: 'hidden',
   },

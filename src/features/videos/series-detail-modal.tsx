@@ -44,7 +44,8 @@ export function SeriesDetailModal({
 
   const { episodes, isLoading } = useSeriesEpisodes(
     visible ? playlistId : null,
-    visible ? series?.seriesName : null
+    visible ? series?.seriesName : null,
+    visible ? series?.groupName : null
   );
 
   const seasonMap = useMemo(() => {

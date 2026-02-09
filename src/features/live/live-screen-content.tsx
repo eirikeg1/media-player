@@ -141,6 +141,7 @@ export function LiveScreenContent({
             </ThemedView>
           }
           columns={4}
+          padding={5}
           ListEmptyComponent={<LoadingComponent />}
           refreshing={isRefreshing}
           onRefresh={onRefresh}
@@ -195,6 +196,7 @@ export function LiveScreenContent({
           </ThemedView>
         }
         columns={4}
+        padding={5}
         ListEmptyComponent={<EmptyComponent />}
         ListFooterComponent={LoadingMoreComponent}
         onEndReached={handleEndReached}
@@ -215,7 +217,7 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   contentContainer: {
-    paddingHorizontal: 0,
+    paddingHorizontal: 5,
   },
   gridBackground: {
     flex: 1,
