@@ -8,6 +8,7 @@ import { useGroups } from '@/features/live/hooks/use-groups';
 import { usePaginatedChannels } from '@/features/live/hooks/use-paginated-channels';
 import { usePlaylistData } from '@/features/live/hooks/use-playlist-data';
 import { usePaginatedSeries } from '@/features/videos/hooks/use-paginated-series';
+import { MovieDetailModal } from '@/features/videos/movie-detail-modal';
 import { SeriesDetailModal } from '@/features/videos/series-detail-modal';
 import { VideosScreenContent } from '@/features/videos/videos-screen-content';
 import { useThemeColor } from '@/hooks/use-theme-color';
@@ -33,6 +34,10 @@ export default function VideosScreen() {
   // Series detail modal state
   const [selectedSeries, setSelectedSeries] = useState<SeriesInfo | null>(null);
   const [seriesModalVisible, setSeriesModalVisible] = useState(false);
+
+  // Movie detail modal state
+  const [selectedMovie, setSelectedMovie] = useState<Channel | null>(null);
+  const [movieModalVisible, setMovieModalVisible] = useState(false);
 
   // Filter state managed locally, passed to paginated hook
   const [selectedGroupName, setSelectedGroupName] = useState<string>('');
@@ -161,6 +166,20 @@ export default function VideosScreen() {
     handleChannelPress(channel);
   }, [handleChannelPress]);
 
+  const handleMoviePress = useCallback((channel: Channel) => {
+    setSelectedMovie(channel);
+    setMovieModalVisible(true);
+  }, []);
+
+  const handleMovieModalClose = useCallback(() => {
+    setMovieModalVisible(false);
+  }, []);
+
+  const handleMoviePlay = useCallback((channel: Channel) => {
+    setMovieModalVisible(false);
+    handleChannelPress(channel);
+  }, [handleChannelPress]);
+
   // Determine loading/pagination state based on content type
   const isSeries = contentType === 'series';
   const isLoading = !hasLoadedPlaylist || !hasLoadedFavorites || isInitialLoading
@@ -194,7 +213,7 @@ export default function VideosScreen() {
         isRefreshing={isRefreshing}
         onGroupSelect={handleGroupSelect}
         onSearchChange={handleSearchTextChange}
-        onChannelPress={handleChannelPress}
+        onChannelPress={handleMoviePress}
         onRefresh={handleCombinedRefresh}
         onLoadMore={loadMore}
         isLoadingMore={isLoadingMore}
@@ -206,6 +225,13 @@ export default function VideosScreen() {
         onToggleFavoriteGroup={toggleFavoriteGroup}
         seriesList={seriesList}
         onSeriesPress={handleSeriesPress}
+      />
+      <MovieDetailModal
+        visible={movieModalVisible}
+        onClose={handleMovieModalClose}
+        movie={selectedMovie}
+        playlistId={activePlaylist?.id}
+        onPlayPress={handleMoviePlay}
       />
       <SeriesDetailModal
         visible={seriesModalVisible}

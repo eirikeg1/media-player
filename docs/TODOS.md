@@ -45,7 +45,6 @@
 * Make more advanced parallax scroll functionalty, will randomly generated collages of video images
 * Custom bitrate (quality)
 * Subtitles
-* Create movie detail modal (similar to as in `series-detail-modal.tsx`)
 
 ### UI tweaks
 * selected user should not get a "current" pill, instead the name should get the pill around it
