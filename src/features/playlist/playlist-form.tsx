@@ -300,7 +300,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     alignItems: 'center',
     gap: 12,
-    backgroundColor: '#f0f8ff',
+    backgroundColor: '#383838',
     borderRadius: 8,
   },
   loadingText: {

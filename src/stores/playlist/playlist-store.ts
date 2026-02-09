@@ -63,8 +63,10 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
       }
 
       console.log('[PlaylistStore] Checking for duplicates...');
+      const { useUserStore } = await import('../user/user-store');
+      const currentUserId = useUserStore.getState().currentUser?.id;
       const existingPlaylist = get().playlists.find(
-        (p) => p.url.toLowerCase() === input.url.toLowerCase()
+        (p) => p.url.toLowerCase() === input.url.toLowerCase() && p.createdByUserId === currentUserId
       );
       if (existingPlaylist) {
         throw new Error(`Playlist from this URL already exists: "${existingPlaylist.name}"`);
@@ -94,6 +96,7 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
         credentials: input.credentials,
         // parsedData is no longer stored - channels live in Rust DB
         channelCount,
+        createdByUserId: currentUserId,
         createdAt: now,
         updatedAt: now,
         lastFetchedAt: now,
@@ -278,13 +281,17 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      const playlists = await playlistRepository.getAll();
+      // Load playlists visible to the current user based on sharing settings
+      const { useUserStore } = await import('../user/user-store');
+      const currentUser = useUserStore.getState().currentUser;
+      const sharingEnabled = currentUser?.settings?.playlistSharingEnabled ?? true;
+      const playlists = currentUser
+        ? await playlistRepository.getVisiblePlaylists(currentUser.id, sharingEnabled)
+        : await playlistRepository.getAll();
 
       // Load active playlist from current user's settings
       let activePlaylistId: string | null = null;
       try {
-        const { useUserStore } = await import('../user/user-store');
-        const currentUser = useUserStore.getState().currentUser;
         if (currentUser?.settings?.activePlaylistId) {
           // Check if the saved playlist still exists
           const savedPlaylist = playlists.find(p => p.id === currentUser.settings?.activePlaylistId);

@@ -212,13 +212,13 @@ export const PlaylistList = memo(function PlaylistList() {
 
 const styles = StyleSheet.create({
   listContainer: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 8,
     gap: 8,
   },
   playlistCard: {
     borderRadius: 8,
     padding: 12,
-    marginBottom: 8,
     borderWidth: 1,
   },
   mainContent: {

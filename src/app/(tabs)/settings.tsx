@@ -48,6 +48,5 @@ const styles = StyleSheet.create({
     position: 'absolute',
   },
   playlistContainer: {
-    minHeight: 400,
   },
 });

@@ -1,12 +1,11 @@
-
-import { Button } from '@/components/ui/controls/button';
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { usePlaylistStore } from '@/stores/playlist/playlist-store';
+import { useUserStore } from '@/stores/user/user-store';
 import { memo, useCallback, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Switch, View } from 'react-native';
 import { PlaylistList } from './playlist-list';
 import { PlaylistModal } from './playlist-modal';
 
@@ -23,6 +22,10 @@ export const PlaylistManager = memo(function PlaylistManager() {
   const isLoading = usePlaylistStore((state) => state.isLoading);
   const error = usePlaylistStore((state) => state.error);
 
+  const currentUser = useUserStore((state) => state.currentUser);
+  const updateSettings = useUserStore((state) => state.updateSettings);
+  const playlistSharingEnabled = currentUser?.settings?.playlistSharingEnabled ?? true;
+
   const handleCloseModal = useCallback(() => {
     setShowModal(false);
   }, []);
@@ -31,6 +34,14 @@ export const PlaylistManager = memo(function PlaylistManager() {
     setShowModal(true);
   }, []);
 
+  const handleTogglePlaylistSharing = useCallback(
+    (value: boolean) => {
+      if (!currentUser) return;
+      updateSettings(currentUser.id, { playlistSharingEnabled: value });
+    },
+    [currentUser, updateSettings],
+  );
+
   return (
     <ThemedView style={styles.container}>
       <View style={styles.content}>
@@ -38,18 +49,17 @@ export const PlaylistManager = memo(function PlaylistManager() {
           Playlist Management
         </ThemedText>
 
-        <View style={styles.actionRow}>
-          <Button
-            title="Add Playlist"
-            icon="plus.circle"
-            onPress={handleOpenModal}
-            size="medium"
-            variant="secondary"
-            accessibilityLabel="Add playlist"
-            accessibilityHint="Open modal to add a new IPTV playlist"
+        <View style={styles.preferenceRow}>
+          <View style={styles.labelContainer}>
+            <ThemedText style={styles.label}>Share Playlists</ThemedText>
+          </View>
+          <Switch
+            value={playlistSharingEnabled}
+            onValueChange={handleTogglePlaylistSharing}
+            trackColor={{ false: '#767577', true: '#007AFF' }}
+            accessibilityLabel="Share playlists with other users"
           />
         </View>
-
       </View>
 
       {error && (
@@ -68,6 +78,16 @@ export const PlaylistManager = memo(function PlaylistManager() {
 
       {!isLoading && <PlaylistList />}
 
+      <Pressable
+        onPress={handleOpenModal}
+        style={styles.addButton}
+        accessibilityLabel="Add playlist"
+        accessibilityHint="Open modal to add a new IPTV playlist"
+        hitSlop={8}
+      >
+        <IconSymbol name="plus.circle.fill" size={36} color="#007AFF" />
+      </Pressable>
+
       <PlaylistModal visible={showModal} onClose={handleCloseModal} />
     </ThemedView>
   );
@@ -78,15 +98,31 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 0,
   },
   header: {
-    marginBottom: 16,
+    marginBottom: 8,
   },
-  actionRow: {
+  preferenceRow: {
     flexDirection: 'row',
-    gap: 12,
-    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 0,
+  },
+  labelContainer: {
+    flex: 1,
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  addButton: {
+    alignItems: 'center',
+    paddingVertical: 16,
   },
   errorBanner: {
     flexDirection: 'row',

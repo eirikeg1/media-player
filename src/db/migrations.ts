@@ -315,6 +315,20 @@ const migrations: Migration[] = [
       console.log('[Migration] Added tab visibility columns to user_settings');
     },
   },
+  {
+    version: 8,
+    name: 'add_playlist_sharing',
+    up: async (db) => {
+      await db.execAsync(`
+        ALTER TABLE playlists ADD COLUMN createdByUserId TEXT;
+      `);
+      await db.execAsync(`
+        ALTER TABLE user_settings ADD COLUMN playlistSharingEnabled INTEGER NOT NULL DEFAULT 1;
+      `);
+
+      console.log('[Migration] Added playlist sharing columns');
+    },
+  },
 ];
 
 /**

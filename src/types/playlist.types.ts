@@ -38,6 +38,7 @@ export interface Playlist {
   credentials?: PlaylistCredentials;
   parsedData?: ParsedPlaylist;
   channelCount?: number;
+  createdByUserId?: string;
   createdAt: Date;
   updatedAt: Date;
   lastFetchedAt?: Date;

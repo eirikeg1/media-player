@@ -28,6 +28,7 @@ export interface UserSettings {
   showHomeTab: boolean;
   showLiveTab: boolean;
   showVideosTab: boolean;
+  playlistSharingEnabled: boolean;
 }
 
 /**
@@ -115,4 +116,5 @@ export const DEFAULT_USER_SETTINGS: Omit<UserSettings, 'userId'> = {
   showHomeTab: true,
   showLiveTab: true,
   showVideosTab: true,
+  playlistSharingEnabled: true,
 };
