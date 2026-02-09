@@ -25,6 +25,9 @@ export interface UserSettings {
   channelSortBy: 'name' | 'recent' | 'custom' | 'mostWatched' | 'favorites';
   parentalControlEnabled: boolean;
   parentalControlPin?: string;
+  showHomeTab: boolean;
+  showLiveTab: boolean;
+  showVideosTab: boolean;
 }
 
 /**
@@ -109,4 +112,7 @@ export const DEFAULT_USER_SETTINGS: Omit<UserSettings, 'userId'> = {
   activePlaylistId: undefined,
   channelSortBy: 'name',
   parentalControlEnabled: true,
+  showHomeTab: true,
+  showLiveTab: true,
+  showVideosTab: true,
 };

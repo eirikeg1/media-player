@@ -6,9 +6,11 @@ import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { CastMiniPlayerBar } from '@/features/video/components/cast-mini-player-bar';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/lib/theme';
+import { useUserStore } from '@/stores/user/user-store';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
+  const settings = useUserStore((state) => state.currentUser?.settings);
 
   return (
     <Tabs
@@ -28,6 +30,7 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Home',
+          href: settings?.showHomeTab === false ? null : undefined,
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
         }}
       />
@@ -35,6 +38,7 @@ export default function TabLayout() {
         name="live"
         options={{
           title: 'Live',
+          href: settings?.showLiveTab === false ? null : undefined,
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="play.tv" color={color} />,
         }}
       />
@@ -42,6 +46,7 @@ export default function TabLayout() {
         name="videos"
         options={{
           title: 'Videos',
+          href: settings?.showVideosTab === false ? null : undefined,
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="film.fill" color={color} />,
         }}
       />

@@ -9,11 +9,38 @@ export const AppPreferences = memo(function AppPreferences() {
   const updateSettings = useUserStore((state) => state.updateSettings);
 
   const parentalControlEnabled = currentUser?.settings?.parentalControlEnabled ?? true;
+  const showHomeTab = currentUser?.settings?.showHomeTab ?? true;
+  const showLiveTab = currentUser?.settings?.showLiveTab ?? true;
+  const showVideosTab = currentUser?.settings?.showVideosTab ?? true;
 
   const handleToggleParentalControl = useCallback(
     (value: boolean) => {
       if (!currentUser) return;
       updateSettings(currentUser.id, { parentalControlEnabled: value });
+    },
+    [currentUser, updateSettings],
+  );
+
+  const handleToggleHomeTab = useCallback(
+    (value: boolean) => {
+      if (!currentUser) return;
+      updateSettings(currentUser.id, { showHomeTab: value });
+    },
+    [currentUser, updateSettings],
+  );
+
+  const handleToggleLiveTab = useCallback(
+    (value: boolean) => {
+      if (!currentUser) return;
+      updateSettings(currentUser.id, { showLiveTab: value });
+    },
+    [currentUser, updateSettings],
+  );
+
+  const handleToggleVideosTab = useCallback(
+    (value: boolean) => {
+      if (!currentUser) return;
+      updateSettings(currentUser.id, { showVideosTab: value });
     },
     [currentUser, updateSettings],
   );
@@ -38,6 +65,46 @@ export const AppPreferences = memo(function AppPreferences() {
             onValueChange={handleToggleParentalControl}
             trackColor={{ false: '#767577', true: '#007AFF' }}
             accessibilityLabel="Hide adult content"
+          />
+        </View>
+
+        <ThemedText type="subtitle" style={styles.header}>
+          Visible Tabs
+        </ThemedText>
+
+        <View style={styles.preferenceRow}>
+          <View style={styles.labelContainer}>
+            <ThemedText style={styles.label}>Home</ThemedText>
+          </View>
+          <Switch
+            value={showHomeTab}
+            onValueChange={handleToggleHomeTab}
+            trackColor={{ false: '#767577', true: '#007AFF' }}
+            accessibilityLabel="Show Home tab"
+          />
+        </View>
+
+        <View style={styles.preferenceRow}>
+          <View style={styles.labelContainer}>
+            <ThemedText style={styles.label}>Live</ThemedText>
+          </View>
+          <Switch
+            value={showLiveTab}
+            onValueChange={handleToggleLiveTab}
+            trackColor={{ false: '#767577', true: '#007AFF' }}
+            accessibilityLabel="Show Live tab"
+          />
+        </View>
+
+        <View style={styles.preferenceRow}>
+          <View style={styles.labelContainer}>
+            <ThemedText style={styles.label}>Videos</ThemedText>
+          </View>
+          <Switch
+            value={showVideosTab}
+            onValueChange={handleToggleVideosTab}
+            trackColor={{ false: '#767577', true: '#007AFF' }}
+            accessibilityLabel="Show Videos tab"
           />
         </View>
       </View>

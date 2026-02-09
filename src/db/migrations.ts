@@ -298,6 +298,23 @@ const migrations: Migration[] = [
       console.log('[Migration] Added user_favorite_groups table');
     },
   },
+  {
+    version: 7,
+    name: 'add_tab_visibility_settings',
+    up: async (db) => {
+      await db.execAsync(`
+        ALTER TABLE user_settings ADD COLUMN showHomeTab INTEGER NOT NULL DEFAULT 1;
+      `);
+      await db.execAsync(`
+        ALTER TABLE user_settings ADD COLUMN showLiveTab INTEGER NOT NULL DEFAULT 1;
+      `);
+      await db.execAsync(`
+        ALTER TABLE user_settings ADD COLUMN showVideosTab INTEGER NOT NULL DEFAULT 1;
+      `);
+
+      console.log('[Migration] Added tab visibility columns to user_settings');
+    },
+  },
 ];
 
 /**

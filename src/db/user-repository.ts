@@ -87,6 +87,9 @@ interface UserSettingsRow {
   channelSortBy: string;
   parentalControlEnabled: number;
   parentalControlPin: string | null;
+  showHomeTab: number;
+  showLiveTab: number;
+  showVideosTab: number;
 }
 
 interface UserFavoriteChannelRow {
@@ -168,6 +171,9 @@ class SQLiteUserRepository implements IUserRepository {
       channelSortBy: row.channelSortBy as any,
       parentalControlEnabled: row.parentalControlEnabled === 1,
       parentalControlPin: row.parentalControlPin || undefined,
+      showHomeTab: row.showHomeTab === 1,
+      showLiveTab: row.showLiveTab === 1,
+      showVideosTab: row.showVideosTab === 1,
     };
   }
 
@@ -229,8 +235,8 @@ class SQLiteUserRepository implements IUserRepository {
 
       // Insert default settings
       await tx.runAsync(
-        `INSERT INTO user_settings (userId, theme, language, defaultQuality, defaultSubtitles, activePlaylistId, channelSortBy, parentalControlEnabled, parentalControlPin)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO user_settings (userId, theme, language, defaultQuality, defaultSubtitles, activePlaylistId, channelSortBy, parentalControlEnabled, parentalControlPin, showHomeTab, showLiveTab, showVideosTab)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           userId,
           DEFAULT_USER_SETTINGS.theme,
@@ -241,6 +247,9 @@ class SQLiteUserRepository implements IUserRepository {
           DEFAULT_USER_SETTINGS.channelSortBy,
           DEFAULT_USER_SETTINGS.parentalControlEnabled ? 1 : 0,
           null,
+          DEFAULT_USER_SETTINGS.showHomeTab ? 1 : 0,
+          DEFAULT_USER_SETTINGS.showLiveTab ? 1 : 0,
+          DEFAULT_USER_SETTINGS.showVideosTab ? 1 : 0,
         ]
       );
     });
@@ -323,7 +332,8 @@ class SQLiteUserRepository implements IUserRepository {
     await executeStatement(
       `UPDATE user_settings
        SET theme = ?, language = ?, defaultQuality = ?, defaultSubtitles = ?, activePlaylistId = ?,
-           channelSortBy = ?, parentalControlEnabled = ?, parentalControlPin = ?
+           channelSortBy = ?, parentalControlEnabled = ?, parentalControlPin = ?,
+           showHomeTab = ?, showLiveTab = ?, showVideosTab = ?
        WHERE userId = ?`,
       [
         updated.theme,
@@ -334,6 +344,9 @@ class SQLiteUserRepository implements IUserRepository {
         updated.channelSortBy,
         updated.parentalControlEnabled ? 1 : 0,
         updated.parentalControlPin || null,
+        updated.showHomeTab ? 1 : 0,
+        updated.showLiveTab ? 1 : 0,
+        updated.showVideosTab ? 1 : 0,
         userId,
       ]
     );
