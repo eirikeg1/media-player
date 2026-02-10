@@ -2,31 +2,20 @@ import { useEffect, useRef, useState } from 'react';
 import { RustChannelService } from '@/services/rust-channel-service';
 import type { ChannelMetadata } from 'expo-m3u-parser';
 
-interface UseMovieMetadataReturn {
+interface UseSeriesMetadataReturn {
   metadata: ChannelMetadata | null;
   isLoading: boolean;
 }
 
 /**
- * Extract Xtream stream ID from a movie URL.
- * Pattern: http://host:port/movie/user/pass/12345.ext → 12345
- * Returns null for non-Xtream URLs.
+ * Hook to fetch rich metadata for a series by its name.
+ * Only fetches when visible is true and playlistId/seriesName are provided.
  */
-function extractStreamId(url: string): number | null {
-  const match = url.match(/\/movie\/[^/]+\/[^/]+\/(\d+)(?:\.\w+)?$/);
-  if (!match) return null;
-  return parseInt(match[1], 10);
-}
-
-/**
- * Hook to fetch rich metadata for a movie channel by its Xtream stream ID.
- * Only fetches when visible is true and a valid stream ID can be extracted.
- */
-export function useMovieMetadata(
+export function useSeriesMetadata(
   playlistId: string | null | undefined,
-  movieUrl: string | null | undefined,
+  seriesName: string | null | undefined,
   visible: boolean
-): UseMovieMetadataReturn {
+): UseSeriesMetadataReturn {
   const [metadata, setMetadata] = useState<ChannelMetadata | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const isMountedRef = useRef(true);
@@ -39,14 +28,7 @@ export function useMovieMetadata(
   }, []);
 
   useEffect(() => {
-    if (!visible || !playlistId || !movieUrl) {
-      setMetadata(null);
-      return;
-    }
-
-    const streamId = extractStreamId(movieUrl);
-    if (streamId === null) {
-      console.warn('[useMovieMetadata] Could not extract stream ID from URL:', movieUrl);
+    if (!visible || !playlistId || !seriesName) {
       setMetadata(null);
       return;
     }
@@ -54,7 +36,7 @@ export function useMovieMetadata(
     let cancelled = false;
     setIsLoading(true);
 
-    RustChannelService.getMetadataByStreamId(playlistId, streamId)
+    RustChannelService.getMetadataBySeriesName(playlistId, seriesName)
       .then((result) => {
         if (!cancelled && isMountedRef.current) {
           setMetadata(result);
@@ -64,7 +46,7 @@ export function useMovieMetadata(
         if (!cancelled && isMountedRef.current) {
           const message =
             err instanceof Error ? err.message : 'Failed to fetch metadata';
-          console.error('[useMovieMetadata] Error:', message);
+          console.error('[useSeriesMetadata] Error:', message);
           setMetadata(null);
         }
       })
@@ -77,7 +59,7 @@ export function useMovieMetadata(
     return () => {
       cancelled = true;
     };
-  }, [visible, playlistId, movieUrl]);
+  }, [visible, playlistId, seriesName]);
 
   return { metadata, isLoading };
 }

@@ -2,8 +2,10 @@ import { ModalHeader } from '@/components/ui/containers/modal/modal-header';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
 import { CategoryPill } from '@/features/videos/category-pill';
+import { MetadataSection } from '@/features/videos/components/metadata-section';
 import { SeasonAccordion } from '@/features/videos/season-accordion';
 import { useSeriesEpisodes } from '@/features/videos/hooks/use-series-episodes';
+import { useSeriesMetadata } from '@/features/videos/hooks/use-series-metadata';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { groupEpisodesBySeason } from '@/lib/series-utils';
 import type { Channel } from '@/types/playlist.types';
@@ -42,10 +44,16 @@ export function SeriesDetailModal({
     setImageError(false);
   }, [series?.seriesName]);
 
-  const { episodes, isLoading } = useSeriesEpisodes(
+  const { episodes, isLoading: isLoadingEpisodes } = useSeriesEpisodes(
     visible ? playlistId : null,
     visible ? series?.seriesName : null,
     visible ? series?.groupName : null
+  );
+
+  const { metadata, isLoading: isLoadingMetadata } = useSeriesMetadata(
+    playlistId,
+    series?.seriesName,
+    visible
   );
 
   const seasonMap = useMemo(() => {
@@ -112,8 +120,15 @@ export function SeriesDetailModal({
             </View>
           )}
 
+          {/* Metadata */}
+          <MetadataSection
+            metadata={metadata}
+            isLoading={isLoadingMetadata}
+            tintColor={tintColor}
+          />
+
           {/* Loading state */}
-          {isLoading && (
+          {isLoadingEpisodes && (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="small" color={tintColor} />
               <ThemedText style={styles.loadingText}>
@@ -123,7 +138,7 @@ export function SeriesDetailModal({
           )}
 
           {/* Seasons */}
-          {!isLoading &&
+          {!isLoadingEpisodes &&
             sortedSeasons.map((seasonNum) => (
               <SeasonAccordion
                 key={seasonNum}
@@ -134,7 +149,7 @@ export function SeriesDetailModal({
             ))}
 
           {/* Empty state */}
-          {!isLoading && episodes.length === 0 && (
+          {!isLoadingEpisodes && episodes.length === 0 && (
             <ThemedText style={styles.emptyText}>
               No episodes found
             </ThemedText>

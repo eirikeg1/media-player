@@ -109,6 +109,7 @@ const MAPPING = {
   'heart.fill': 'favorite',
   'star': 'star-border',
   'star.fill': 'star',
+  'star.leadinghalf.filled': 'star-half',
   'bookmark': 'bookmark-border',
   'bookmark.fill': 'bookmark',
   'hand.thumbsup': 'thumb-up',

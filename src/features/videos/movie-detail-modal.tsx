@@ -3,18 +3,12 @@ import { ModalHeader } from '@/components/ui/containers/modal/modal-header';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
 import { CategoryPill } from '@/features/videos/category-pill';
+import { MetadataSection } from '@/features/videos/components/metadata-section';
 import { useMovieMetadata } from '@/features/videos/hooks/use-movie-metadata';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import type { Channel } from '@/types/playlist.types';
 import { useEffect, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  Image,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
+import { Image, Modal, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface MovieDetailModalProps {
@@ -104,71 +98,12 @@ export function MovieDetailModal({
             </View>
           )}
 
-          {/* Loading state for metadata */}
-          {isLoading && (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="small" color={tintColor} />
-              <ThemedText style={styles.loadingText}>
-                Loading details...
-              </ThemedText>
-            </View>
-          )}
-
-          {/* Metadata section */}
-          {!isLoading && metadata && (
-            <View style={styles.metadataSection}>
-              {/* Rating & Release date row */}
-              {(metadata.rating || metadata.releaseDate) && (
-                <View style={styles.metadataRow}>
-                  {metadata.rating && (
-                    <ThemedText style={styles.metadataLabel}>
-                      Rating: <ThemedText style={styles.metadataValue}>{metadata.rating}</ThemedText>
-                    </ThemedText>
-                  )}
-                  {metadata.releaseDate && (
-                    <ThemedText style={styles.metadataLabel}>
-                      Released: <ThemedText style={styles.metadataValue}>{metadata.releaseDate}</ThemedText>
-                    </ThemedText>
-                  )}
-                </View>
-              )}
-
-              {/* Genre */}
-              {metadata.genre && (
-                <View style={styles.metadataItem}>
-                  <ThemedText style={styles.metadataLabel}>
-                    Genre: <ThemedText style={styles.metadataValue}>{metadata.genre}</ThemedText>
-                  </ThemedText>
-                </View>
-              )}
-
-              {/* Plot */}
-              {metadata.plot && (
-                <View style={styles.metadataItem}>
-                  <ThemedText style={styles.metadataLabel}>Plot</ThemedText>
-                  <ThemedText style={styles.plotText}>{metadata.plot}</ThemedText>
-                </View>
-              )}
-
-              {/* Director */}
-              {metadata.director && (
-                <View style={styles.metadataItem}>
-                  <ThemedText style={styles.metadataLabel}>
-                    Director: <ThemedText style={styles.metadataValue}>{metadata.director}</ThemedText>
-                  </ThemedText>
-                </View>
-              )}
-
-              {/* Cast */}
-              {metadata.castMembers && (
-                <View style={styles.metadataItem}>
-                  <ThemedText style={styles.metadataLabel}>
-                    Cast: <ThemedText style={styles.metadataValue}>{metadata.castMembers}</ThemedText>
-                  </ThemedText>
-                </View>
-              )}
-            </View>
-          )}
+          {/* Metadata */}
+          <MetadataSection
+            metadata={metadata}
+            isLoading={isLoading}
+            tintColor={tintColor}
+          />
 
           {/* Play button */}
           <View style={styles.playButtonContainer}>
@@ -218,42 +153,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     marginBottom: 16,
     justifyContent: 'center',
-  },
-  loadingContainer: {
-    alignItems: 'center',
-    paddingVertical: 32,
-    gap: 8,
-  },
-  loadingText: {
-    fontSize: 14,
-    opacity: 0.7,
-  },
-  metadataSection: {
-    paddingHorizontal: 16,
-    gap: 12,
-  },
-  metadataRow: {
-    flexDirection: 'row',
-    gap: 16,
-    flexWrap: 'wrap',
-  },
-  metadataItem: {
-    gap: 4,
-  },
-  metadataLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    opacity: 0.7,
-  },
-  metadataValue: {
-    fontSize: 14,
-    fontWeight: '400',
-    opacity: 1,
-  },
-  plotText: {
-    fontSize: 14,
-    lineHeight: 20,
-    opacity: 0.85,
   },
   playButtonContainer: {
     paddingHorizontal: 16,
