@@ -27,11 +27,13 @@ export function MovieDetailModal({
   onPlayPress,
 }: MovieDetailModalProps) {
   const [imageError, setImageError] = useState(false);
+  const [aspectRatio, setAspectRatio] = useState(2 / 3);
   const insets = useSafeAreaInsets();
   const tintColor = useThemeColor({}, 'tint');
 
   useEffect(() => {
     setImageError(false);
+    setAspectRatio(2 / 3);
   }, [movie?.name]);
 
   const { metadata, isLoading } = useMovieMetadata(
@@ -39,6 +41,14 @@ export function MovieDetailModal({
     movie?.url,
     visible
   );
+
+  const posterUrl = movie?.tvg.logo || metadata?.backdropPath;
+
+  useEffect(() => {
+    if (posterUrl) {
+      Image.getSize(posterUrl, (w, h) => setAspectRatio(w / h));
+    }
+  }, [posterUrl]);
 
   // Split groupName by common separators for category pills
   const categories = useMemo(() => {
@@ -74,15 +84,18 @@ export function MovieDetailModal({
           contentContainerStyle={styles.scrollContent}
         >
           {/* Poster */}
-          {movie.tvg.logo && !imageError ? (
+          {posterUrl && !imageError ? (
             <Image
-              source={{ uri: movie.tvg.logo }}
-              style={styles.poster}
-              resizeMode="contain"
+              source={{ uri: posterUrl }}
+              style={[
+                styles.posterBase,
+                { aspectRatio, maxWidth: '90%' },
+              ]}
+              resizeMode="cover"
               onError={() => setImageError(true)}
             />
           ) : (
-            <ThemedView style={[styles.poster, styles.fallbackPoster]}>
+            <ThemedView style={[styles.fallbackPoster]}>
               <ThemedText style={styles.fallbackText}>
                 {movie.name.charAt(0).toUpperCase()}
               </ThemedText>
@@ -132,14 +145,18 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: 40,
   },
-  poster: {
-    width: 180,
+  posterBase: {
     height: 240,
     borderRadius: 8,
     alignSelf: 'center',
     marginVertical: 16,
   },
   fallbackPoster: {
+    width: 180,
+    height: 240,
+    borderRadius: 8,
+    alignSelf: 'center',
+    marginVertical: 16,
     justifyContent: 'center',
     alignItems: 'center',
   },
