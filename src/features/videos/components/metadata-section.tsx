@@ -1,14 +1,9 @@
+import { Button } from '@/components/ui/controls/button';
 import { StarRating } from '@/components/ui/display/star-rating';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { CategoryPill } from '@/features/videos/category-pill';
 import type { ChannelMetadata } from 'expo-m3u-parser';
-import {
-  ActivityIndicator,
-  Linking,
-  Pressable,
-  StyleSheet,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Linking, StyleSheet, View } from 'react-native';
 
 interface MetadataSectionProps {
   metadata: ChannelMetadata | null;
@@ -33,7 +28,7 @@ export function MetadataSection({
   if (!metadata) return null;
 
   const genreList = metadata.genre
-    ?.split(/\s*,\s*/)
+    ?.split(/\s*[,/]\s*/)
     .map((g) => g.trim())
     .filter(Boolean);
 
@@ -86,16 +81,16 @@ export function MetadataSection({
         </View>
       )}
 
-      {/* Trailer link */}
+      {/* Trailer button */}
       {metadata.trailerUrl && (
-        <Pressable
+        <Button
+          variant="secondary"
+          size="medium"
+          fullWidth
+          icon="play.circle"
+          title="View Trailer"
           onPress={() => Linking.openURL(metadata.trailerUrl!)}
-          style={styles.trailerLink}
-        >
-          <ThemedText style={[styles.trailerText, { color: tintColor }]}>
-            View Trailer
-          </ThemedText>
-        </Pressable>
+        />
       )}
     </View>
   );
@@ -133,6 +128,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     flex: 1,
+    gap: 6,
   },
   label: {
     fontSize: 14,
@@ -154,12 +150,5 @@ const styles = StyleSheet.create({
   inlineRow: {
     flexDirection: 'row',
     gap: 8,
-  },
-  trailerLink: {
-    paddingVertical: 4,
-  },
-  trailerText: {
-    fontSize: 14,
-    fontWeight: '600',
   },
 });

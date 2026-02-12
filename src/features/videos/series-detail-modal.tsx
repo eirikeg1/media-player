@@ -171,8 +171,8 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   poster: {
-    width: 120,
-    height: 160,
+    width: 180,
+    height: 240,
     borderRadius: 8,
     alignSelf: 'center',
     marginVertical: 16,
@@ -191,6 +191,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     marginBottom: 16,
     justifyContent: 'center',
+    gap: 6,
   },
   loadingContainer: {
     alignItems: 'center',

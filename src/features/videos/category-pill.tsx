@@ -24,8 +24,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 10,
     paddingVertical: 4,
-    marginRight: 6,
-    marginBottom: 4,
   },
   pillText: {
     fontSize: 12,

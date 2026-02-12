@@ -1,9 +1,5 @@
 # Future Tasks*
 
-## Small TODOS:
-* Add clear button to input fields. If there is content in an input field, there should appear a circled x icon in the right of the input field. Clicking this should clear the value
-* Add graphics to paralax scroll headers
-
 ## Investivate
 * Does `expo-video` for IOS support mpeg ts streams? If not consider a native fmpeg solution
 
@@ -31,7 +27,7 @@
 * View history. For tv shows: show a "continue watching" link to next episode on
 * When opening match stream through sports schedule: show lineups and match info on screen, either through gui button press, or as main view on phone while casting
 * Skip intro/recap/trailer
-* Playbaack-speed control and general playback control (choose where to play from a bottom bar/line which tells you where in the video you are)
+* Playback-speed control and general playback control (choose where to play from a bottom bar/line which tells you where in the video you are)
 * Catch up feature; show highlights/similar if starting to what from middle of game
 
 ## React Native App
@@ -45,9 +41,7 @@
 * Make more advanced parallax scroll functionalty, will randomly generated collages of video images
 * Custom bitrate (quality)
 * Subtitles
-
-### UI tweaks
-* selected user should not get a "current" pill, instead the name should get the pill around it
+* Show all movie images cropped in carousel component in info modal. Click to enlarge uncropped
 
 ## Rust Backend
 * Infinite scroll: evict old items when exceeding window size
