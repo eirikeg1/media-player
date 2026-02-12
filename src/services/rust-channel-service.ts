@@ -33,7 +33,6 @@ export async function getRustDatabase(): Promise<Database> {
   }
 
   const dbPath = getDatabasePath();
-  console.log('[RustChannelService] Opening database at:', dbPath);
   database = await Database.open(dbPath);
   return database;
 }
@@ -45,7 +44,6 @@ export async function closeRustDatabase(): Promise<void> {
   if (database) {
     await database.close();
     database = null;
-    console.log('[RustChannelService] Database closed');
   }
 }
 
@@ -108,13 +106,6 @@ export class RustChannelService {
     url: string,
     credentials?: PlaylistCredentials
   ): Promise<number> {
-    console.log('[RustChannelService] fetchAndImportPlaylist:', {
-      playlistId,
-      name,
-    });
-    // DEBUG: Log full URL before passing to Rust FFI
-    console.log('[RustChannelService] Sending URL to Rust (full):', url);
-
     const db = await getRustDatabase();
 
     // Create or update playlist metadata
@@ -151,7 +142,6 @@ export class RustChannelService {
       toRustCredentials(credentials)
     );
 
-    console.log('[RustChannelService] Imported', channelCount, 'channels');
     return channelCount;
   }
 

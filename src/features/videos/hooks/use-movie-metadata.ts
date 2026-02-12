@@ -46,7 +46,6 @@ export function useMovieMetadata(
 
     const streamId = extractStreamId(movieUrl);
     if (streamId === null) {
-      console.warn('[useMovieMetadata] Could not extract stream ID from URL:', movieUrl);
       setMetadata(null);
       return;
     }
