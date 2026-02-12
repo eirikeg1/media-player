@@ -1,6 +1,5 @@
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
-import { ThemedView } from '@/components/ui/display/themed-view';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { extractCleanUrl } from '@/lib/playlist-utils';
 import { usePlaylistStore } from '@/stores/playlist/playlist-store';
@@ -178,15 +177,7 @@ export const PlaylistList = memo(function PlaylistList() {
   const keyExtractor = useCallback((item: Playlist) => item.id, []);
 
   if (playlists.length === 0) {
-    return (
-      <ThemedView style={styles.emptyContainer}>
-        <IconSymbol name="tv" size={64} color={isDark ? '#555' : '#ccc'} />
-        <ThemedText style={styles.emptyTitle}>No Playlists</ThemedText>
-        <ThemedText style={styles.emptyText}>
-          Add your first IPTV playlist to get started
-        </ThemedText>
-      </ThemedView>
-    );
+    return null;
   }
 
   return (
@@ -269,22 +260,5 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     padding: 6,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 32,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptyText: {
-    fontSize: 14,
-    opacity: 0.7,
-    textAlign: 'center',
   },
 });
