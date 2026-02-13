@@ -1,14 +1,20 @@
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { GlassColors } from '@/lib/theme';
 
 /**
  * Selection state colors for interactive components like buttons, cards, etc.
  * Provides consistent colors across the app for selected/unselected states.
  */
 export function useSelectionColors() {
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const glass = isDark ? GlassColors.dark : GlassColors.light;
+
   const selectedBackground = useThemeColor({ light: '#007AFF', dark: '#3b82f6' }, 'tint');
-  const unselectedBackground = useThemeColor({ light: '#f5f5f5', dark: '#2a2a2a' }, 'background');
+  const unselectedBackground = glass.surface;
   const selectedBorder = selectedBackground;
-  const unselectedBorder = useThemeColor({ light: '#e5e5e5', dark: '#444' }, 'icon');
+  const unselectedBorder = glass.border;
   const selectedText = '#ffffff';
   const unselectedText = useThemeColor({}, 'text');
   const selectedIcon = '#ffffff';

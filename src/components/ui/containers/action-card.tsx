@@ -1,6 +1,7 @@
 import { IconSymbol, IconSymbolName } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { GlassColors } from '@/lib/theme';
 import { memo } from 'react';
 import { StyleSheet, TouchableOpacity, View, ViewStyle } from 'react-native';
 
@@ -70,11 +71,13 @@ export const ActionCard = memo(function ActionCard({
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
 
+  const glass = isDark ? GlassColors.dark : GlassColors.light;
+
   const cardStyle = [
     styles.card,
     {
-      backgroundColor: isDark ? '#2a2a2a' : '#f5f5f5',
-      borderColor: isDark ? '#444' : '#ddd',
+      backgroundColor: glass.surface,
+      borderColor: glass.border,
     },
     style,
   ];
@@ -90,7 +93,7 @@ export const ActionCard = memo(function ActionCard({
       <View style={styles.content}>
         {icon && (
           <View style={styles.iconContainer}>
-            <IconSymbol name={icon} size={48} color={isDark ? '#888' : '#666'} />
+            <IconSymbol name={icon} size={48} color={isDark ? '#7c869e' : '#5c6477'} />
           </View>
         )}
 
@@ -108,7 +111,7 @@ export const ActionCard = memo(function ActionCard({
                   <IconSymbol
                     name={subtitleIcon}
                     size={16}
-                    color={isDark ? '#aaa' : '#666'}
+                    color={isDark ? '#7c869e' : '#5c6477'}
                   />
                 )}
                 <ThemedText style={styles.subtitle}>{subtitle}</ThemedText>
@@ -121,7 +124,7 @@ export const ActionCard = memo(function ActionCard({
           <IconSymbol
             name="chevron.right"
             size={24}
-            color={isDark ? '#666' : '#999'}
+            color={isDark ? '#7c869e' : '#5c6477'}
             style={styles.chevronIcon}
           />
         )}

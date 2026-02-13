@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { TextInput, type TextInputProps, StyleSheet } from 'react-native';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { GlassColors } from '@/lib/theme';
 
 interface TextareaProps extends Omit<TextInputProps, 'multiline'> {
   /** Optional error state to change border color */
@@ -23,17 +24,17 @@ const Textarea = React.forwardRef<TextInput, TextareaProps>(
         multiline
         textAlignVertical="top"
         scrollEnabled
-        placeholderTextColor={isDark ? '#888' : '#999'}
+        placeholderTextColor={isDark ? '#6b7394' : '#8a90a0'}
         style={[
           styles.textarea,
           {
-            backgroundColor: isDark ? '#2a2a2a' : '#f5f5f5',
+            backgroundColor: isDark ? GlassColors.dark.surface : GlassColors.light.surface,
             color: isDark ? '#ffffff' : '#000000',
             borderColor: error
               ? '#ef4444'
               : isDark
-              ? '#444'
-              : '#ddd',
+              ? GlassColors.dark.border
+              : GlassColors.light.border,
           },
           !editable && styles.disabled,
           style,

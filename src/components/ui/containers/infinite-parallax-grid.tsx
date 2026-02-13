@@ -60,9 +60,9 @@ export default function InfiniteParallaxGrid<T>({
   const insets = useSafeAreaInsets();
 
   // Arrow color (dark arrow for light theme, theme color for dark theme)
-  const refreshArrowColor = colorScheme === 'dark' ? tintColor : '#333333';
+  const refreshArrowColor = colorScheme === 'dark' ? tintColor : '#3d4560';
   // Background color (light gray for light theme, dark for dark theme)
-  const refreshBackgroundColor = colorScheme === 'dark' ? '#444444' : '#E5E5E5';
+  const refreshBackgroundColor = colorScheme === 'dark' ? '#1f2740' : '#dbe0ec';
   const scrollRef = useAnimatedRef<any>();
   const { scrollOffset, headerAnimatedStyle } = useParallaxHeader(scrollRef);
 

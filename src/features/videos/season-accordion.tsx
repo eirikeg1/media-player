@@ -1,7 +1,9 @@
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { GlassColors } from '@/lib/theme';
 import type { ParsedEpisode } from '@/lib/series-utils';
 import type { Channel } from '@/types/playlist.types';
 import { useState } from 'react';
@@ -19,8 +21,10 @@ export function SeasonAccordion({
   onEpisodePress,
 }: SeasonAccordionProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
   const iconColor = useThemeColor({}, 'icon');
-  const borderColor = useThemeColor({ light: '#eee', dark: '#2a2a2a' }, 'icon');
+  const borderColor = isDark ? GlassColors.dark.border : GlassColors.light.border;
   const tintColor = useThemeColor({}, 'tint');
 
   return (

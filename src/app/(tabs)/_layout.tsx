@@ -1,15 +1,18 @@
 import { BottomTabBar } from '@react-navigation/bottom-tabs';
+import { BlurView } from 'expo-blur';
 import { Tabs } from 'expo-router';
+import { StyleSheet } from 'react-native';
 
 import { HapticTab } from '@/components/ui/controls/haptic-tab';
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { CastMiniPlayerBar } from '@/features/video/components/cast-mini-player-bar';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Colors } from '@/lib/theme';
+import { Colors, GlassColors } from '@/lib/theme';
 import { useUserStore } from '@/stores/user/user-store';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
   const settings = useUserStore((state) => state.currentUser?.settings);
 
   return (
@@ -24,6 +27,22 @@ export default function TabLayout() {
         tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
         headerShown: false,
         tabBarButton: HapticTab,
+        tabBarStyle: {
+          position: 'absolute',
+          borderTopWidth: 1,
+          borderTopColor: isDark ? GlassColors.dark.border : GlassColors.light.border,
+          backgroundColor: 'transparent',
+          elevation: 0,
+        },
+        tabBarBackground: () => (
+          <BlurView
+            intensity={isDark ? 80 : 60}
+            tint={isDark ? 'dark' : 'light'}
+            style={[StyleSheet.absoluteFill, {
+              backgroundColor: isDark ? 'rgba(10, 14, 23, 0.98)' : 'rgba(240, 242, 248, 0.98)',
+            }]}
+          />
+        ),
       }}
     >
       <Tabs.Screen

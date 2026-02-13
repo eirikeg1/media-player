@@ -64,7 +64,7 @@ export const ChannelGroupList = memo(function ChannelGroupList() {
   if (!activePlaylist) {
     return (
       <ThemedView style={styles.emptyContainer}>
-        <IconSymbol name="tv" size={64} color={isDark ? '#555' : '#ccc'} />
+        <IconSymbol name="tv" size={64} color={isDark ? '#3d4560' : '#b0b8cc'} />
         <ThemedText style={styles.emptyTitle}>No Active Playlist</ThemedText>
         <ThemedText style={styles.emptyText}>
           Please add and select a playlist from the settings
@@ -76,7 +76,7 @@ export const ChannelGroupList = memo(function ChannelGroupList() {
   if (channels.length === 0) {
     return (
       <ThemedView style={styles.emptyContainer}>
-        <IconSymbol name="tv" size={64} color={isDark ? '#555' : '#ccc'} />
+        <IconSymbol name="tv" size={64} color={isDark ? '#3d4560' : '#b0b8cc'} />
         <ThemedText style={styles.emptyTitle}>No Channels</ThemedText>
         <ThemedText style={styles.emptyText}>
           This playlist doesn&apos;t contain any channels

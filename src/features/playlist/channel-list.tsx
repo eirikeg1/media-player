@@ -3,6 +3,7 @@ import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { usePlaylistChannels } from '@/hooks/use-playlist-channels';
+import { GlassColors } from '@/lib/theme';
 import { usePlaylistStore } from '@/stores/playlist/playlist-store';
 import type { Channel } from '@/types/playlist.types';
 import { memo, useCallback, useMemo } from 'react';
@@ -39,11 +40,12 @@ export const ChannelList = memo(function ChannelList({ group }: ChannelListProps
 
   const renderChannelCard = useCallback(
     ({ item }: { item: Channel }) => {
+      const glass = isDark ? GlassColors.dark : GlassColors.light;
       const cardStyle = [
         styles.channelCard,
         {
-          backgroundColor: isDark ? '#2a2a2a' : '#f5f5f5',
-          borderColor: isDark ? '#444' : '#ddd',
+          backgroundColor: glass.surface,
+          borderColor: glass.border,
         },
       ];
 
@@ -63,8 +65,8 @@ export const ChannelList = memo(function ChannelList({ group }: ChannelListProps
                 resizeMode="contain"
               />
             ) : (
-              <View style={[styles.channelLogo, styles.placeholderLogo]}>
-                <IconSymbol name="tv" size={24} color={isDark ? '#666' : '#999'} />
+              <View style={[styles.channelLogo, styles.placeholderLogo, { backgroundColor: isDark ? GlassColors.dark.surface : GlassColors.light.surface }]}>
+                <IconSymbol name="tv" size={24} color={isDark ? '#7c869e' : '#5c6477'} />
               </View>
             )}
 
@@ -75,7 +77,7 @@ export const ChannelList = memo(function ChannelList({ group }: ChannelListProps
 
               {item.group.title && (
                 <View style={styles.channelMeta}>
-                  <IconSymbol name="folder" size={14} color={isDark ? '#aaa' : '#666'} />
+                  <IconSymbol name="folder" size={14} color={isDark ? '#7c869e' : '#5c6477'} />
                   <ThemedText style={styles.channelGroup}>{item.group.title}</ThemedText>
                 </View>
               )}
@@ -111,7 +113,7 @@ export const ChannelList = memo(function ChannelList({ group }: ChannelListProps
   if (!activePlaylist) {
     return (
       <ThemedView style={styles.emptyContainer}>
-        <IconSymbol name="tv" size={64} color={isDark ? '#555' : '#ccc'} />
+        <IconSymbol name="tv" size={64} color={isDark ? '#3d4560' : '#b0b8cc'} />
         <ThemedText style={styles.emptyTitle}>No Active Playlist</ThemedText>
         <ThemedText style={styles.emptyText}>
           Please add and select a playlist from the settings
@@ -123,7 +125,7 @@ export const ChannelList = memo(function ChannelList({ group }: ChannelListProps
   if (channels.length === 0) {
     return (
       <ThemedView style={styles.emptyContainer}>
-        <IconSymbol name="tv" size={64} color={isDark ? '#555' : '#ccc'} />
+        <IconSymbol name="tv" size={64} color={isDark ? '#3d4560' : '#b0b8cc'} />
         <ThemedText style={styles.emptyTitle}>No Channels</ThemedText>
         <ThemedText style={styles.emptyText}>
           {group
@@ -170,7 +172,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   placeholderLogo: {
-    backgroundColor: '#333',
     justifyContent: 'center',
     alignItems: 'center',
   },

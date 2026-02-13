@@ -16,7 +16,9 @@ import Animated, {
 
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { GlassColors } from '@/lib/theme';
 import { getChannelId } from '@/lib/channel-utils';
 import { useCastMiniPlayerStore } from '@/stores/video/cast-mini-player-store';
 
@@ -32,8 +34,11 @@ export function CastMiniPlayerBar() {
   const castState = useCastState();
   const mediaStatus = useMediaStatus();
 
-  const backgroundColor = useThemeColor({}, 'background');
-  const borderColor = useThemeColor({ light: '#e0e0e0', dark: '#333' }, 'background');
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const glass = isDark ? GlassColors.dark : GlassColors.light;
+  const backgroundColor = glass.surfaceElevated;
+  const borderColor = glass.border;
   const iconColor = useThemeColor({}, 'icon');
   const textColor = useThemeColor({}, 'text');
 
@@ -101,7 +106,7 @@ export function CastMiniPlayerBar() {
         onPress={handleExpand}
         style={[
           styles.bar,
-          { backgroundColor, borderTopColor: borderColor, borderWidth: 2 },
+          { backgroundColor, borderTopColor: borderColor, borderTopWidth: 1 },
         ]}
       >
         {channel?.tvg.logo ? (

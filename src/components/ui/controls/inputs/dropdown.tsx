@@ -1,6 +1,7 @@
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { GlassColors } from '@/lib/theme';
 import { useCallback, useState } from 'react';
 import { FlatList, Modal, StyleSheet, TouchableOpacity, View, ViewStyle } from 'react-native';
 
@@ -86,11 +87,13 @@ export function Dropdown<T = string>({
     setIsOpen(false);
   }, []);
 
+  const glass = isDark ? GlassColors.dark : GlassColors.light;
+
   const dropdownStyle = [
     styles.dropdown,
     {
-      backgroundColor: isDark ? '#2a2a2a' : '#f5f5f5',
-      borderColor: isDark ? '#444' : '#ddd',
+      backgroundColor: isDark ? glass.surface : glass.surface,
+      borderColor: glass.border,
       opacity: disabled ? 0.5 : 1,
     },
     style,
@@ -106,8 +109,8 @@ export function Dropdown<T = string>({
             styles.option,
             {
               backgroundColor: isSelected
-                ? isDark ? '#444' : '#e3f2fd'
-                : isDark ? '#2a2a2a' : '#ffffff',
+                ? isDark ? 'rgba(0, 122, 255, 0.15)' : 'rgba(0, 122, 255, 0.08)'
+                : 'transparent',
             },
           ]}
           onPress={() => handleSelect(item.value)}
@@ -160,7 +163,7 @@ export function Dropdown<T = string>({
         <IconSymbol
           name={isOpen ? 'chevron.up' : 'chevron.down'}
           size={20}
-          color={isDark ? '#888' : '#666'}
+          color={isDark ? '#7c869e' : '#5c6477'}
         />
       </TouchableOpacity>
 
@@ -172,13 +175,13 @@ export function Dropdown<T = string>({
         accessibilityViewIsModal
       >
         <TouchableOpacity
-          style={styles.overlay}
+          style={[styles.overlay, { backgroundColor: isDark ? GlassColors.dark.backdrop : GlassColors.light.backdrop }]}
           activeOpacity={1}
           onPress={handleClose}
         >
           <View style={[
             styles.modalContent,
-            { backgroundColor: isDark ? '#2a2a2a' : '#ffffff' }
+            { backgroundColor: isDark ? 'rgb(14, 19, 32)' : 'rgb(245, 246, 251)' }
           ]}>
             <FlatList
               data={options}
@@ -218,7 +221,6 @@ const styles = StyleSheet.create({
   },
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,

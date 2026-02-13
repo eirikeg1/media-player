@@ -1,4 +1,4 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { ThemeProvider } from '@react-navigation/native';
 import { PortalHost } from '@rn-primitives/portal';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -10,6 +10,7 @@ import '../global.css';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { usePlaylistInit } from '@/hooks/use-playlist-init';
+import { NAV_THEME } from '@/lib/theme';
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -18,7 +19,7 @@ export default function RootLayout() {
   usePlaylistInit();
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+    <ThemeProvider value={colorScheme === 'dark' ? NAV_THEME.dark : NAV_THEME.light}>
       <SafeAreaProvider>
         <GestureHandlerRootView>
           <Stack screenOptions={{ headerShown: false }}>

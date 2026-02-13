@@ -1,5 +1,8 @@
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { GlassColors } from '@/lib/theme';
+import { BlurView } from 'expo-blur';
 import { ReactNode, useEffect, useRef } from 'react';
-import { Animated, Easing, Keyboard, Platform, StyleSheet, TouchableWithoutFeedback, View } from 'react-native';
+import { Animated, Easing, Keyboard, Platform, StyleSheet, TouchableWithoutFeedback } from 'react-native';
 
 interface AnimatedModalProps {
   children: ReactNode;
@@ -11,6 +14,8 @@ interface AnimatedModalProps {
  * A reusable modal component with smooth entrance/exit animations and keyboard handling
  */
 export function AnimatedModal({ children, visible, onClose }: AnimatedModalProps) {
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
   const translateY = useRef(new Animated.Value(0)).current;
   const opacity = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(0.8)).current;
@@ -106,12 +111,21 @@ export function AnimatedModal({ children, visible, onClose }: AnimatedModalProps
   return (
     <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]}>
       <TouchableWithoutFeedback onPress={onClose}>
-        <View style={styles.backdropTouchArea} />
+        <BlurView
+          intensity={isDark ? 40 : 30}
+          tint={isDark ? 'dark' : 'light'}
+          style={[styles.backdropTouchArea, {
+            backgroundColor: isDark ? GlassColors.dark.backdrop : GlassColors.light.backdrop,
+          }]}
+        />
       </TouchableWithoutFeedback>
       <Animated.View
         style={[
           styles.modal,
           {
+            backgroundColor: isDark ? 'rgba(14, 19, 32, 0.92)' : 'rgba(245, 246, 251, 0.92)',
+            borderColor: isDark ? GlassColors.dark.border : GlassColors.light.border,
+            borderWidth: 1,
             opacity,
             transform: [{ scale }, { translateY }]
           }
@@ -140,10 +154,8 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
   },
   modal: {
-    backgroundColor: 'rgb(16, 16, 16)',
     borderRadius: 16,
     padding: 20,
     width: '100%',

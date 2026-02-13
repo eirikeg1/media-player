@@ -1,5 +1,6 @@
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { GlassColors } from '@/lib/theme';
 import { memo } from 'react';
 import { StyleSheet, TextStyle, TouchableOpacity, ViewStyle } from 'react-native';
 import { StyleProp } from 'react-native/Libraries/StyleSheet/StyleSheet';
@@ -83,11 +84,13 @@ export const Button = memo(function Button({
   const isDark = colorScheme === 'dark';
 
   const getButtonColors = () => {
+    const glass = isDark ? GlassColors.dark : GlassColors.light;
+
     if (disabled) {
       return {
-        backgroundColor: isDark ? '#333' : '#e0e0e0',
-        textColor: isDark ? '#666' : '#999',
-        iconColor: isDark ? '#666' : '#999',
+        backgroundColor: glass.surface,
+        textColor: isDark ? '#8a90a0' : '#556',
+        iconColor: isDark ? '#8a90a0' : '#556',
       };
     }
 
@@ -100,7 +103,7 @@ export const Button = memo(function Button({
         };
       case 'secondary':
         return {
-          backgroundColor: isDark ? '#2a2a2a' : '#f0f0f0',
+          backgroundColor: glass.surface,
           textColor: isDark ? '#ffffff' : '#000000',
           iconColor: isDark ? '#ffffff' : '#000000',
         };
@@ -172,7 +175,7 @@ export const Button = memo(function Button({
     },
     variant === 'ghost' && {
       borderWidth: 1,
-      borderColor: isDark ? '#444' : '#ddd',
+      borderColor: isDark ? GlassColors.dark.border : GlassColors.light.border,
     },
     style,
   ];

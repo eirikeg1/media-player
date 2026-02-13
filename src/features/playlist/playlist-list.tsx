@@ -2,6 +2,7 @@ import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { extractCleanUrl } from '@/lib/playlist-utils';
+import { GlassColors } from '@/lib/theme';
 import { usePlaylistStore } from '@/stores/playlist/playlist-store';
 import type { Playlist } from '@/types/playlist.types';
 import { memo, useCallback, useState } from 'react';
@@ -86,12 +87,13 @@ export const PlaylistList = memo(function PlaylistList() {
 
   const renderPlaylistCard = useCallback(
     ({ item }: { item: Playlist }) => {
+      const glass = isDark ? GlassColors.dark : GlassColors.light;
       const isActive = item.id === activePlaylistId;
       const cardStyle = [
         styles.playlistCard,
         {
-          backgroundColor: isDark ? '#2a2a2a' : '#f5f5f5',
-          borderColor: isActive ? '#007AFF' : isDark ? '#444' : '#ddd',
+          backgroundColor: glass.surface,
+          borderColor: isActive ? '#007AFF' : glass.border,
           borderWidth: isActive ? 2 : 1,
         },
       ];
@@ -116,7 +118,7 @@ export const PlaylistList = memo(function PlaylistList() {
                 )}
               </View>
               <View style={styles.metaRow}>
-                <IconSymbol name="tv" size={14} color={isDark ? '#888' : '#666'} />
+                <IconSymbol name="tv" size={14} color={isDark ? '#7c869e' : '#5c6477'} />
                 <ThemedText style={styles.metaText}>
                   {item.channelCount || 0}
                 </ThemedText>
@@ -138,7 +140,7 @@ export const PlaylistList = memo(function PlaylistList() {
                 accessibilityLabel="Edit playlist"
                 accessibilityHint="Edit playlist details and settings"
               >
-                <IconSymbol name="pencil" size={18} color={isDark ? '#888' : '#666'} />
+                <IconSymbol name="pencil" size={18} color={isDark ? '#7c869e' : '#5c6477'} />
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -151,7 +153,7 @@ export const PlaylistList = memo(function PlaylistList() {
                 accessibilityLabel="Refresh playlist"
                 accessibilityHint="Re-fetch and update the playlist channels"
               >
-                <IconSymbol name="arrow.clockwise" size={18} color={isDark ? '#888' : '#666'} />
+                <IconSymbol name="arrow.clockwise" size={18} color={isDark ? '#7c869e' : '#5c6477'} />
               </TouchableOpacity>
 
               <TouchableOpacity

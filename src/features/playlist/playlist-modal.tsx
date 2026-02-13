@@ -1,7 +1,9 @@
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { GlassColors } from '@/lib/theme';
 import type { Playlist } from '@/types/playlist.types';
 import { memo } from 'react';
 import {
@@ -26,8 +28,10 @@ interface PlaylistModalProps {
  */
 export const PlaylistModal = memo(function PlaylistModal({ visible, onClose, playlist }: PlaylistModalProps) {
   const insets = useSafeAreaInsets();
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
   const isEditing = !!playlist;
-  const borderColor = useThemeColor({ light: '#ddd', dark: '#333' }, 'icon');
+  const borderColor = isDark ? GlassColors.dark.border : GlassColors.light.border;
   const iconColor = useThemeColor({ light: '#000', dark: '#fff' }, 'icon');
 
   return (

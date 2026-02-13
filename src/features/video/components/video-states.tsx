@@ -15,7 +15,7 @@ export function VideoLoadingState({ channel }: VideoLoadingStateProps) {
   const iconColor = useThemeColor({}, 'icon');
   const overlayBackground = useThemeColor({ light: 'rgba(0, 0, 0, 0.8)', dark: 'rgba(0, 0, 0, 0.8)' }, 'background');
   const titleColor = useThemeColor({ light: '#fff', dark: '#fff' }, 'background');
-  const subtitleColor = useThemeColor({ light: '#ccc', dark: '#ccc' }, 'background');
+  const subtitleColor = useThemeColor({ light: '#b0b8cc', dark: '#b0b8cc' }, 'background');
 
   return (
     <View
@@ -97,8 +97,8 @@ export function VideoErrorState({ error, onRetry, isRetrying = false }: VideoErr
   const iconColor = useThemeColor({}, 'icon');
   const overlayBackground = useThemeColor({ light: 'rgba(0, 0, 0, 0.8)', dark: 'rgba(0, 0, 0, 0.8)' }, 'background');
   const titleColor = useThemeColor({ light: '#fff', dark: '#fff' }, 'background');
-  const subtitleColor = useThemeColor({ light: '#ccc', dark: '#ccc' }, 'background');
-  const suggestionColor = useThemeColor({ light: '#e5e7eb', dark: '#e5e7eb' }, 'background');
+  const subtitleColor = useThemeColor({ light: '#b0b8cc', dark: '#b0b8cc' }, 'background');
+  const suggestionColor = useThemeColor({ light: '#c8cdd8', dark: '#c8cdd8' }, 'background');
   const retryButtonBackground = useThemeColor({ light: 'rgba(255, 255, 255, 0.2)', dark: 'rgba(255, 255, 255, 0.2)' }, 'background');
   const retryButtonText = useThemeColor({ light: '#fff', dark: '#fff' }, 'background');
 

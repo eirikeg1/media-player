@@ -6,6 +6,8 @@ import { usePlaylistStore } from '@/stores/playlist/playlist-store';
 import type { Playlist } from '@/types/playlist.types';
 import { memo, useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Switch, TouchableOpacity, View } from 'react-native';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { GlassColors } from '@/lib/theme';
 
 interface PlaylistFormProps {
   onSuccess?: () => void;
@@ -18,6 +20,8 @@ interface PlaylistFormProps {
  * Supports optional authentication credentials.
  */
 export const PlaylistForm = memo(function PlaylistForm({ onSuccess, onCancel, playlist }: PlaylistFormProps) {
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
   const isEditing = !!playlist;
   const [name, setName] = useState(playlist?.name || '');
   const [url, setUrl] = useState(playlist?.url || '');
@@ -120,7 +124,9 @@ export const PlaylistForm = memo(function PlaylistForm({ onSuccess, onCancel, pl
       )}
 
       {isSubmitting && (
-        <View style={styles.loadingContainer}>
+        <View style={[styles.loadingContainer, {
+          backgroundColor: isDark ? GlassColors.dark.surface : GlassColors.light.surface,
+        }]}>
           <ActivityIndicator size="large" color="#007AFF" />
           <ThemedText style={styles.loadingText}>
             Fetching and parsing playlist... This may take a moment.
@@ -219,7 +225,9 @@ export const PlaylistForm = memo(function PlaylistForm({ onSuccess, onCancel, pl
       <View style={styles.buttonContainer}>
         {onCancel && (
           <TouchableOpacity
-            style={[styles.button, styles.cancelButton]}
+            style={[styles.button, styles.cancelButton, {
+              backgroundColor: isDark ? GlassColors.dark.surfaceElevated : GlassColors.light.surfaceElevated,
+            }]}
             onPress={onCancel}
             disabled={isSubmitting}
             accessibilityLabel="Cancel"
@@ -300,7 +308,6 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     alignItems: 'center',
     gap: 12,
-    backgroundColor: '#383838',
     borderRadius: 8,
   },
   loadingText: {
@@ -320,9 +327,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  cancelButton: {
-    backgroundColor: '#666',
-  },
+  cancelButton: {},
   cancelButtonText: {
     color: '#fff',
     fontSize: 16,
