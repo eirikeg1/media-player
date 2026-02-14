@@ -4,7 +4,7 @@
     "slug": "media-player",
     "version": "1.0.0",
     "icon": "./assets/images/app-icon.png",
-    "scheme": "iptvmobile",
+    "scheme": "mediaplayer",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
@@ -14,7 +14,7 @@
           "NSAllowsArbitraryLoads": true
         }
       },
-      "bundleIdentifier": "com.anonymous.iptvmobile"
+      "bundleIdentifier": "com.anonymous.mediaplayer"
     },
     "android": {
       "adaptiveIcon": {
@@ -25,7 +25,7 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "usesCleartextTraffic": true,
-      "package": "com.anonymous.iptvmobile"
+      "package": "com.anonymous.mediaplayer"
     },
     "web": {
       "output": "static",

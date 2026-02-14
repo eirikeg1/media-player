@@ -7,16 +7,23 @@ import { ThemedText } from '@/components/ui/display/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import type { Channel } from '@/types/playlist.types';
 import { VIDEO_CONSTANTS } from '../constants';
+import { VideoSeekBar } from './video-seek-bar';
 
 interface VideoControlsProps {
   channel: Channel;
   player: VideoPlayer;
   isLoading: boolean;
   isPlaying: boolean;
+  currentTime?: number;
+  duration?: number;
+  isLive?: boolean;
   onBack?: () => void;
   onTogglePlayPause: () => void;
   onClearTimeout: () => void;
   onToggleControls: () => void;
+  onSeekStart?: () => void;
+  onSeekEnd?: (time: number) => void;
+  onSeek?: (time: number) => void;
 }
 
 export function VideoControls({
@@ -24,10 +31,16 @@ export function VideoControls({
   player,
   isLoading,
   isPlaying,
+  currentTime = 0,
+  duration = 0,
+  isLive = false,
   onBack,
   onTogglePlayPause,
   onClearTimeout,
   onToggleControls,
+  onSeekStart,
+  onSeekEnd,
+  onSeek,
 }: VideoControlsProps) {
   const iconColor = useThemeColor({}, 'icon');
   const overlayColor = useThemeColor({ light: 'rgba(0, 0, 0, 0.3)', dark: 'rgba(0, 0, 0, 0.3)' }, 'background');
@@ -104,13 +117,23 @@ export function VideoControls({
             )}
           </View>
 
-          <View className="bg-transparent items-center">
+          <View className="bg-transparent">
+            {!isLive && duration > 0 && onSeekStart && onSeekEnd && (
+              <VideoSeekBar
+                currentTime={currentTime}
+                duration={duration}
+                onSeekStart={onSeekStart}
+                onSeekEnd={onSeekEnd}
+                onSeek={onSeek}
+              />
+            )}
             <ThemedText
               style={{
                 fontSize: VIDEO_CONSTANTS.CHANNEL_NAME_SIZE,
                 fontWeight: '600',
                 color: textColor,
                 textAlign: 'center',
+                marginTop: !isLive && duration > 0 ? 8 : 0,
               }}
               numberOfLines={1}
             >

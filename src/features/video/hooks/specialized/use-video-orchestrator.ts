@@ -1,7 +1,7 @@
 import { useVideoPlayerStore } from '@/stores/video/player-store';
 import type { Channel } from '@/types/playlist.types';
 import { useFocusEffect } from '@react-navigation/native';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { getVideoErrorInfo } from '../../types/video-error.types';
 import { useVideoControls } from './use-video-controls';
 import { useVideoErrorHandling } from './use-video-error-handling';
@@ -27,6 +27,17 @@ export function useVideoOrchestrator({
   const errorHandling = useVideoErrorHandling();
   const controls = useVideoControls();
   const network = useVideoNetwork();
+
+  // Seek bar state
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [isLive, setIsLive] = useState(false);
+
+  const seekTo = useCallback((time: number) => {
+    if (playerState.player) {
+      playerState.player.currentTime = time;
+    }
+  }, [playerState.player]);
 
   // Enhanced stop function that coordinates all state
   const stopVideo = useCallback(() => {
@@ -101,6 +112,16 @@ export function useVideoOrchestrator({
         console.log('Video ready to play - auto starting');
         playerState.actions.setIsLoading(false);
         errorHandling.actions.onRetrySuccess();
+
+        // Detect live stream vs finite content
+        if (playerState.player) {
+          setIsLive(playerState.player.isLive);
+          const d = playerState.player.duration;
+          if (isFinite(d) && d > 0) {
+            setDuration(d);
+          }
+        }
+
         const { isCasting } = useVideoPlayerStore.getState();
         if (!isCasting) {
           playerState.actions.playVideo();
@@ -126,10 +147,20 @@ export function useVideoOrchestrator({
       playerState.actions.setIsPlaying(isPlaying);
     });
 
+    const timeUpdateSubscription = playerState.player.addListener('timeUpdate', ({ currentTime: time }) => {
+      setCurrentTime(time);
+      // Update duration if it becomes available after initial readyToPlay
+      const d = playerState.player!.duration;
+      if (isFinite(d) && d > 0) {
+        setDuration(d);
+      }
+    });
+
     return () => {
       console.log('Cleaning up video player status listener');
       statusSubscription?.remove();
       playingSubscription?.remove();
+      timeUpdateSubscription?.remove();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playerState.player]); // Only depend on the player itself, not the actions
@@ -200,6 +231,11 @@ export function useVideoOrchestrator({
     loadingProgress: playerState.loadingProgress,
     isPlaying: playerState.isPlaying,
 
+    // Seek bar state
+    currentTime,
+    duration,
+    isLive,
+
     // Error state
     hasError: errorHandling.hasError,
     videoError: errorHandling.error,
@@ -214,7 +250,9 @@ export function useVideoOrchestrator({
     // Actions
     togglePlayPause,
     stopVideo,
+    playVideo: playerState.actions.playVideo,
     pauseVideo: playerState.actions.pauseVideo,
+    seekTo,
     retryPlayback,
     showControlsTemporarily: controls.actions.showControlsTemporarily,
     clearHideControlsTimeout: controls.actions.clearHideControlsTimeout,

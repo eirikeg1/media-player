@@ -1,4 +1,5 @@
 import { VideoView } from 'expo-video';
+import { useCallback, useRef } from 'react';
 import { View } from 'react-native';
 
 import { useVideoPlayerStore } from '@/stores/video/player-store';
@@ -36,11 +37,45 @@ export function VideoPlayer({ channel, onBack, onStopVideo, onRegisterStopFuncti
     networkState,
     retryState,
     toggleControls,
+    currentTime,
+    duration,
+    isLive,
+    seekTo,
+    playVideo,
+    pauseVideo,
   } = useVideoPlayerLogic({
     channel,
     onStopVideo,
     onRegisterStopFunction,
   });
+
+  const wasPlayingBeforeSeek = useRef(false);
+
+  const handleSeekStart = useCallback(() => {
+    wasPlayingBeforeSeek.current = isPlaying;
+    if (isPlaying) {
+      pauseVideo();
+    }
+    clearHideControlsTimeout();
+  }, [isPlaying, pauseVideo, clearHideControlsTimeout]);
+
+  const handleSeek = useCallback(
+    (time: number) => {
+      seekTo(time);
+    },
+    [seekTo],
+  );
+
+  const handleSeekEnd = useCallback(
+    (time: number) => {
+      seekTo(time);
+      if (wasPlayingBeforeSeek.current) {
+        playVideo();
+      }
+      showControlsTemporarily();
+    },
+    [seekTo, playVideo, showControlsTemporarily],
+  );
 
   const { toggleCastPlayPause, isCastPlaying } = useCastPlayback({ channel });
   const isCasting = useVideoPlayerStore(s => s.isCasting);
@@ -94,10 +129,16 @@ export function VideoPlayer({ channel, onBack, onStopVideo, onRegisterStopFuncti
             player={player}
             isLoading={isLoading}
             isPlaying={isPlaying}
+            currentTime={currentTime}
+            duration={duration}
+            isLive={isLive}
             onBack={onBack}
             onTogglePlayPause={togglePlayPause}
             onClearTimeout={clearHideControlsTimeout}
             onToggleControls={toggleControls}
+            onSeekStart={handleSeekStart}
+            onSeekEnd={handleSeekEnd}
+            onSeek={handleSeek}
           />
         )}
         {!showControls && !hasError && !isLoading && !isCasting && (

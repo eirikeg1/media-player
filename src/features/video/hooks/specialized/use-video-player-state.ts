@@ -23,6 +23,7 @@ export function useVideoPlayerState({ channel }: UseVideoPlayerStateProps) {
   const videoPlayer = useVideoPlayer(channel.url, (player) => {
     player.loop = false;
     player.muted = false;
+    player.timeUpdateEventInterval = 0.5;
     setPlayer(player);
   });
 

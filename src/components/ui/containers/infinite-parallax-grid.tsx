@@ -6,6 +6,7 @@ import { FlashList, type ListRenderItem } from '@shopify/flash-list';
 import { ThemedView } from '@/components/ui/display/themed-view';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
@@ -58,6 +59,7 @@ export default function InfiniteParallaxGrid<T>({
   const tintColor = useThemeColor({}, 'tint');
   const colorScheme = useColorScheme() ?? 'light';
   const insets = useSafeAreaInsets();
+  const tabBarHeight = useBottomTabBarHeight();
 
   // Arrow color (dark arrow for light theme, theme color for dark theme)
   const refreshArrowColor = colorScheme === 'dark' ? tintColor : '#3d4560';
@@ -137,7 +139,7 @@ export default function InfiniteParallaxGrid<T>({
         onEndReachedThreshold={onEndReachedThreshold}
         contentContainerStyle={{
           paddingHorizontal: padding,
-          paddingBottom: padding,
+          paddingBottom: padding + tabBarHeight,
         }}
         keyboardShouldPersistTaps="handled"
         scrollEventThrottle={16}

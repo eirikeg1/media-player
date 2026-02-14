@@ -4,6 +4,7 @@ import Animated, { useAnimatedRef } from 'react-native-reanimated';
 
 import { ThemedView } from '@/components/ui/display/themed-view';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
@@ -30,6 +31,7 @@ export default function ParallaxScrollView({
 }: Props) {
   const colorScheme = useColorScheme() ?? 'light';
   const insets = useSafeAreaInsets();
+  const tabBarHeight = useBottomTabBarHeight();
   const scrollRef = useAnimatedRef<Animated.ScrollView>();
   const { headerAnimatedStyle } = useParallaxHeader(scrollRef);
 
@@ -54,7 +56,7 @@ export default function ParallaxScrollView({
         showsVerticalScrollIndicator={showsVerticalScrollIndicator}
       >
         <View style={parallaxStyles.headerSpacer} />
-        <ThemedView style={[styles.content, { padding }]}>{children}</ThemedView>
+        <ThemedView style={[styles.content, { padding, paddingBottom: padding + tabBarHeight }]}>{children}</ThemedView>
       </Animated.ScrollView>
     </ThemedView>
   );
