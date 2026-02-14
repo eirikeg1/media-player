@@ -1,5 +1,6 @@
 import { AddUserCard, UserProfileCard } from '@/features/user/user-profile-card';
 import { AnimatedModal } from '@/components/ui/containers/modal/animated-modal';
+import { ConfirmDialog } from '@/components/ui/containers/modal/confirm-dialog';
 import { useUserStore } from '@/stores/user/user-store';
 import type { UpdateUserInput, User } from '@/types/user.types';
 import { router } from 'expo-router';
@@ -260,6 +261,7 @@ function EditUserModal({
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [newUsername, setNewUsername] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
+  const [pendingDeleteUser, setPendingDeleteUser] = useState<User | null>(null);
 
   const handleEditUser = (user: User) => {
     setEditingUser(user);
@@ -282,26 +284,8 @@ function EditUserModal({
     }
   };
 
-  const handleDeleteUser = async (user: User) => {
-    Alert.alert(
-      'Delete Profile',
-      `Are you sure you want to delete "${user.username}"? This action cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await onDeleteUser(user.id);
-            } catch (error) {
-              console.error('Failed to delete user:', error);
-              Alert.alert('Error', 'Failed to delete user. Please try again.');
-            }
-          },
-        },
-      ]
-    );
+  const handleDeleteUser = (user: User) => {
+    setPendingDeleteUser(user);
   };
 
   if (editingUser) {
@@ -420,6 +404,33 @@ function EditUserModal({
           </Text>
         </Pressable>
       </View>
+
+      <ConfirmDialog
+        visible={pendingDeleteUser !== null}
+        title="Delete Profile"
+        message={`Are you sure you want to delete "${pendingDeleteUser?.username}"? This action cannot be undone.`}
+        actions={[
+          {
+            title: 'Cancel',
+            onPress: () => setPendingDeleteUser(null),
+          },
+          {
+            title: 'Delete',
+            variant: 'danger',
+            onPress: async () => {
+              if (pendingDeleteUser) {
+                try {
+                  await onDeleteUser(pendingDeleteUser.id);
+                } catch (error) {
+                  console.error('Failed to delete user:', error);
+                  Alert.alert('Error', 'Failed to delete user. Please try again.');
+                }
+              }
+              setPendingDeleteUser(null);
+            },
+          },
+        ]}
+      />
     </View>
   );
 }

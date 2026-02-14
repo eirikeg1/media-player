@@ -2,16 +2,27 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { BackHandler, StatusBar } from 'react-native';
 
+import { ConfirmDialog } from '@/components/ui/containers/modal/confirm-dialog';
 import { VideoPlayer } from '@/features/video/components/video-player';
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { getChannelId } from '@/lib/channel-utils';
 import { RustChannelService } from '@/services/rust-channel-service';
 import { useCastMiniPlayerStore } from '@/stores/video/cast-mini-player-store';
+import { useUserStore } from '@/stores/user/user-store';
 import { useVideoPlayerStore } from '@/stores/video/player-store';
 import type { Channel } from '@/types/playlist.types';
 import type { ContentType } from '@/types/user.types';
+
+function formatPosition(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+}
 
 export default function VideoPlayerScreen() {
   const router = useRouter();
@@ -23,6 +34,11 @@ export default function VideoPlayerScreen() {
   // Look up channel from route params
   const [channel, setChannel] = useState<Channel | null>(null);
   const [isLoadingChannel, setIsLoadingChannel] = useState(true);
+
+  // Resume playback state
+  const [startPosition, setStartPosition] = useState(0);
+  const [isResumeResolved, setIsResumeResolved] = useState(false);
+  const [resumeDialogData, setResumeDialogData] = useState<{ position: number } | null>(null);
 
   // Dismiss mini-player when this screen mounts (expanding from bar or new channel)
   useEffect(() => {
@@ -42,6 +58,36 @@ export default function VideoPlayerScreen() {
       })
       .finally(() => setIsLoadingChannel(false));
   }, [params.channelId, params.playlistId]);
+
+  // Check for saved position to prompt resume
+  useEffect(() => {
+    if (!channel || isLoadingChannel) return;
+
+    if (contentType === 'live') {
+      setIsResumeResolved(true);
+      return;
+    }
+
+    const userId = useUserStore.getState().currentUser?.id;
+    if (!userId || !params.playlistId) {
+      setIsResumeResolved(true);
+      return;
+    }
+
+    const channelId = getChannelId(channel);
+    useUserStore.getState().getSavedPosition(userId, params.playlistId, channelId)
+      .then((saved) => {
+        if (!saved) {
+          setIsResumeResolved(true);
+          return;
+        }
+
+        setResumeDialogData({ position: saved.lastPosition });
+      })
+      .catch(() => {
+        setIsResumeResolved(true);
+      });
+  }, [channel, isLoadingChannel, contentType, params.playlistId]);
 
   useLayoutEffect(() => {
     const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -76,10 +122,35 @@ export default function VideoPlayerScreen() {
     stopVideoRef.current = stopFn;
   };
 
-  if (isLoadingChannel) {
+  if (isLoadingChannel || !isResumeResolved) {
     return (
       <ThemedView style={styles.errorContainer}>
         <StatusBar hidden />
+        {resumeDialogData && (
+          <ConfirmDialog
+            visible
+            title="Resume Playback"
+            message={`You were at ${formatPosition(resumeDialogData.position)}. Continue where you left off?`}
+            actions={[
+              {
+                title: 'From Beginning',
+                onPress: () => {
+                  setResumeDialogData(null);
+                  setIsResumeResolved(true);
+                },
+              },
+              {
+                title: 'Continue',
+                variant: 'primary',
+                onPress: () => {
+                  setStartPosition(resumeDialogData.position);
+                  setResumeDialogData(null);
+                  setIsResumeResolved(true);
+                },
+              },
+            ]}
+          />
+        )}
       </ThemedView>
     );
   }
@@ -104,6 +175,7 @@ export default function VideoPlayerScreen() {
         channel={channel}
         playlistId={params.playlistId}
         contentType={contentType}
+        startPosition={startPosition}
         onBack={handleGoBack}
         onStopVideo={handleStopVideo}
         onRegisterStopFunction={handleRegisterStopFunction}

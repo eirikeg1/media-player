@@ -1,3 +1,4 @@
+import { ConfirmDialog } from '@/components/ui/containers/modal/confirm-dialog';
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -25,6 +26,7 @@ export const PlaylistList = memo(function PlaylistList() {
 
   const [editingPlaylist, setEditingPlaylist] = useState<Playlist | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [pendingDeletePlaylist, setPendingDeletePlaylist] = useState<Playlist | null>(null);
 
   const handleEdit = useCallback((playlist: Playlist) => {
     setEditingPlaylist(playlist);
@@ -36,28 +38,9 @@ export const PlaylistList = memo(function PlaylistList() {
     setEditingPlaylist(null);
   }, []);
 
-  const handleDelete = useCallback(
-    (playlist: Playlist) => {
-      Alert.alert('Delete Playlist', `Are you sure you want to delete "${playlist.name}"?`, [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await removePlaylist(playlist.id);
-            } catch (error) {
-              Alert.alert(
-                'Error',
-                error instanceof Error ? error.message : 'Failed to delete playlist'
-              );
-            }
-          },
-        },
-      ]);
-    },
-    [removePlaylist]
-  );
+  const handleDelete = useCallback((playlist: Playlist) => {
+    setPendingDeletePlaylist(playlist);
+  }, []);
 
   const handleRefresh = useCallback(
     async (playlist: Playlist) => {
@@ -198,6 +181,34 @@ export const PlaylistList = memo(function PlaylistList() {
         visible={showEditModal}
         onClose={handleCloseEditModal}
         playlist={editingPlaylist || undefined}
+      />
+      <ConfirmDialog
+        visible={pendingDeletePlaylist !== null}
+        title="Delete Playlist"
+        message={`Are you sure you want to delete "${pendingDeletePlaylist?.name}"?`}
+        actions={[
+          {
+            title: 'Cancel',
+            onPress: () => setPendingDeletePlaylist(null),
+          },
+          {
+            title: 'Delete',
+            variant: 'danger',
+            onPress: async () => {
+              if (pendingDeletePlaylist) {
+                try {
+                  await removePlaylist(pendingDeletePlaylist.id);
+                } catch (error) {
+                  Alert.alert(
+                    'Error',
+                    error instanceof Error ? error.message : 'Failed to delete playlist'
+                  );
+                }
+              }
+              setPendingDeletePlaylist(null);
+            },
+          },
+        ]}
       />
     </>
   );

@@ -15,6 +15,7 @@ interface VideoPlayerProps {
   channel: Channel;
   playlistId: string;
   contentType: ContentType;
+  startPosition?: number;
   onBack?: () => void;
   onStopVideo?: () => void;
   onRegisterStopFunction?: (stopFn: () => void) => void;
@@ -23,7 +24,7 @@ interface VideoPlayerProps {
 /**
  * Video player component with clean, modular state management architecture
  */
-export function VideoPlayer({ channel, playlistId, contentType, onBack, onStopVideo, onRegisterStopFunction }: VideoPlayerProps) {
+export function VideoPlayer({ channel, playlistId, contentType, startPosition, onBack, onStopVideo, onRegisterStopFunction }: VideoPlayerProps) {
   const {
     player,
     isLoading,
@@ -50,6 +51,7 @@ export function VideoPlayer({ channel, playlistId, contentType, onBack, onStopVi
     channel,
     playlistId,
     contentType,
+    startPosition,
     onStopVideo,
     onRegisterStopFunction,
   });

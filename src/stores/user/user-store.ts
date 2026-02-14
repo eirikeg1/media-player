@@ -52,7 +52,7 @@ interface UserState {
     startPosition?: number;
     totalDuration?: number;
   }) => Promise<string>;
-  updateSessionProgress: (sessionId: string, endPosition: number, durationWatched: number) => Promise<void>;
+  updateSessionProgress: (sessionId: string, endPosition: number, durationWatched: number, totalDuration?: number) => Promise<void>;
   endViewingSession: (sessionId: string, endPosition: number, durationWatched: number, completed: boolean) => Promise<void>;
   getContinueWatching: (userId: string, playlistId: string, limit?: number) => Promise<ContinueWatchingItem[]>;
   getRecentlyWatched: (userId: string, playlistId: string, limit?: number) => Promise<RecentlyWatchedItem[]>;
@@ -60,6 +60,7 @@ interface UserState {
   getViewingHistory: (userId: string, limit?: number) => Promise<ViewingSession[]>;
   clearViewingHistory: (userId: string) => Promise<void>;
   closeOrphanedSessions: () => Promise<void>;
+  getSavedPosition: (userId: string, playlistId: string, channelId: string) => Promise<{ lastPosition: number; totalDuration?: number } | null>;
 
   // Utility actions
   clearError: () => void;
@@ -331,9 +332,9 @@ export const useUserStore = create<UserState>((set, get) => ({
   },
 
   // Update session progress (periodic save)
-  updateSessionProgress: async (sessionId, endPosition, durationWatched) => {
+  updateSessionProgress: async (sessionId, endPosition, durationWatched, totalDuration) => {
     try {
-      await userRepository.updateSessionProgress(sessionId, endPosition, durationWatched);
+      await userRepository.updateSessionProgress(sessionId, endPosition, durationWatched, totalDuration);
     } catch (error) {
       console.error('[UserStore] Error updating session progress:', error);
     }
@@ -387,6 +388,11 @@ export const useUserStore = create<UserState>((set, get) => ({
     } catch (error) {
       console.error('[UserStore] Error closing orphaned sessions:', error);
     }
+  },
+
+  // Get saved position for resume prompt
+  getSavedPosition: async (userId, playlistId, channelId) => {
+    return await userRepository.getSavedPosition(userId, playlistId, channelId);
   },
 
   // Clear error

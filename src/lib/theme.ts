@@ -86,13 +86,15 @@ export const GlassColors = {
     surface: 'rgba(255, 255, 255, 0.65)',
     surfaceElevated: 'rgba(255, 255, 255, 0.85)',
     border: 'rgba(80, 110, 180, 0.15)',
-    backdrop: 'rgba(0, 10, 30, 0.6)',
+    backdrop: 'rgba(0, 0, 5, 0.7)',
+    backdropBlur: 50,
   },
   dark: {
     surface: 'rgba(15, 20, 45, 0.6)',
     surfaceElevated: 'rgba(25, 33, 60, 0.75)',
     border: 'rgba(100, 140, 220, 0.12)',
-    backdrop: 'rgba(0, 5, 15, 0.8)',
+    backdrop: 'rgba(0, 0, 5, 0.85)',
+    backdropBlur: 60,
   },
 } as const;
 

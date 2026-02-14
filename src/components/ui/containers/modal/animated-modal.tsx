@@ -2,7 +2,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { GlassColors } from '@/lib/theme';
 import { BlurView } from 'expo-blur';
 import { ReactNode, useEffect, useRef } from 'react';
-import { Animated, Easing, Keyboard, Platform, StyleSheet, TouchableWithoutFeedback } from 'react-native';
+import { Animated, Easing, Keyboard, Modal, Platform, StyleSheet, TouchableWithoutFeedback } from 'react-native';
 
 interface AnimatedModalProps {
   children: ReactNode;
@@ -106,44 +106,40 @@ export function AnimatedModal({ children, visible, onClose }: AnimatedModalProps
     };
   }, [translateY, visible]);
 
-  if (!visible) return null;
-
   return (
-    <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]}>
-      <TouchableWithoutFeedback onPress={onClose}>
-        <BlurView
-          intensity={isDark ? 40 : 30}
-          tint={isDark ? 'dark' : 'light'}
-          style={[styles.backdropTouchArea, {
-            backgroundColor: isDark ? GlassColors.dark.backdrop : GlassColors.light.backdrop,
-          }]}
-        />
-      </TouchableWithoutFeedback>
-      <Animated.View
-        style={[
-          styles.modal,
-          {
-            backgroundColor: isDark ? 'rgba(14, 19, 32, 0.92)' : 'rgba(245, 246, 251, 0.92)',
-            borderColor: isDark ? GlassColors.dark.border : GlassColors.light.border,
-            borderWidth: 1,
-            opacity,
-            transform: [{ scale }, { translateY }]
-          }
-        ]}
-      >
-        {children}
+    <Modal transparent visible={visible} statusBarTranslucent>
+      <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]}>
+        <TouchableWithoutFeedback onPress={onClose}>
+          <BlurView
+            intensity={isDark ? GlassColors.dark.backdropBlur : GlassColors.light.backdropBlur}
+            tint={isDark ? 'dark' : 'light'}
+            style={[styles.backdropTouchArea, {
+              backgroundColor: isDark ? GlassColors.dark.backdrop : GlassColors.light.backdrop,
+            }]}
+          />
+        </TouchableWithoutFeedback>
+        <Animated.View
+          style={[
+            styles.modal,
+            {
+              backgroundColor: isDark ? 'rgba(14, 19, 32, 0.92)' : 'rgba(245, 246, 251, 0.92)',
+              borderColor: isDark ? GlassColors.dark.border : GlassColors.light.border,
+              borderWidth: 1,
+              opacity,
+              transform: [{ scale }, { translateY }]
+            }
+          ]}
+        >
+          {children}
+        </Animated.View>
       </Animated.View>
-    </Animated.View>
+    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
   backdrop: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 32,

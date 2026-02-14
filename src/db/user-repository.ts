@@ -66,7 +66,7 @@ export interface IUserRepository {
     startPosition?: number;
     totalDuration?: number;
   }): Promise<string>;
-  updateSessionProgress(sessionId: string, endPosition: number, durationWatched: number): Promise<void>;
+  updateSessionProgress(sessionId: string, endPosition: number, durationWatched: number, totalDuration?: number): Promise<void>;
   endViewingSession(sessionId: string, endPosition: number, durationWatched: number, completed: boolean): Promise<void>;
   closeOrphanedSessions(): Promise<void>;
   getContinueWatching(userId: string, playlistId: string, limit?: number): Promise<ContinueWatchingItem[]>;
@@ -75,6 +75,7 @@ export interface IUserRepository {
   getViewingHistory(userId: string, limit?: number): Promise<ViewingSession[]>;
   clearViewingHistory(userId: string): Promise<void>;
   clearViewingHistoryForPlaylist(userId: string, playlistId: string): Promise<void>;
+  getSavedPosition(userId: string, playlistId: string, channelId: string): Promise<{ lastPosition: number; totalDuration?: number } | null>;
 
   // Migration helper
   migrateFavoritesToNewFormat(userId: string, channels: { name: string; url: string; tvg?: { id?: string } }[]): Promise<void>;
@@ -599,10 +600,10 @@ class SQLiteUserRepository implements IUserRepository {
     return id;
   }
 
-  async updateSessionProgress(sessionId: string, endPosition: number, durationWatched: number): Promise<void> {
+  async updateSessionProgress(sessionId: string, endPosition: number, durationWatched: number, totalDuration?: number): Promise<void> {
     await executeStatement(
-      `UPDATE viewing_sessions SET endPosition = ?, durationWatched = ? WHERE id = ?`,
-      [endPosition, durationWatched, sessionId]
+      `UPDATE viewing_sessions SET endPosition = ?, durationWatched = ?, totalDuration = COALESCE(?, totalDuration) WHERE id = ?`,
+      [endPosition, durationWatched, totalDuration ?? null, sessionId]
     );
   }
 
@@ -852,6 +853,20 @@ class SQLiteUserRepository implements IUserRepository {
       await db.runAsync('DELETE FROM channel_watch_stats WHERE userId = ? AND playlistId = ?', [userId, playlistId]);
       await db.runAsync('DELETE FROM group_watch_stats WHERE userId = ? AND playlistId = ?', [userId, playlistId]);
     });
+  }
+
+  async getSavedPosition(userId: string, playlistId: string, channelId: string): Promise<{ lastPosition: number; totalDuration?: number } | null> {
+    const row = await executeQuerySingle<{ lastPosition: number; totalDuration: number | null }>(
+      `SELECT lastPosition, totalDuration FROM channel_watch_stats
+       WHERE userId = ? AND playlistId = ? AND channelId = ?
+         AND lastPosition > 0
+         AND totalDuration IS NOT NULL AND totalDuration > 0
+         AND lastPosition >= totalDuration * 0.1
+         AND lastPosition < totalDuration * 0.9`,
+      [userId, playlistId, channelId]
+    );
+    if (!row) return null;
+    return { lastPosition: row.lastPosition, totalDuration: row.totalDuration ?? undefined };
   }
 
   async migrateFavoritesToNewFormat(userId: string, channels: { name: string; url: string; tvg?: { id?: string } }[]): Promise<void> {

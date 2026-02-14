@@ -2,12 +2,12 @@ import { Input } from '@/components/ui/controls/inputs/input';
 import { Textarea } from '@/components/ui/controls/inputs/textarea';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { GlassColors } from '@/lib/theme';
 import { usePlaylistStore } from '@/stores/playlist/playlist-store';
 import type { Playlist } from '@/types/playlist.types';
 import { memo, useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Switch, TouchableOpacity, View } from 'react-native';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-import { GlassColors } from '@/lib/theme';
 
 interface PlaylistFormProps {
   onSuccess?: () => void;
@@ -129,7 +129,7 @@ export const PlaylistForm = memo(function PlaylistForm({ onSuccess, onCancel, pl
         }]}>
           <ActivityIndicator size="large" color="#007AFF" />
           <ThemedText style={styles.loadingText}>
-            Fetching and parsing playlist... This may take a moment.
+            Fetching and parsing playlist... This may take a moment, do not close the app.
           </ThemedText>
         </View>
       )}

@@ -15,6 +15,7 @@ interface UseVideoOrchestratorProps {
   channel: Channel;
   playlistId: string;
   contentType: ContentType;
+  startPosition?: number;
   onStopVideo?: () => void;
   onRegisterStopFunction?: (stopFn: () => void) => void;
 }
@@ -23,11 +24,13 @@ export function useVideoOrchestrator({
   channel,
   playlistId,
   contentType,
+  startPosition,
   onStopVideo,
   onRegisterStopFunction,
 }: UseVideoOrchestratorProps) {
   const isUnmountedRef = useRef(false);
   const retryTimeoutRef = useRef<number | null>(null);
+  const hasAppliedStartPositionRef = useRef(false);
 
   const userId = useUserStore((s) => s.currentUser?.id);
 
@@ -48,6 +51,7 @@ export function useVideoOrchestrator({
     playlistId,
     channel,
     contentType,
+    startPosition,
     currentTime,
     duration,
     isPlaying: playerState.isPlaying,
@@ -140,6 +144,11 @@ export function useVideoOrchestrator({
           if (isFinite(d) && d > 0) {
             setDuration(d);
           }
+        }
+
+        if (startPosition && startPosition > 0 && playerState.player && !hasAppliedStartPositionRef.current) {
+          hasAppliedStartPositionRef.current = true;
+          playerState.player.currentTime = startPosition;
         }
 
         const { isCasting } = useVideoPlayerStore.getState();

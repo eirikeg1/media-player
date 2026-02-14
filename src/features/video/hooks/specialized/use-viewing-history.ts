@@ -10,6 +10,7 @@ interface UseViewingHistoryProps {
   playlistId: string;
   channel: Channel;
   contentType: ContentType;
+  startPosition?: number;
   currentTime: number;
   duration: number;
   isPlaying: boolean;
@@ -22,6 +23,7 @@ export function useViewingHistory({
   playlistId,
   channel,
   contentType,
+  startPosition,
   currentTime,
   duration,
   isPlaying,
@@ -54,7 +56,7 @@ export function useViewingHistory({
       groupTitle: channel.group?.title,
       contentType,
       tvgLogo: channel.tvg?.logo,
-      startPosition: 0,
+      startPosition: startPosition ?? 0,
       totalDuration: duration > 0 ? duration : undefined,
     }).then((id) => {
       sessionIdRef.current = id;
@@ -98,13 +100,8 @@ export function useViewingHistory({
         sessionIdRef.current,
         currentTime,
         accumulatedWatchTimeRef.current,
+        duration > 0 ? duration : undefined,
       );
     }
-  }, [currentTime, isPlaying, updateSessionProgress]);
-
-  // Update duration on session if it becomes known after start
-  useEffect(() => {
-    if (!sessionIdRef.current || duration <= 0) return;
-    // Duration updates are included in the next progress save — no extra DB call needed
-  }, [duration]);
+  }, [currentTime, duration, isPlaying, updateSessionProgress]);
 }

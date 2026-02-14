@@ -1,9 +1,10 @@
+import { ConfirmDialog } from '@/components/ui/containers/modal/confirm-dialog';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
 import { useUserStore } from '@/stores/user/user-store';
 import { isPrivateModeActive } from '@/types/user.types';
-import { memo, useCallback } from 'react';
-import { Alert, Pressable, StyleSheet, Switch, View } from 'react-native';
+import { memo, useCallback, useState } from 'react';
+import { Pressable, StyleSheet, Switch, View } from 'react-native';
 
 const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 
@@ -13,28 +14,15 @@ export const HistorySettings = memo(function HistorySettings() {
   const clearViewingHistory = useUserStore((state) => state.clearViewingHistory);
 
   const privateModeActive = isPrivateModeActive(currentUser?.settings);
+  const [showPrivateModeDialog, setShowPrivateModeDialog] = useState(false);
+  const [showClearHistoryDialog, setShowClearHistoryDialog] = useState(false);
 
   const handleTogglePrivateMode = useCallback(
     (value: boolean) => {
       if (!currentUser) return;
 
       if (value) {
-        Alert.alert(
-          'Enable Private Mode',
-          'While private mode is active, your viewing activity will not be recorded. This will last for 24 hours.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Enable',
-              onPress: () =>
-                updateSettings(currentUser.id, {
-                  privateModeExpiresAt: new Date(
-                    Date.now() + TWENTY_FOUR_HOURS_MS,
-                  ).toISOString(),
-                }),
-            },
-          ],
-        );
+        setShowPrivateModeDialog(true);
       } else {
         updateSettings(currentUser.id, {
           privateModeExpiresAt: undefined,
@@ -46,20 +34,8 @@ export const HistorySettings = memo(function HistorySettings() {
 
   const handleClearHistory = useCallback(() => {
     if (!currentUser) return;
-
-    Alert.alert(
-      'Clear Viewing History',
-      'This will permanently delete all your viewing history, including Continue Watching and Recently Watched data. This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear',
-          style: 'destructive',
-          onPress: () => clearViewingHistory(currentUser.id),
-        },
-      ],
-    );
-  }, [currentUser, clearViewingHistory]);
+    setShowClearHistoryDialog(true);
+  }, [currentUser]);
 
   if (!currentUser) {
     return null;
@@ -92,6 +68,54 @@ export const HistorySettings = memo(function HistorySettings() {
           </View>
         </Pressable>
       </View>
+
+      <ConfirmDialog
+        visible={showPrivateModeDialog}
+        title="Enable Private Mode"
+        message="While private mode is active, your viewing activity will not be recorded. This will last for 24 hours."
+        actions={[
+          {
+            title: 'Cancel',
+            onPress: () => setShowPrivateModeDialog(false),
+          },
+          {
+            title: 'Enable',
+            variant: 'primary',
+            onPress: () => {
+              if (currentUser) {
+                updateSettings(currentUser.id, {
+                  privateModeExpiresAt: new Date(
+                    Date.now() + TWENTY_FOUR_HOURS_MS,
+                  ).toISOString(),
+                });
+              }
+              setShowPrivateModeDialog(false);
+            },
+          },
+        ]}
+      />
+
+      <ConfirmDialog
+        visible={showClearHistoryDialog}
+        title="Clear Viewing History"
+        message="This will permanently delete all your viewing history, including Continue Watching and Recently Watched data. This cannot be undone."
+        actions={[
+          {
+            title: 'Cancel',
+            onPress: () => setShowClearHistoryDialog(false),
+          },
+          {
+            title: 'Clear',
+            variant: 'danger',
+            onPress: () => {
+              if (currentUser) {
+                clearViewingHistory(currentUser.id);
+              }
+              setShowClearHistoryDialog(false);
+            },
+          },
+        ]}
+      />
     </ThemedView>
   );
 });
