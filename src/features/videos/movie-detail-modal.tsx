@@ -4,8 +4,10 @@ import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
 import { CategoryPill } from '@/features/videos/category-pill';
 import { MetadataSection } from '@/features/videos/components/metadata-section';
+import { FavoriteStar } from '@/features/live/favorite-star';
 import { useMovieMetadata } from '@/features/videos/hooks/use-movie-metadata';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { getChannelId } from '@/lib/channel-utils';
 import type { Channel } from '@/types/playlist.types';
 import { useEffect, useMemo, useState } from 'react';
 import { Image, Modal, ScrollView, StyleSheet, View } from 'react-native';
@@ -77,6 +79,13 @@ export function MovieDetailModal({
           title={movie.name}
           subtitle={movie.group.title}
           onClose={onClose}
+          headerRight={
+            <FavoriteStar
+              channelId={getChannelId(movie)}
+              channelName={movie.name}
+              size={22}
+            />
+          }
         />
 
         <ScrollView

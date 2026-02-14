@@ -142,6 +142,7 @@ export function LiveScreenContent({
           }
           columns={4}
           padding={5}
+          gap={4}
           ListEmptyComponent={<LoadingComponent />}
           refreshing={isRefreshing}
           onRefresh={onRefresh}
@@ -197,6 +198,7 @@ export function LiveScreenContent({
         }
         columns={4}
         padding={5}
+        gap={4}
         ListEmptyComponent={<EmptyComponent />}
         ListFooterComponent={LoadingMoreComponent}
         onEndReached={handleEndReached}

@@ -3,10 +3,12 @@ import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
 import { CategoryPill } from '@/features/videos/category-pill';
 import { MetadataSection } from '@/features/videos/components/metadata-section';
+import { FavoriteStar } from '@/features/live/favorite-star';
 import { SeasonAccordion } from '@/features/videos/season-accordion';
 import { useSeriesEpisodes } from '@/features/videos/hooks/use-series-episodes';
 import { useSeriesMetadata } from '@/features/videos/hooks/use-series-metadata';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { getSeriesId } from '@/lib/channel-utils';
 import { groupEpisodesBySeason } from '@/lib/series-utils';
 import type { Channel } from '@/types/playlist.types';
 import type { SeriesInfo } from 'expo-m3u-parser';
@@ -99,6 +101,13 @@ export function SeriesDetailModal({
           title={series.seriesName}
           subtitle={`${series.episodeCount} ${series.episodeCount === 1 ? 'episode' : 'episodes'}`}
           onClose={onClose}
+          headerRight={
+            <FavoriteStar
+              channelId={getSeriesId(series)}
+              channelName={series.seriesName}
+              size={22}
+            />
+          }
         />
 
         <ScrollView

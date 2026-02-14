@@ -4,7 +4,7 @@ import { ThemedView } from '@/components/ui/display/themed-view';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { GlassColors } from '@/lib/theme';
-import { StyleSheet, TouchableOpacity } from 'react-native';
+import { StyleSheet, TouchableOpacity, View } from 'react-native';
 
 export interface ModalHeaderProps {
   /**
@@ -27,6 +27,11 @@ export interface ModalHeaderProps {
    * @default true
    */
   showCloseButton?: boolean;
+
+  /**
+   * Optional element rendered to the left of the close button
+   */
+  headerRight?: React.ReactNode;
 }
 
 export function ModalHeader({
@@ -34,6 +39,7 @@ export function ModalHeader({
   onClose,
   subtitle,
   showCloseButton = true,
+  headerRight,
 }: ModalHeaderProps) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
@@ -53,17 +59,20 @@ export function ModalHeader({
         )}
       </ThemedView>
 
-      {showCloseButton && (
-        <TouchableOpacity
-          onPress={onClose}
-          style={styles.closeButton}
-          accessibilityRole="button"
-          accessibilityLabel="Close modal"
-          accessibilityHint="Close the modal"
-        >
-          <IconSymbol name="xmark" size={24} color={textColor} />
-        </TouchableOpacity>
-      )}
+      <View style={styles.headerActions}>
+        {headerRight}
+        {showCloseButton && (
+          <TouchableOpacity
+            onPress={onClose}
+            style={styles.closeButton}
+            accessibilityRole="button"
+            accessibilityLabel="Close modal"
+            accessibilityHint="Close the modal"
+          >
+            <IconSymbol name="xmark" size={24} color={textColor} />
+          </TouchableOpacity>
+        )}
+      </View>
     </ThemedView>
   );
 }
@@ -87,6 +96,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 2,
     opacity: 0.8,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
   closeButton: {
     padding: 4,

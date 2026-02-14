@@ -1,4 +1,5 @@
 import type { Channel } from '@/types/playlist.types';
+import type { SeriesInfo } from 'expo-m3u-parser';
 
 /**
  * Generate a consistent unique identifier for a channel
@@ -27,6 +28,20 @@ export function getRawChannelId(item: any): string {
   const name = item.name || '';
   const url = item.url || '';
   return `${name}|${url}`;
+}
+
+/**
+ * Generate a consistent unique identifier for a series
+ */
+export function getSeriesId(series: SeriesInfo): string {
+  return `series:${series.seriesName}`;
+}
+
+/**
+ * Check if a series is marked as favorite
+ */
+export function isSeriesFavorite(series: SeriesInfo, favoriteChannels: string[]): boolean {
+  return favoriteChannels.includes(getSeriesId(series));
 }
 
 /**

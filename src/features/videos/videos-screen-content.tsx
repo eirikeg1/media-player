@@ -2,12 +2,12 @@ import InfiniteParallaxGrid from '@/components/ui/containers/infinite-parallax-g
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
-import { ChannelItem } from '@/features/live/channel-item';
 import { LiveLoadingSpinner } from '@/features/live/live-loading-spinner';
+import { MovieItem } from '@/features/videos/movie-item';
 import { SeriesItem } from '@/features/videos/series-item';
 import { VideosEmptyState } from '@/features/videos/videos-empty-state';
 import { VideosTopBar } from '@/features/videos/videos-top-bar';
-import { isChannelFavorite } from '@/lib/channel-utils';
+import { isChannelFavorite, isSeriesFavorite } from '@/lib/channel-utils';
 import type { GroupOption } from '@/lib/group-utils';
 import type { Channel, Playlist } from '@/types/playlist.types';
 import type { ListRenderItemInfo } from '@shopify/flash-list';
@@ -83,7 +83,7 @@ export function VideosScreenContent({
     const isFavorite = isChannelFavorite(channel, favoriteChannels);
 
     return (
-      <ChannelItem
+      <MovieItem
         channel={channel}
         isFavorite={isFavorite}
         onPress={onChannelPress}
@@ -92,13 +92,16 @@ export function VideosScreenContent({
   }, [favoriteChannels, onChannelPress]);
 
   const renderSeriesItem = useCallback(({ item: series }: ListRenderItemInfo<SeriesInfo>) => {
+    const isFavorite = isSeriesFavorite(series, favoriteChannels);
+
     return (
       <SeriesItem
         series={series}
+        isFavorite={isFavorite}
         onPress={onSeriesPress!}
       />
     );
-  }, [onSeriesPress]);
+  }, [favoriteChannels, onSeriesPress]);
 
   const EmptyComponent = useCallback(() => {
     return (

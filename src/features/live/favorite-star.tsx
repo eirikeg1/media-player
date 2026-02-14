@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { useUserStore } from '@/stores/user/user-store';
-import { useThemeColor } from '@/hooks/use-theme-color';
+
 
 interface FavoriteStarProps {
   channelId: string;
@@ -20,8 +20,7 @@ export function FavoriteStar({ channelId, channelName, size = 16, initialIsFavor
   const toggleFavorite = useUserStore((state) => state.toggleFavorite);
   const checkIsFavorite = useUserStore((state) => state.isFavorite);
 
-  const iconColor = useThemeColor({}, 'icon');
-  const favoriteColor = '#FFD700'; // Yellow color for favorite
+  const favoriteColor = '#FFD700';
 
   const loadFavoriteStatus = useCallback(async () => {
     if (!currentUser) return;
@@ -64,6 +63,8 @@ export function FavoriteStar({ channelId, channelName, size = 16, initialIsFavor
       onPress={handleToggle}
       disabled={isLoading}
       activeOpacity={0.7}
+      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      style={{ padding: 6 }}
       accessibilityRole="button"
       accessibilityLabel={`${isFavorite ? 'Remove from' : 'Add to'} favorites`}
       accessibilityHint={`${isFavorite ? 'Remove' : 'Add'} ${channelName} ${isFavorite ? 'from' : 'to'} your favorite channels`}
@@ -71,7 +72,7 @@ export function FavoriteStar({ channelId, channelName, size = 16, initialIsFavor
       <IconSymbol
         name={isFavorite ? 'star.fill' : 'star'}
         size={size}
-        color={isFavorite ? favoriteColor : iconColor}
+        color={isFavorite ? favoriteColor : 'rgba(160, 160, 160, 0.9)'}
       />
     </TouchableOpacity>
   );

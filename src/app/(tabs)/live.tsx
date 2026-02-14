@@ -85,6 +85,7 @@ export default function LiveScreen() {
     contentType: 'live',
     favoriteChannelIds: favoriteChannels,
     excludeAdult,
+    pageSize: 100,
   });
 
   // Event handlers for filters

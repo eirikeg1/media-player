@@ -57,8 +57,11 @@ export function useGroups(
         // Sort alphabetically with adult groups at the bottom
         const sortedGroups = sortGroupsWithAdultLast(groupOptions);
 
-        // Build final list: Favorites (if applicable) → All Channels → sorted groups
+        // Build final list: All Channels → Favorites (if applicable) → sorted groups
         const result: GroupOption[] = [];
+
+        // Add "All Channels" option (empty string name means "all")
+        result.push({ name: '', channelCount: totalCount });
 
         // Add Favorites entry if there are favorite groups
         if (stableFavoriteGroups && stableFavoriteGroups.length > 0) {
@@ -67,9 +70,6 @@ export function useGroups(
             .reduce((sum, g) => sum + g.count, 0);
           result.push({ name: FAVORITES_GROUP_SENTINEL, channelCount: favoritesCount });
         }
-
-        // Add "All Channels" option (empty string name means "all")
-        result.push({ name: '', channelCount: totalCount });
 
         // Add sorted groups
         result.push(...sortedGroups);

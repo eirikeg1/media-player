@@ -18,6 +18,7 @@ interface UserState {
   currentUser: User | null;
   isLoading: boolean;
   error: string | null;
+  favoriteChannels: string[];
 
   // User management actions
   loadUsers: () => Promise<void>;
@@ -30,6 +31,7 @@ interface UserState {
   updateSettings: (userId: string, settings: Partial<UserSettings>) => Promise<void>;
 
   // Favorite channels actions
+  loadFavoriteChannels: (userId: string) => Promise<void>;
   getFavoriteChannels: (userId: string) => Promise<string[]>;
   toggleFavorite: (userId: string, channelId: string) => Promise<void>;
   isFavorite: (userId: string, channelId: string) => Promise<boolean>;
@@ -80,6 +82,7 @@ export const useUserStore = create<UserState>((set, get) => ({
   currentUser: null,
   isLoading: true, // Start as true until users are loaded
   error: null,
+  favoriteChannels: [],
   activeSessionId: null,
 
   // Load all users from database
@@ -99,6 +102,11 @@ export const useUserStore = create<UserState>((set, get) => ({
         currentUser: firstUser,
         isLoading: false,
       });
+
+      // Hydrate favorite channels for the initial user
+      if (firstUser) {
+        get().loadFavoriteChannels(firstUser.id);
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to load users';
       console.error('[UserStore] Error loading users:', errorMessage);
@@ -151,6 +159,9 @@ export const useUserStore = create<UserState>((set, get) => ({
         currentUser: user,
         isLoading: false,
       });
+
+      // Hydrate favorite channels for the new user
+      get().loadFavoriteChannels(userId);
 
       // Reload playlist store to get the correct active playlist for this user
       try {
@@ -257,6 +268,16 @@ export const useUserStore = create<UserState>((set, get) => ({
     }
   },
 
+  // Load favorite channels into store state
+  loadFavoriteChannels: async (userId: string) => {
+    try {
+      const favorites = await userRepository.getFavoriteChannels(userId);
+      set({ favoriteChannels: favorites });
+    } catch (error) {
+      console.error('[UserStore] Error loading favorite channels:', error);
+    }
+  },
+
   // Get favorite channels
   getFavoriteChannels: async (userId: string) => {
     return await userRepository.getFavoriteChannels(userId);
@@ -271,8 +292,10 @@ export const useUserStore = create<UserState>((set, get) => ({
 
       if (isFav) {
         await userRepository.removeFavoriteChannel(userId, channelId);
+        set({ favoriteChannels: get().favoriteChannels.filter((id) => id !== channelId) });
       } else {
         await userRepository.addFavoriteChannel(userId, channelId);
+        set({ favoriteChannels: [...get().favoriteChannels, channelId] });
       }
 
       console.log('[UserStore] Favorite toggled successfully');

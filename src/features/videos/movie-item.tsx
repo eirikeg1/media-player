@@ -1,22 +1,20 @@
-import { FavoriteStar } from '@/features/live/favorite-star';
+import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
-import { getChannelId } from '@/lib/channel-utils';
 import type { Channel } from '@/types/playlist.types';
 import { useState } from 'react';
 import { Image, StyleSheet, TouchableOpacity, View } from 'react-native';
 
-interface ChannelItemProps {
+interface MovieItemProps {
   channel: Channel;
   isFavorite: boolean;
   onPress: (channel: Channel) => void;
 }
 
-export function ChannelItem({ channel, isFavorite, onPress }: ChannelItemProps) {
+export function MovieItem({ channel, isFavorite, onPress }: MovieItemProps) {
   const [imageError, setImageError] = useState(false);
   const hasLogo = !!channel.tvg.logo && !imageError;
   const initial = channel.name.charAt(0).toUpperCase();
-  const channelId = getChannelId(channel);
 
   return (
     <View style={styles.container}>
@@ -25,38 +23,32 @@ export function ChannelItem({ channel, isFavorite, onPress }: ChannelItemProps) 
         onPress={() => onPress(channel)}
         activeOpacity={0.7}
         accessibilityRole="button"
-        accessibilityLabel={`${channel.name} channel`}
-        accessibilityHint="Tap to play this channel"
+        accessibilityLabel={`${channel.name} movie`}
+        accessibilityHint="Tap to view movie details"
       >
-        <View style={styles.imageWrapper}>
-          {hasLogo ? (
-            <Image
-              source={{ uri: channel.tvg.logo }}
-              style={styles.poster}
-              resizeMode="cover"
-              onError={() => setImageError(true)}
-            />
-          ) : (
-            <ThemedView style={[styles.poster, styles.fallbackPoster]}>
-              <ThemedText style={styles.fallbackText}>{initial}</ThemedText>
-            </ThemedView>
-          )}
+        {hasLogo ? (
+          <Image
+            source={{ uri: channel.tvg.logo }}
+            style={styles.poster}
+            resizeMode="cover"
+            onError={() => setImageError(true)}
+          />
+        ) : (
+          <ThemedView style={[styles.poster, styles.fallbackPoster]}>
+            <ThemedText style={styles.fallbackText}>{initial}</ThemedText>
+          </ThemedView>
+        )}
 
-        </View>
+        {isFavorite && (
+          <View style={styles.starBadge}>
+            <IconSymbol name="star.fill" size={14} color="#FFD700" />
+          </View>
+        )}
 
-        <ThemedText style={styles.channelName} numberOfLines={2}>
+        <ThemedText style={styles.movieName} numberOfLines={2}>
           {channel.name}
         </ThemedText>
       </TouchableOpacity>
-
-      <View style={styles.starContainer}>
-        <FavoriteStar
-          channelId={channelId}
-          channelName={channel.name}
-          size={20}
-          initialIsFavorite={isFavorite}
-        />
-      </View>
     </View>
   );
 }
@@ -69,15 +61,11 @@ const styles = StyleSheet.create({
   button: {
     width: '100%',
   },
-  imageWrapper: {
-    width: '100%',
-    borderRadius: 6,
-    overflow: 'hidden',
-    marginBottom: 4,
-  },
   poster: {
     width: '100%',
-    aspectRatio: 4 / 3,
+    aspectRatio: 3 / 4,
+    borderRadius: 6,
+    marginBottom: 4,
     backgroundColor: '#1a1a1a',
   },
   fallbackPoster: {
@@ -88,13 +76,15 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '600',
   },
-  starContainer: {
+  starBadge: {
     position: 'absolute',
     top: 4,
-    right: 0,
-    zIndex: 1,
+    right: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: 10,
+    padding: 3,
   },
-  channelName: {
+  movieName: {
     fontSize: 11,
     textAlign: 'center',
     fontWeight: '500',

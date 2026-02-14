@@ -4,7 +4,6 @@ import { useUserStore } from '@/stores/user/user-store';
 import type { Playlist } from '@/types/playlist.types';
 
 export function useFavoriteChannels(activePlaylist: Playlist | null, hasLoadedPlaylist: boolean) {
-  const [favoriteChannels, setFavoriteChannels] = useState<string[]>([]);
   const [hasLoadedFavorites, setHasLoadedFavorites] = useState<boolean>(false);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
@@ -12,7 +11,8 @@ export function useFavoriteChannels(activePlaylist: Playlist | null, hasLoadedPl
   const isMountedRef = useRef(true);
 
   const currentUser = useUserStore((state) => state.currentUser);
-  const getFavoriteChannels = useUserStore((state) => state.getFavoriteChannels);
+  const favoriteChannels = useUserStore((state) => state.favoriteChannels);
+  const loadFavoriteChannels = useUserStore((state) => state.loadFavoriteChannels);
 
   useEffect(() => {
     return () => {
@@ -29,22 +29,17 @@ export function useFavoriteChannels(activePlaylist: Playlist | null, hasLoadedPl
 
     if (currentUser) {
       try {
-        const favorites = await getFavoriteChannels(currentUser.id);
-        if (!isMountedRef.current) return;
-        setFavoriteChannels(favorites);
+        await loadFavoriteChannels(currentUser.id);
       } catch (error) {
         if (!isMountedRef.current) return;
         console.error('Error loading favorite channels:', error);
       }
-    } else {
-      if (!isMountedRef.current) return;
-      setFavoriteChannels([]);
     }
 
     if (!isMountedRef.current) return;
     setHasLoadedFavorites(true);
     setIsInitialLoading(false);
-  }, [currentUser, getFavoriteChannels]);
+  }, [currentUser, loadFavoriteChannels]);
 
   const handleRefresh = useCallback(async () => {
     if (!isMountedRef.current) return;

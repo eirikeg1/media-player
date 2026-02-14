@@ -1,3 +1,4 @@
+import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
 import type { SeriesInfo } from 'expo-m3u-parser';
@@ -6,10 +7,11 @@ import { Image, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 interface SeriesItemProps {
   series: SeriesInfo;
+  isFavorite: boolean;
   onPress: (series: SeriesInfo) => void;
 }
 
-export function SeriesItem({ series, onPress }: SeriesItemProps) {
+export function SeriesItem({ series, isFavorite, onPress }: SeriesItemProps) {
   const [imageError, setImageError] = useState(false);
   const hasPoster = !!series.poster && !imageError;
   const initial = series.seriesName.charAt(0).toUpperCase();
@@ -28,13 +30,19 @@ export function SeriesItem({ series, onPress }: SeriesItemProps) {
           <Image
             source={{ uri: series.poster }}
             style={styles.poster}
-            resizeMode="contain"
+            resizeMode="cover"
             onError={() => setImageError(true)}
           />
         ) : (
           <ThemedView style={[styles.poster, styles.fallbackPoster]}>
             <ThemedText style={styles.fallbackText}>{initial}</ThemedText>
           </ThemedView>
+        )}
+
+        {isFavorite && (
+          <View style={styles.starBadge}>
+            <IconSymbol name="star.fill" size={14} color="#FFD700" />
+          </View>
         )}
 
         <ThemedText style={styles.seriesName} numberOfLines={2}>
@@ -51,27 +59,34 @@ export function SeriesItem({ series, onPress }: SeriesItemProps) {
 
 const styles = StyleSheet.create({
   container: {
-    alignItems: 'center',
-    paddingVertical: 4,
     flex: 1,
+    paddingVertical: 4,
   },
   button: {
-    alignItems: 'center',
     width: '100%',
   },
   poster: {
-    width: 48,
-    height: 48,
+    width: '100%',
+    aspectRatio: 3 / 4,
     borderRadius: 6,
     marginBottom: 4,
+    backgroundColor: '#1a1a1a',
   },
   fallbackPoster: {
     justifyContent: 'center',
     alignItems: 'center',
   },
   fallbackText: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: '600',
+  },
+  starBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: 10,
+    padding: 3,
   },
   seriesName: {
     fontSize: 11,
