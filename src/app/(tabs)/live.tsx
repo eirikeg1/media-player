@@ -107,6 +107,7 @@ export default function LiveScreen() {
       params: {
         channelId: getChannelId(channel),
         playlistId: activePlaylist?.id ?? '',
+        contentType: 'live',
       },
     });
   }, [router, activePlaylist?.id]);

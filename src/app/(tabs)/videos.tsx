@@ -148,9 +148,10 @@ export default function VideosScreen() {
       params: {
         channelId: getChannelId(channel),
         playlistId: activePlaylist?.id ?? '',
+        contentType,
       },
     });
-  }, [router, activePlaylist?.id]);
+  }, [router, activePlaylist?.id, contentType]);
 
   const handleSeriesPress = useCallback((series: SeriesInfo) => {
     setSelectedSeries(series);

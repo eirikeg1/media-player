@@ -29,6 +29,15 @@ export interface UserSettings {
   showLiveTab: boolean;
   showVideosTab: boolean;
   playlistSharingEnabled: boolean;
+  privateModeExpiresAt?: string;
+}
+
+/**
+ * Check if private mode is currently active (not expired)
+ */
+export function isPrivateModeActive(settings?: UserSettings): boolean {
+  if (!settings?.privateModeExpiresAt) return false;
+  return new Date(settings.privateModeExpiresAt).getTime() > Date.now();
 }
 
 /**
@@ -62,26 +71,93 @@ export interface UserChannelOrder {
 }
 
 /**
- * Watch history entry
+ * Content type for viewing history
  */
-export interface UserWatchHistory {
+export type ContentType = 'live' | 'movie' | 'series';
+
+/**
+ * A single viewing session (raw event log row)
+ */
+export interface ViewingSession {
   id: string;
   userId: string;
+  playlistId: string;
   channelId: string;
-  watchedAt: Date;
-  duration: number; // seconds watched
+  channelName: string;
+  groupTitle?: string;
+  contentType: ContentType;
+  tvgLogo?: string;
+  startedAt: string;
+  endedAt?: string;
+  durationWatched: number;
+  startPosition: number;
+  endPosition: number;
+  totalDuration?: number;
+  dayOfWeek: number;
+  hourOfDay: number;
+  completed: boolean;
 }
 
 /**
- * Playback position for resume feature
+ * Aggregated watch stats per channel (per user + playlist)
  */
-export interface UserPlaybackPosition {
-  id: string;
+export interface ChannelWatchStats {
   userId: string;
+  playlistId: string;
   channelId: string;
-  position: number; // current position in seconds
-  totalDuration: number; // total duration in seconds
-  updatedAt: Date;
+  channelName: string;
+  groupTitle?: string;
+  contentType: ContentType;
+  tvgLogo?: string;
+  watchCount: number;
+  totalTimeWatched: number;
+  lastWatchedAt: string;
+  firstWatchedAt: string;
+  lastPosition: number;
+  totalDuration?: number;
+  completionCount: number;
+  avgSessionDuration: number;
+  longestSessionDuration: number;
+}
+
+/**
+ * Aggregated watch stats per group (per user + playlist)
+ */
+export interface GroupWatchStats {
+  userId: string;
+  playlistId: string;
+  groupTitle: string;
+  watchCount: number;
+  totalTimeWatched: number;
+  uniqueChannelsWatched: number;
+  lastWatchedAt: string;
+}
+
+/**
+ * Item for "Continue Watching" row
+ */
+export interface ContinueWatchingItem {
+  channelId: string;
+  channelName: string;
+  groupTitle?: string;
+  contentType: ContentType;
+  tvgLogo?: string;
+  lastPosition: number;
+  totalDuration?: number;
+  lastWatchedAt: string;
+}
+
+/**
+ * Item for "Recently Watched" row
+ */
+export interface RecentlyWatchedItem {
+  channelId: string;
+  channelName: string;
+  groupTitle?: string;
+  contentType: ContentType;
+  tvgLogo?: string;
+  watchCount: number;
+  lastWatchedAt: string;
 }
 
 /**

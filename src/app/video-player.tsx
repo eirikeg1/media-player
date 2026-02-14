@@ -11,10 +11,12 @@ import { RustChannelService } from '@/services/rust-channel-service';
 import { useCastMiniPlayerStore } from '@/stores/video/cast-mini-player-store';
 import { useVideoPlayerStore } from '@/stores/video/player-store';
 import type { Channel } from '@/types/playlist.types';
+import type { ContentType } from '@/types/user.types';
 
 export default function VideoPlayerScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ channelId: string; playlistId: string }>();
+  const params = useLocalSearchParams<{ channelId: string; playlistId: string; contentType: string }>();
+  const contentType = (params.contentType as ContentType) || 'live';
   const iconColor = useThemeColor({}, 'icon');
   const stopVideoRef = useRef<(() => void) | null>(null);
 
@@ -45,7 +47,7 @@ export default function VideoPlayerScreen() {
     const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
       const isCasting = useVideoPlayerStore.getState().isCasting;
       if (isCasting && channel && params.playlistId) {
-        useCastMiniPlayerStore.getState().activate(channel, params.playlistId);
+        useCastMiniPlayerStore.getState().activate(channel, params.playlistId, contentType);
       } else {
         stopVideoRef.current?.();
       }
@@ -54,12 +56,12 @@ export default function VideoPlayerScreen() {
     });
 
     return () => backHandler.remove();
-  }, [router, channel, params.playlistId]);
+  }, [router, channel, params.playlistId, contentType]);
 
   const handleGoBack = () => {
     const isCasting = useVideoPlayerStore.getState().isCasting;
     if (isCasting && channel && params.playlistId) {
-      useCastMiniPlayerStore.getState().activate(channel, params.playlistId);
+      useCastMiniPlayerStore.getState().activate(channel, params.playlistId, contentType);
     } else {
       stopVideoRef.current?.();
     }
@@ -100,6 +102,8 @@ export default function VideoPlayerScreen() {
       <StatusBar hidden />
       <VideoPlayer
         channel={channel}
+        playlistId={params.playlistId}
+        contentType={contentType}
         onBack={handleGoBack}
         onStopVideo={handleStopVideo}
         onRegisterStopFunction={handleRegisterStopFunction}

@@ -29,6 +29,7 @@ export function CastMiniPlayerBar() {
   const router = useRouter();
   const channel = useCastMiniPlayerStore((s) => s.channel);
   const playlistId = useCastMiniPlayerStore((s) => s.playlistId);
+  const contentType = useCastMiniPlayerStore((s) => s.contentType);
 
   const client = useRemoteMediaClient();
   const castState = useCastState();
@@ -72,7 +73,7 @@ export function CastMiniPlayerBar() {
     if (!channel || !playlistId) return;
     router.push({
       pathname: '/video-player',
-      params: { channelId: getChannelId(channel), playlistId },
+      params: { channelId: getChannelId(channel), playlistId, contentType: contentType ?? 'live' },
     });
   };
 

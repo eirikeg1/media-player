@@ -329,6 +329,106 @@ const migrations: Migration[] = [
       console.log('[Migration] Added playlist sharing columns');
     },
   },
+  {
+    version: 9,
+    name: 'add_viewing_history_tables',
+    up: async (db) => {
+      // Drop unused old tables
+      await db.execAsync(`DROP TABLE IF EXISTS user_watch_history;`);
+      await db.execAsync(`DROP TABLE IF EXISTS user_playback_position;`);
+
+      // Create viewing_sessions table (raw event log)
+      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS viewing_sessions (
+          id TEXT PRIMARY KEY NOT NULL,
+          userId TEXT NOT NULL,
+          playlistId TEXT NOT NULL,
+          channelId TEXT NOT NULL,
+          channelName TEXT NOT NULL,
+          groupTitle TEXT,
+          contentType TEXT NOT NULL,
+          tvgLogo TEXT,
+          startedAt TEXT NOT NULL,
+          endedAt TEXT,
+          durationWatched REAL DEFAULT 0,
+          startPosition REAL DEFAULT 0,
+          endPosition REAL DEFAULT 0,
+          totalDuration REAL,
+          dayOfWeek INTEGER,
+          hourOfDay INTEGER,
+          completed INTEGER DEFAULT 0,
+          FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE
+        );
+      `);
+
+      // Indexes for viewing_sessions
+      await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_vs_user_playlist ON viewing_sessions (userId, playlistId);`);
+      await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_vs_user_started ON viewing_sessions (userId, startedAt DESC);`);
+      await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_vs_user_content ON viewing_sessions (userId, contentType, startedAt DESC);`);
+      await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_vs_user_group ON viewing_sessions (userId, groupTitle, startedAt DESC);`);
+      await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_vs_user_time_pattern ON viewing_sessions (userId, dayOfWeek, hourOfDay);`);
+
+      // Create channel_watch_stats table (aggregated per user+playlist+channel)
+      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS channel_watch_stats (
+          userId TEXT NOT NULL,
+          playlistId TEXT NOT NULL,
+          channelId TEXT NOT NULL,
+          channelName TEXT NOT NULL,
+          groupTitle TEXT,
+          contentType TEXT NOT NULL,
+          tvgLogo TEXT,
+          watchCount INTEGER DEFAULT 0,
+          totalTimeWatched REAL DEFAULT 0,
+          lastWatchedAt TEXT NOT NULL,
+          firstWatchedAt TEXT NOT NULL,
+          lastPosition REAL DEFAULT 0,
+          totalDuration REAL,
+          completionCount INTEGER DEFAULT 0,
+          avgSessionDuration REAL DEFAULT 0,
+          longestSessionDuration REAL DEFAULT 0,
+          PRIMARY KEY (userId, playlistId, channelId),
+          FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE
+        );
+      `);
+
+      // Indexes for channel_watch_stats
+      await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_cws_last_watched ON channel_watch_stats (userId, playlistId, lastWatchedAt DESC);`);
+      await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_cws_watch_count ON channel_watch_stats (userId, playlistId, watchCount DESC);`);
+      await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_cws_total_time ON channel_watch_stats (userId, playlistId, totalTimeWatched DESC);`);
+      await db.execAsync(`
+        CREATE INDEX IF NOT EXISTS idx_cws_resume
+        ON channel_watch_stats (userId, playlistId, lastWatchedAt DESC)
+        WHERE lastPosition > 0 AND (totalDuration IS NULL OR lastPosition < totalDuration * 0.9);
+      `);
+
+      // Create group_watch_stats table (aggregated per user+playlist+group)
+      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS group_watch_stats (
+          userId TEXT NOT NULL,
+          playlistId TEXT NOT NULL,
+          groupTitle TEXT NOT NULL,
+          watchCount INTEGER DEFAULT 0,
+          totalTimeWatched REAL DEFAULT 0,
+          uniqueChannelsWatched INTEGER DEFAULT 0,
+          lastWatchedAt TEXT NOT NULL,
+          PRIMARY KEY (userId, playlistId, groupTitle),
+          FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE
+        );
+      `);
+
+      console.log('[Migration] Added viewing history tables (viewing_sessions, channel_watch_stats, group_watch_stats)');
+    },
+  },
+  {
+    version: 10,
+    name: 'add_private_mode_expires_at',
+    up: async (db) => {
+      await db.execAsync(`ALTER TABLE user_settings ADD COLUMN privateModeExpiresAt TEXT;`);
+
+      console.log('[Migration] Added privateModeExpiresAt column to user_settings');
+    },
+  },
 ];
 
 /**

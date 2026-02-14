@@ -4,6 +4,7 @@ import { View } from 'react-native';
 
 import { useVideoPlayerStore } from '@/stores/video/player-store';
 import type { Channel } from '@/types/playlist.types';
+import type { ContentType } from '@/types/user.types';
 import { useCastPlayback } from '../hooks/use-cast-playback';
 import { useVideoPlayerLogic } from '../hooks/use-video-player';
 import { LoadingProgress } from './loading-progress';
@@ -12,6 +13,8 @@ import { VideoCastingState, VideoErrorState } from './video-states';
 
 interface VideoPlayerProps {
   channel: Channel;
+  playlistId: string;
+  contentType: ContentType;
   onBack?: () => void;
   onStopVideo?: () => void;
   onRegisterStopFunction?: (stopFn: () => void) => void;
@@ -20,7 +23,7 @@ interface VideoPlayerProps {
 /**
  * Video player component with clean, modular state management architecture
  */
-export function VideoPlayer({ channel, onBack, onStopVideo, onRegisterStopFunction }: VideoPlayerProps) {
+export function VideoPlayer({ channel, playlistId, contentType, onBack, onStopVideo, onRegisterStopFunction }: VideoPlayerProps) {
   const {
     player,
     isLoading,
@@ -45,6 +48,8 @@ export function VideoPlayer({ channel, onBack, onStopVideo, onRegisterStopFuncti
     pauseVideo,
   } = useVideoPlayerLogic({
     channel,
+    playlistId,
+    contentType,
     onStopVideo,
     onRegisterStopFunction,
   });

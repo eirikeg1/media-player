@@ -1,14 +1,18 @@
 import { getChannelId } from '@/lib/channel-utils';
 import type {
+    ContentType,
+    ContinueWatchingItem,
     CreateUserInput,
+    GroupWatchStats,
+    RecentlyWatchedItem,
     UpdateUserInput,
     User,
-    UserPlaybackPosition,
     UserSettings,
-    UserWatchHistory
+    ViewingSession,
 } from '@/types/user.types';
 import { DEFAULT_USER_SETTINGS } from '@/types/user.types';
 import { randomUUID } from 'expo-crypto';
+import type { SQLiteDatabase } from 'expo-sqlite';
 import { executeQuery, executeQuerySingle, executeStatement, executeTransaction } from './sqlite-client';
 
 /**
@@ -50,15 +54,27 @@ export interface IUserRepository {
   setChannelOrder(userId: string, channelId: string, order: number): Promise<void>;
   clearChannelOrder(userId: string): Promise<void>;
 
-  // Watch history operations
-  addWatchHistory(userId: string, channelId: string, duration: number): Promise<void>;
-  getWatchHistory(userId: string, limit?: number): Promise<UserWatchHistory[]>;
-  clearWatchHistory(userId: string): Promise<void>;
-
-  // Playback position operations
-  savePlaybackPosition(userId: string, channelId: string, position: number, totalDuration: number): Promise<void>;
-  getPlaybackPosition(userId: string, channelId: string): Promise<UserPlaybackPosition | null>;
-  clearPlaybackPosition(userId: string, channelId: string): Promise<void>;
+  // Viewing history operations
+  startViewingSession(params: {
+    userId: string;
+    playlistId: string;
+    channelId: string;
+    channelName: string;
+    groupTitle?: string;
+    contentType: ContentType;
+    tvgLogo?: string;
+    startPosition?: number;
+    totalDuration?: number;
+  }): Promise<string>;
+  updateSessionProgress(sessionId: string, endPosition: number, durationWatched: number): Promise<void>;
+  endViewingSession(sessionId: string, endPosition: number, durationWatched: number, completed: boolean): Promise<void>;
+  closeOrphanedSessions(): Promise<void>;
+  getContinueWatching(userId: string, playlistId: string, limit?: number): Promise<ContinueWatchingItem[]>;
+  getRecentlyWatched(userId: string, playlistId: string, limit?: number): Promise<RecentlyWatchedItem[]>;
+  getMostWatchedGroups(userId: string, playlistId: string, limit?: number): Promise<GroupWatchStats[]>;
+  getViewingHistory(userId: string, limit?: number): Promise<ViewingSession[]>;
+  clearViewingHistory(userId: string): Promise<void>;
+  clearViewingHistoryForPlaylist(userId: string, playlistId: string): Promise<void>;
 
   // Migration helper
   migrateFavoritesToNewFormat(userId: string, channels: { name: string; url: string; tvg?: { id?: string } }[]): Promise<void>;
@@ -91,6 +107,7 @@ interface UserSettingsRow {
   showLiveTab: number;
   showVideosTab: number;
   playlistSharingEnabled: number;
+  privateModeExpiresAt: string | null;
 }
 
 interface UserFavoriteChannelRow {
@@ -121,21 +138,55 @@ interface UserChannelOrderRow {
   sortOrder: number;
 }
 
-interface UserWatchHistoryRow {
+interface ViewingSessionRow {
   id: string;
   userId: string;
+  playlistId: string;
   channelId: string;
-  watchedAt: string;
-  duration: number;
+  channelName: string;
+  groupTitle: string | null;
+  contentType: string;
+  tvgLogo: string | null;
+  startedAt: string;
+  endedAt: string | null;
+  durationWatched: number;
+  startPosition: number;
+  endPosition: number;
+  totalDuration: number | null;
+  dayOfWeek: number;
+  hourOfDay: number;
+  completed: number;
 }
 
-interface UserPlaybackPositionRow {
-  id: string;
+interface GroupWatchStatsRow {
   userId: string;
+  playlistId: string;
+  groupTitle: string;
+  watchCount: number;
+  totalTimeWatched: number;
+  uniqueChannelsWatched: number;
+  lastWatchedAt: string;
+}
+
+interface ContinueWatchingRow {
   channelId: string;
-  position: number;
-  totalDuration: number;
-  updatedAt: string;
+  channelName: string;
+  groupTitle: string | null;
+  contentType: string;
+  tvgLogo: string | null;
+  lastPosition: number;
+  totalDuration: number | null;
+  lastWatchedAt: string;
+}
+
+interface RecentlyWatchedRow {
+  channelId: string;
+  channelName: string;
+  groupTitle: string | null;
+  contentType: string;
+  tvgLogo: string | null;
+  watchCount: number;
+  lastWatchedAt: string;
 }
 
 /**
@@ -176,6 +227,7 @@ class SQLiteUserRepository implements IUserRepository {
       showLiveTab: row.showLiveTab === 1,
       showVideosTab: row.showVideosTab === 1,
       playlistSharingEnabled: row.playlistSharingEnabled === 1,
+      privateModeExpiresAt: row.privateModeExpiresAt || undefined,
     };
   }
 
@@ -237,8 +289,8 @@ class SQLiteUserRepository implements IUserRepository {
 
       // Insert default settings
       await tx.runAsync(
-        `INSERT INTO user_settings (userId, theme, language, defaultQuality, defaultSubtitles, activePlaylistId, channelSortBy, parentalControlEnabled, parentalControlPin, showHomeTab, showLiveTab, showVideosTab, playlistSharingEnabled)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO user_settings (userId, theme, language, defaultQuality, defaultSubtitles, activePlaylistId, channelSortBy, parentalControlEnabled, parentalControlPin, showHomeTab, showLiveTab, showVideosTab, playlistSharingEnabled, privateModeExpiresAt)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           userId,
           DEFAULT_USER_SETTINGS.theme,
@@ -253,6 +305,7 @@ class SQLiteUserRepository implements IUserRepository {
           DEFAULT_USER_SETTINGS.showLiveTab ? 1 : 0,
           DEFAULT_USER_SETTINGS.showVideosTab ? 1 : 0,
           DEFAULT_USER_SETTINGS.playlistSharingEnabled ? 1 : 0,
+          null,
         ]
       );
     });
@@ -336,7 +389,8 @@ class SQLiteUserRepository implements IUserRepository {
       `UPDATE user_settings
        SET theme = ?, language = ?, defaultQuality = ?, defaultSubtitles = ?, activePlaylistId = ?,
            channelSortBy = ?, parentalControlEnabled = ?, parentalControlPin = ?,
-           showHomeTab = ?, showLiveTab = ?, showVideosTab = ?, playlistSharingEnabled = ?
+           showHomeTab = ?, showLiveTab = ?, showVideosTab = ?, playlistSharingEnabled = ?,
+           privateModeExpiresAt = ?
        WHERE userId = ?`,
       [
         updated.theme,
@@ -351,6 +405,7 @@ class SQLiteUserRepository implements IUserRepository {
         updated.showLiveTab ? 1 : 0,
         updated.showVideosTab ? 1 : 0,
         updated.playlistSharingEnabled ? 1 : 0,
+        updated.privateModeExpiresAt || null,
         userId,
       ]
     );
@@ -501,80 +556,302 @@ class SQLiteUserRepository implements IUserRepository {
     );
   }
 
-  async addWatchHistory(userId: string, channelId: string, duration: number): Promise<void> {
-    console.log('[UserRepository] addWatchHistory called:', { userId, channelId, duration });
+  // ── Viewing History ──
+
+  async startViewingSession(params: {
+    userId: string;
+    playlistId: string;
+    channelId: string;
+    channelName: string;
+    groupTitle?: string;
+    contentType: ContentType;
+    tvgLogo?: string;
+    startPosition?: number;
+    totalDuration?: number;
+  }): Promise<string> {
+    const id = randomUUID();
+    const now = new Date();
+    const startedAt = now.toISOString();
 
     await executeStatement(
-      'INSERT INTO user_watch_history (id, userId, channelId, watchedAt, duration) VALUES (?, ?, ?, ?, ?)',
-      [randomUUID(), userId, channelId, new Date().toISOString(), duration]
+      `INSERT INTO viewing_sessions
+        (id, userId, playlistId, channelId, channelName, groupTitle, contentType, tvgLogo,
+         startedAt, startPosition, totalDuration, dayOfWeek, hourOfDay)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        params.userId,
+        params.playlistId,
+        params.channelId,
+        params.channelName,
+        params.groupTitle ?? null,
+        params.contentType,
+        params.tvgLogo ?? null,
+        startedAt,
+        params.startPosition ?? 0,
+        params.totalDuration ?? null,
+        now.getDay(),
+        now.getHours(),
+      ]
+    );
+
+    console.log('[UserRepository] Started viewing session:', id);
+    return id;
+  }
+
+  async updateSessionProgress(sessionId: string, endPosition: number, durationWatched: number): Promise<void> {
+    await executeStatement(
+      `UPDATE viewing_sessions SET endPosition = ?, durationWatched = ? WHERE id = ?`,
+      [endPosition, durationWatched, sessionId]
     );
   }
 
-  async getWatchHistory(userId: string, limit: number = 50): Promise<UserWatchHistory[]> {
-    const rows = await executeQuery<UserWatchHistoryRow>(
-      'SELECT * FROM user_watch_history WHERE userId = ? ORDER BY watchedAt DESC LIMIT ?',
+  /**
+   * Shared aggregation logic: UPSERT channel_watch_stats and group_watch_stats.
+   * Called by both endViewingSession and closeOrphanedSessions.
+   */
+  private async aggregateSessionStats(
+    db: SQLiteDatabase,
+    session: ViewingSessionRow,
+    endPosition: number,
+    durationWatched: number,
+    completed: boolean,
+    now: string,
+  ): Promise<void> {
+    // UPSERT channel_watch_stats
+    await db.runAsync(
+      `INSERT INTO channel_watch_stats
+        (userId, playlistId, channelId, channelName, groupTitle, contentType, tvgLogo,
+         watchCount, totalTimeWatched, lastWatchedAt, firstWatchedAt, lastPosition,
+         totalDuration, completionCount, avgSessionDuration, longestSessionDuration)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(userId, playlistId, channelId) DO UPDATE SET
+         channelName = excluded.channelName,
+         groupTitle = excluded.groupTitle,
+         tvgLogo = excluded.tvgLogo,
+         watchCount = watchCount + 1,
+         totalTimeWatched = totalTimeWatched + excluded.totalTimeWatched,
+         lastWatchedAt = excluded.lastWatchedAt,
+         lastPosition = excluded.lastPosition,
+         totalDuration = COALESCE(excluded.totalDuration, totalDuration),
+         completionCount = completionCount + excluded.completionCount,
+         avgSessionDuration = (totalTimeWatched + excluded.totalTimeWatched) / (watchCount + 1),
+         longestSessionDuration = MAX(longestSessionDuration, excluded.longestSessionDuration)`,
+      [
+        session.userId,
+        session.playlistId,
+        session.channelId,
+        session.channelName,
+        session.groupTitle,
+        session.contentType,
+        session.tvgLogo,
+        durationWatched,
+        now,
+        now,
+        endPosition,
+        session.totalDuration,
+        completed ? 1 : 0,
+        durationWatched,
+        durationWatched,
+      ]
+    );
+
+    // UPSERT group_watch_stats (only if groupTitle exists)
+    if (session.groupTitle) {
+      const existingChannelCount = await db.getFirstAsync<{ cnt: number }>(
+        `SELECT COUNT(*) as cnt FROM channel_watch_stats
+         WHERE userId = ? AND playlistId = ? AND groupTitle = ? AND channelId = ?
+           AND watchCount > 1`,
+        [session.userId, session.playlistId, session.groupTitle, session.channelId]
+      );
+      const isNewChannel = !existingChannelCount || existingChannelCount.cnt === 0;
+
+      await db.runAsync(
+        `INSERT INTO group_watch_stats
+          (userId, playlistId, groupTitle, watchCount, totalTimeWatched, uniqueChannelsWatched, lastWatchedAt)
+         VALUES (?, ?, ?, 1, ?, ?, ?)
+         ON CONFLICT(userId, playlistId, groupTitle) DO UPDATE SET
+           watchCount = watchCount + 1,
+           totalTimeWatched = totalTimeWatched + ?,
+           uniqueChannelsWatched = uniqueChannelsWatched + ?,
+           lastWatchedAt = ?`,
+        [
+          session.userId,
+          session.playlistId,
+          session.groupTitle,
+          durationWatched,
+          isNewChannel ? 1 : 0,
+          now,
+          durationWatched,
+          isNewChannel ? 1 : 0,
+          now,
+        ]
+      );
+    }
+  }
+
+  async endViewingSession(sessionId: string, endPosition: number, durationWatched: number, completed: boolean): Promise<void> {
+    const now = new Date().toISOString();
+
+    await executeTransaction(async (db) => {
+      // 1. Finalize the session row
+      await db.runAsync(
+        `UPDATE viewing_sessions
+         SET endedAt = ?, endPosition = ?, durationWatched = ?, completed = ?
+         WHERE id = ?`,
+        [now, endPosition, durationWatched, completed ? 1 : 0, sessionId]
+      );
+
+      // 2. Read back session data for aggregation
+      const session = await db.getFirstAsync<ViewingSessionRow>(
+        `SELECT * FROM viewing_sessions WHERE id = ?`,
+        [sessionId]
+      );
+      if (!session) return;
+
+      // 3. Aggregate into stats tables
+      await this.aggregateSessionStats(db, session, endPosition, durationWatched, completed, now);
+    });
+
+    console.log('[UserRepository] Ended viewing session:', sessionId);
+  }
+
+  async closeOrphanedSessions(): Promise<void> {
+    const now = new Date().toISOString();
+    const orphans = await executeQuery<ViewingSessionRow>(
+      'SELECT * FROM viewing_sessions WHERE endedAt IS NULL'
+    );
+    if (orphans.length === 0) return;
+
+    console.log(`[UserRepository] Closing ${orphans.length} orphaned viewing sessions`);
+
+    for (const session of orphans) {
+      const completed = session.totalDuration != null
+        && session.totalDuration > 0
+        && session.endPosition / session.totalDuration >= 0.9;
+
+      await executeTransaction(async (db) => {
+        await db.runAsync(
+          'UPDATE viewing_sessions SET endedAt = ?, completed = ? WHERE id = ?',
+          [now, completed ? 1 : 0, session.id]
+        );
+        await this.aggregateSessionStats(
+          db, session, session.endPosition, session.durationWatched, completed, now
+        );
+      });
+    }
+  }
+
+  async getContinueWatching(userId: string, playlistId: string, limit: number = 20): Promise<ContinueWatchingItem[]> {
+    const rows = await executeQuery<ContinueWatchingRow>(
+      `SELECT channelId, channelName, groupTitle, contentType, tvgLogo, lastPosition, totalDuration, lastWatchedAt
+       FROM channel_watch_stats
+       WHERE userId = ? AND playlistId = ? AND lastPosition > 0
+         AND (totalDuration IS NULL OR lastPosition < totalDuration * 0.9)
+       ORDER BY lastWatchedAt DESC
+       LIMIT ?`,
+      [userId, playlistId, limit]
+    );
+
+    return rows.map(row => ({
+      channelId: row.channelId,
+      channelName: row.channelName,
+      groupTitle: row.groupTitle ?? undefined,
+      contentType: row.contentType as ContentType,
+      tvgLogo: row.tvgLogo ?? undefined,
+      lastPosition: row.lastPosition,
+      totalDuration: row.totalDuration ?? undefined,
+      lastWatchedAt: row.lastWatchedAt,
+    }));
+  }
+
+  async getRecentlyWatched(userId: string, playlistId: string, limit: number = 20): Promise<RecentlyWatchedItem[]> {
+    const rows = await executeQuery<RecentlyWatchedRow>(
+      `SELECT channelId, channelName, groupTitle, contentType, tvgLogo, watchCount, lastWatchedAt
+       FROM channel_watch_stats
+       WHERE userId = ? AND playlistId = ?
+       ORDER BY lastWatchedAt DESC
+       LIMIT ?`,
+      [userId, playlistId, limit]
+    );
+
+    return rows.map(row => ({
+      channelId: row.channelId,
+      channelName: row.channelName,
+      groupTitle: row.groupTitle ?? undefined,
+      contentType: row.contentType as ContentType,
+      tvgLogo: row.tvgLogo ?? undefined,
+      watchCount: row.watchCount,
+      lastWatchedAt: row.lastWatchedAt,
+    }));
+  }
+
+  async getMostWatchedGroups(userId: string, playlistId: string, limit: number = 10): Promise<GroupWatchStats[]> {
+    const rows = await executeQuery<GroupWatchStatsRow>(
+      `SELECT * FROM group_watch_stats
+       WHERE userId = ? AND playlistId = ?
+       ORDER BY totalTimeWatched DESC
+       LIMIT ?`,
+      [userId, playlistId, limit]
+    );
+
+    return rows.map(row => ({
+      userId: row.userId,
+      playlistId: row.playlistId,
+      groupTitle: row.groupTitle,
+      watchCount: row.watchCount,
+      totalTimeWatched: row.totalTimeWatched,
+      uniqueChannelsWatched: row.uniqueChannelsWatched,
+      lastWatchedAt: row.lastWatchedAt,
+    }));
+  }
+
+  async getViewingHistory(userId: string, limit: number = 50): Promise<ViewingSession[]> {
+    const rows = await executeQuery<ViewingSessionRow>(
+      `SELECT * FROM viewing_sessions
+       WHERE userId = ?
+       ORDER BY startedAt DESC
+       LIMIT ?`,
       [userId, limit]
     );
 
     return rows.map(row => ({
       id: row.id,
       userId: row.userId,
+      playlistId: row.playlistId,
       channelId: row.channelId,
-      watchedAt: new Date(row.watchedAt),
-      duration: row.duration,
+      channelName: row.channelName,
+      groupTitle: row.groupTitle ?? undefined,
+      contentType: row.contentType as ContentType,
+      tvgLogo: row.tvgLogo ?? undefined,
+      startedAt: row.startedAt,
+      endedAt: row.endedAt ?? undefined,
+      durationWatched: row.durationWatched,
+      startPosition: row.startPosition,
+      endPosition: row.endPosition,
+      totalDuration: row.totalDuration ?? undefined,
+      dayOfWeek: row.dayOfWeek,
+      hourOfDay: row.hourOfDay,
+      completed: row.completed === 1,
     }));
   }
 
-  async clearWatchHistory(userId: string): Promise<void> {
-    console.log('[UserRepository] clearWatchHistory called:', userId);
-
-    await executeStatement(
-      'DELETE FROM user_watch_history WHERE userId = ?',
-      [userId]
-    );
+  async clearViewingHistory(userId: string): Promise<void> {
+    console.log('[UserRepository] clearViewingHistory called:', userId);
+    await executeTransaction(async (db) => {
+      await db.runAsync('DELETE FROM viewing_sessions WHERE userId = ?', [userId]);
+      await db.runAsync('DELETE FROM channel_watch_stats WHERE userId = ?', [userId]);
+      await db.runAsync('DELETE FROM group_watch_stats WHERE userId = ?', [userId]);
+    });
   }
 
-  async savePlaybackPosition(userId: string, channelId: string, position: number, totalDuration: number): Promise<void> {
-    console.log('[UserRepository] savePlaybackPosition called:', { userId, channelId, position });
-
-    await executeStatement(
-      `INSERT INTO user_playback_position (id, userId, channelId, position, totalDuration, updatedAt)
-       VALUES (?, ?, ?, ?, ?, ?)
-       ON CONFLICT(userId, channelId) DO UPDATE SET position = ?, totalDuration = ?, updatedAt = ?`,
-      [
-        randomUUID(), userId, channelId, position, totalDuration, new Date().toISOString(),
-        position, totalDuration, new Date().toISOString(),
-      ]
-    );
-  }
-
-  async getPlaybackPosition(userId: string, channelId: string): Promise<UserPlaybackPosition | null> {
-    const row = await executeQuerySingle<UserPlaybackPositionRow>(
-      'SELECT * FROM user_playback_position WHERE userId = ? AND channelId = ?',
-      [userId, channelId]
-    );
-
-    if (!row) {
-      return null;
-    }
-
-    return {
-      id: row.id,
-      userId: row.userId,
-      channelId: row.channelId,
-      position: row.position,
-      totalDuration: row.totalDuration,
-      updatedAt: new Date(row.updatedAt),
-    };
-  }
-
-  async clearPlaybackPosition(userId: string, channelId: string): Promise<void> {
-    console.log('[UserRepository] clearPlaybackPosition called:', { userId, channelId });
-
-    await executeStatement(
-      'DELETE FROM user_playback_position WHERE userId = ? AND channelId = ?',
-      [userId, channelId]
-    );
+  async clearViewingHistoryForPlaylist(userId: string, playlistId: string): Promise<void> {
+    console.log('[UserRepository] clearViewingHistoryForPlaylist called:', { userId, playlistId });
+    await executeTransaction(async (db) => {
+      await db.runAsync('DELETE FROM viewing_sessions WHERE userId = ? AND playlistId = ?', [userId, playlistId]);
+      await db.runAsync('DELETE FROM channel_watch_stats WHERE userId = ? AND playlistId = ?', [userId, playlistId]);
+      await db.runAsync('DELETE FROM group_watch_stats WHERE userId = ? AND playlistId = ?', [userId, playlistId]);
+    });
   }
 
   async migrateFavoritesToNewFormat(userId: string, channels: { name: string; url: string; tvg?: { id?: string } }[]): Promise<void> {

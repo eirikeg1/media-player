@@ -2,6 +2,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { PlaylistManager } from '@/features/playlist';
 import { AppPreferences } from '@/features/user/app-preferences';
+import { HistorySettings } from '@/features/user/history-settings';
 import { UserSettings } from '@/features/user/user-settings';
 import ParallaxScrollView from '@/components/ui/containers/parallax-scroll-view';
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
@@ -28,6 +29,11 @@ export default function SettingsScreen() {
       {/* App Preferences Section */}
       <ThemedView>
         <AppPreferences />
+      </ThemedView>
+
+      {/* History Settings Section */}
+      <ThemedView>
+        <HistorySettings />
       </ThemedView>
 
       {/* Playlist Management Section */}

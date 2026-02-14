@@ -24,6 +24,10 @@ export function usePlaylistInit() {
         await loadUsers();
         console.log('[App] Users loaded successfully');
 
+        // Close any orphaned viewing sessions (crash recovery)
+        console.log('[App] Closing orphaned viewing sessions...');
+        await useUserStore.getState().closeOrphanedSessions();
+
         // Load playlists from database
         console.log('[App] Loading playlists...');
         await loadPlaylists();

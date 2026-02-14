@@ -1,5 +1,15 @@
 import { userRepository } from '@/db/user-repository';
-import type { CreateUserInput, UpdateUserInput, User, UserSettings } from '@/types/user.types';
+import type {
+  ContentType,
+  ContinueWatchingItem,
+  CreateUserInput,
+  GroupWatchStats,
+  RecentlyWatchedItem,
+  UpdateUserInput,
+  User,
+  UserSettings,
+  ViewingSession,
+} from '@/types/user.types';
 import { create } from 'zustand';
 
 interface UserState {
@@ -29,13 +39,27 @@ interface UserState {
   toggleHidden: (userId: string, channelId: string) => Promise<void>;
   isHidden: (userId: string, channelId: string) => Promise<boolean>;
 
-  // Watch history actions
-  addToWatchHistory: (userId: string, channelId: string, duration: number) => Promise<void>;
-  getWatchHistory: (userId: string, limit?: number) => Promise<any[]>;
-
-  // Playback position actions
-  savePlaybackPosition: (userId: string, channelId: string, position: number, totalDuration: number) => Promise<void>;
-  getPlaybackPosition: (userId: string, channelId: string) => Promise<any>;
+  // Viewing history actions
+  activeSessionId: string | null;
+  startViewingSession: (params: {
+    userId: string;
+    playlistId: string;
+    channelId: string;
+    channelName: string;
+    groupTitle?: string;
+    contentType: ContentType;
+    tvgLogo?: string;
+    startPosition?: number;
+    totalDuration?: number;
+  }) => Promise<string>;
+  updateSessionProgress: (sessionId: string, endPosition: number, durationWatched: number) => Promise<void>;
+  endViewingSession: (sessionId: string, endPosition: number, durationWatched: number, completed: boolean) => Promise<void>;
+  getContinueWatching: (userId: string, playlistId: string, limit?: number) => Promise<ContinueWatchingItem[]>;
+  getRecentlyWatched: (userId: string, playlistId: string, limit?: number) => Promise<RecentlyWatchedItem[]>;
+  getMostWatchedGroups: (userId: string, playlistId: string, limit?: number) => Promise<GroupWatchStats[]>;
+  getViewingHistory: (userId: string, limit?: number) => Promise<ViewingSession[]>;
+  clearViewingHistory: (userId: string) => Promise<void>;
+  closeOrphanedSessions: () => Promise<void>;
 
   // Utility actions
   clearError: () => void;
@@ -55,6 +79,7 @@ export const useUserStore = create<UserState>((set, get) => ({
   currentUser: null,
   isLoading: true, // Start as true until users are loaded
   error: null,
+  activeSessionId: null,
 
   // Load all users from database
   loadUsers: async () => {
@@ -293,40 +318,75 @@ export const useUserStore = create<UserState>((set, get) => ({
     return await userRepository.isChannelHidden(userId, channelId);
   },
 
-  // Add to watch history
-  addToWatchHistory: async (userId: string, channelId: string, duration: number) => {
-    console.log('[UserStore] addToWatchHistory called:', { userId, channelId, duration });
-
+  // Start a viewing session
+  startViewingSession: async (params) => {
     try {
-      await userRepository.addWatchHistory(userId, channelId, duration);
-      console.log('[UserStore] Added to watch history');
+      const sessionId = await userRepository.startViewingSession(params);
+      set({ activeSessionId: sessionId });
+      return sessionId;
     } catch (error) {
-      console.error('[UserStore] Error adding to watch history:', error);
+      console.error('[UserStore] Error starting viewing session:', error);
       throw error;
     }
   },
 
-  // Get watch history
-  getWatchHistory: async (userId: string, limit?: number) => {
-    return await userRepository.getWatchHistory(userId, limit);
+  // Update session progress (periodic save)
+  updateSessionProgress: async (sessionId, endPosition, durationWatched) => {
+    try {
+      await userRepository.updateSessionProgress(sessionId, endPosition, durationWatched);
+    } catch (error) {
+      console.error('[UserStore] Error updating session progress:', error);
+    }
   },
 
-  // Save playback position
-  savePlaybackPosition: async (userId: string, channelId: string, position: number, totalDuration: number) => {
-    console.log('[UserStore] savePlaybackPosition called:', { userId, channelId, position });
-
+  // End a viewing session
+  endViewingSession: async (sessionId, endPosition, durationWatched, completed) => {
     try {
-      await userRepository.savePlaybackPosition(userId, channelId, position, totalDuration);
-      console.log('[UserStore] Playback position saved');
+      await userRepository.endViewingSession(sessionId, endPosition, durationWatched, completed);
+      set({ activeSessionId: null });
     } catch (error) {
-      console.error('[UserStore] Error saving playback position:', error);
+      console.error('[UserStore] Error ending viewing session:', error);
+    }
+  },
+
+  // Get continue watching items
+  getContinueWatching: async (userId, playlistId, limit) => {
+    return await userRepository.getContinueWatching(userId, playlistId, limit);
+  },
+
+  // Get recently watched items
+  getRecentlyWatched: async (userId, playlistId, limit) => {
+    return await userRepository.getRecentlyWatched(userId, playlistId, limit);
+  },
+
+  // Get most watched groups
+  getMostWatchedGroups: async (userId, playlistId, limit) => {
+    return await userRepository.getMostWatchedGroups(userId, playlistId, limit);
+  },
+
+  // Get full viewing history
+  getViewingHistory: async (userId, limit) => {
+    return await userRepository.getViewingHistory(userId, limit);
+  },
+
+  // Clear all viewing history for a user
+  clearViewingHistory: async (userId) => {
+    try {
+      await userRepository.clearViewingHistory(userId);
+      console.log('[UserStore] Viewing history cleared');
+    } catch (error) {
+      console.error('[UserStore] Error clearing viewing history:', error);
       throw error;
     }
   },
 
-  // Get playback position
-  getPlaybackPosition: async (userId: string, channelId: string) => {
-    return await userRepository.getPlaybackPosition(userId, channelId);
+  // Close orphaned sessions (crash recovery)
+  closeOrphanedSessions: async () => {
+    try {
+      await userRepository.closeOrphanedSessions();
+    } catch (error) {
+      console.error('[UserStore] Error closing orphaned sessions:', error);
+    }
   },
 
   // Clear error

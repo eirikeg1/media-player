@@ -1,5 +1,7 @@
+import { useUserStore } from '@/stores/user/user-store';
 import { useVideoPlayerStore } from '@/stores/video/player-store';
 import type { Channel } from '@/types/playlist.types';
+import type { ContentType } from '@/types/user.types';
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getVideoErrorInfo } from '../../types/video-error.types';
@@ -7,20 +9,27 @@ import { useVideoControls } from './use-video-controls';
 import { useVideoErrorHandling } from './use-video-error-handling';
 import { useVideoNetwork } from './use-video-network';
 import { useVideoPlayerState } from './use-video-player-state';
+import { useViewingHistory } from './use-viewing-history';
 
 interface UseVideoOrchestratorProps {
   channel: Channel;
+  playlistId: string;
+  contentType: ContentType;
   onStopVideo?: () => void;
   onRegisterStopFunction?: (stopFn: () => void) => void;
 }
 
 export function useVideoOrchestrator({
   channel,
+  playlistId,
+  contentType,
   onStopVideo,
   onRegisterStopFunction,
 }: UseVideoOrchestratorProps) {
   const isUnmountedRef = useRef(false);
   const retryTimeoutRef = useRef<number | null>(null);
+
+  const userId = useUserStore((s) => s.currentUser?.id);
 
   // Specialized hooks
   const playerState = useVideoPlayerState({ channel });
@@ -32,6 +41,17 @@ export function useVideoOrchestrator({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isLive, setIsLive] = useState(false);
+
+  // Viewing history tracking
+  useViewingHistory({
+    userId,
+    playlistId,
+    channel,
+    contentType,
+    currentTime,
+    duration,
+    isPlaying: playerState.isPlaying,
+  });
 
   const seekTo = useCallback((time: number) => {
     if (playerState.player) {
