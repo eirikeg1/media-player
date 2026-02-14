@@ -6,7 +6,6 @@ import type { Playlist } from '@/types/playlist.types';
 export function useFavoriteChannels(activePlaylist: Playlist | null, hasLoadedPlaylist: boolean) {
   const [hasLoadedFavorites, setHasLoadedFavorites] = useState<boolean>(false);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
-  const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
   const isInitialMount = useRef(true);
   const isMountedRef = useRef(true);
 
@@ -20,12 +19,8 @@ export function useFavoriteChannels(activePlaylist: Playlist | null, hasLoadedPl
     };
   }, []);
 
-  const loadFavorites = useCallback(async (isTabClick: boolean = false) => {
+  const loadFavorites = useCallback(async () => {
     if (!isMountedRef.current) return;
-
-    if (isTabClick) {
-      setIsInitialLoading(true);
-    }
 
     if (currentUser) {
       try {
@@ -38,7 +33,6 @@ export function useFavoriteChannels(activePlaylist: Playlist | null, hasLoadedPl
 
     if (!isMountedRef.current) return;
     setHasLoadedFavorites(true);
-    setIsInitialLoading(false);
   }, [currentUser, loadFavoriteChannels]);
 
   const handleRefresh = useCallback(async () => {
@@ -65,23 +59,11 @@ export function useFavoriteChannels(activePlaylist: Playlist | null, hasLoadedPl
         return;
       }
 
-      let timeoutId: ReturnType<typeof setTimeout>;
-
-      timeoutId = setTimeout(() => {
+      loadFavorites().catch((error) => {
         if (isMountedRef.current) {
-          loadFavorites(true).catch((error) => {
-            if (isMountedRef.current) {
-              console.error('Error reloading favorites on focus:', error);
-            }
-          });
+          console.error('Error reloading favorites on focus:', error);
         }
-      }, 0);
-
-      return () => {
-        if (timeoutId) {
-          clearTimeout(timeoutId);
-        }
-      };
+      });
     }, [loadFavorites])
   );
 
@@ -89,7 +71,6 @@ export function useFavoriteChannels(activePlaylist: Playlist | null, hasLoadedPl
     favoriteChannels,
     hasLoadedFavorites,
     isRefreshing,
-    isInitialLoading,
     handleRefresh
   };
 }

@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import { LiveScreenContent } from '@/features/live/live-screen-content';
 import { useFavoriteChannels } from '@/features/live/hooks/use-favorite-channels';
@@ -9,7 +9,8 @@ import { usePaginatedChannels } from '@/features/live/hooks/use-paginated-channe
 import { usePlaylistData } from '@/features/live/hooks/use-playlist-data';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { getChannelId } from '@/lib/channel-utils';
-import { FAVORITES_GROUP_SENTINEL } from '@/lib/group-utils';
+import { FAVORITES_GROUP_SENTINEL, getEffectiveFavoriteGroups } from '@/lib/group-utils';
+import { useFirstPageCacheStore } from '@/stores/cache';
 import { useUserStore } from '@/stores/user/user-store';
 import type { Channel } from '@/types/playlist.types';
 
@@ -25,7 +26,7 @@ export default function LiveScreen() {
   const excludeAdult = useUserStore((s) => s.currentUser?.settings?.parentalControlEnabled ?? false);
 
   // Filter state managed locally, passed to paginated hook
-  const [selectedGroupName, setSelectedGroupName] = useState<string>('');
+  const [userGroupSelection, setUserGroupSelection] = useState<string | null>(null);
   const [searchText, setSearchText] = useState<string>('');
 
   // Custom hooks for data management
@@ -34,7 +35,6 @@ export default function LiveScreen() {
     favoriteChannels,
     hasLoadedFavorites,
     isRefreshing,
-    isInitialLoading,
     handleRefresh
   } = useFavoriteChannels(activePlaylist, hasLoadedPlaylist);
 
@@ -44,28 +44,30 @@ export default function LiveScreen() {
   // Server-side groups fetching (with favorites support)
   const { groups } = useGroups(activePlaylist?.id, 'live', favoriteGroups, excludeAdult);
 
-  // Reset filter state when switching playlists
+  // Synchronous state derivation: reset filters on playlist change
   const activePlaylistId = activePlaylist?.id;
-  useEffect(() => {
-    setSelectedGroupName('');
-    setSearchText('');
-    hasSetDefaultGroup.current = false;
-  }, [activePlaylistId]);
+  const [prevActivePlaylistId, setPrevActivePlaylistId] = useState(activePlaylistId);
 
-  // One-time default: Favorites if available, otherwise All Channels
-  const hasSetDefaultGroup = useRef(false);
-  useEffect(() => {
-    if (!hasSetDefaultGroup.current && !isLoadingFavoriteGroups) {
-      hasSetDefaultGroup.current = true;
-      if (favoriteGroups.length > 0) {
-        setSelectedGroupName(FAVORITES_GROUP_SENTINEL);
-      }
-    }
-  }, [favoriteGroups, isLoadingFavoriteGroups]);
+  if (activePlaylistId !== prevActivePlaylistId) {
+    setPrevActivePlaylistId(activePlaylistId);
+    setUserGroupSelection(null);
+    setSearchText('');
+  }
+
+  // Derive selectedGroupName: user selection takes priority, otherwise default to favorites
+  const selectedGroupName = userGroupSelection !== null
+    ? userGroupSelection
+    : (!isLoadingFavoriteGroups && favoriteGroups.length > 0)
+      ? FAVORITES_GROUP_SENTINEL
+      : '';
+
+  // Defer fetching until favorites + groups are resolved to prevent flash of unfiltered content
+  const shouldDeferFetch = !hasLoadedFavorites || isLoadingFavoriteGroups
+    || (selectedGroupName === FAVORITES_GROUP_SENTINEL && groups.length === 0);
 
   // Translate FAVORITES_GROUP_SENTINEL for the paginated channels query
   const channelGroups = selectedGroupName === FAVORITES_GROUP_SENTINEL
-    ? favoriteGroups
+    ? getEffectiveFavoriteGroups(favoriteGroups, groups)
     : selectedGroupName
       ? [selectedGroupName]
       : undefined;
@@ -79,7 +81,7 @@ export default function LiveScreen() {
     loadMore,
     refresh: refreshChannels,
   } = usePaginatedChannels({
-    playlistId: activePlaylist?.id,
+    playlistId: !shouldDeferFetch ? activePlaylist?.id : undefined,
     groups: channelGroups,
     search: searchText,
     contentType: 'live',
@@ -90,7 +92,7 @@ export default function LiveScreen() {
 
   // Event handlers for filters
   const handleGroupSelect = useCallback((groupName: string) => {
-    setSelectedGroupName(groupName);
+    setUserGroupSelection(groupName);
   }, []);
 
   const handleSearchTextChange = useCallback((text: string) => {
@@ -113,13 +115,16 @@ export default function LiveScreen() {
     });
   }, [router, activePlaylist?.id]);
 
-  const isLoading = !hasLoadedPlaylist || !hasLoadedFavorites || isInitialLoading || isLoadingChannels;
+  const isLoading = !hasLoadedPlaylist || shouldDeferFetch || isLoadingChannels;
 
   // Combined refresh handler
   const handleCombinedRefresh = useCallback(() => {
+    if (activePlaylist?.id) {
+      useFirstPageCacheStore.getState().invalidatePlaylist(activePlaylist.id);
+    }
     handleRefresh();
     refreshChannels();
-  }, [handleRefresh, refreshChannels]);
+  }, [handleRefresh, refreshChannels, activePlaylist?.id]);
 
   return (
     <LiveScreenContent

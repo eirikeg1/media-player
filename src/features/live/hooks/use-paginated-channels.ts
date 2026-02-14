@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { RustChannelService } from '@/services/rust-channel-service';
+import { useFirstPageCacheStore } from '@/stores/cache';
 import type { Channel } from '@/types/playlist.types';
 
 const DEFAULT_PAGE_SIZE = 50;
@@ -45,6 +46,12 @@ export function usePaginatedChannels({
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState(0);
+  const [loadedPlaylistId, setLoadedPlaylistId] = useState<string | null>(null);
+
+  // Use a ref for favorite IDs so toggling a favorite doesn't trigger re-fetch.
+  // The new sort order only takes effect on the next refresh.
+  const favoriteIdsRef = useRef(favoriteChannelIds);
+  favoriteIdsRef.current = favoriteChannelIds;
 
   // Stabilize groups reference — only update when contents actually change
   const groupsRef = useRef(groups);
@@ -60,6 +67,8 @@ export function usePaginatedChannels({
   const offsetRef = useRef(0);
   // Track if we're currently loading to prevent duplicate requests
   const isLoadingRef = useRef(false);
+  // Generation counter to discard stale fetch results after filter changes
+  const fetchGenerationRef = useRef(0);
   // Track the current search term for debouncing
   const debouncedSearchRef = useRef<string | undefined>(search);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -78,6 +87,7 @@ export function usePaginatedChannels({
         return;
       }
 
+      const generation = fetchGenerationRef.current;
       isLoadingRef.current = true;
 
       if (isInitial && showLoading) {
@@ -97,7 +107,11 @@ export function usePaginatedChannels({
           sortBy: 'title',
           sortOrder: 'asc',
           excludeAdult,
+          favoriteIds: favoriteIdsRef.current.length > 0 ? favoriteIdsRef.current : undefined,
         });
+
+        // Discard stale results from superseded fetches
+        if (generation !== fetchGenerationRef.current) return;
 
         // Determine if there are more pages using the totalCount from the query
         const hasMorePages = offset + result.channels.length < result.totalCount;
@@ -106,12 +120,20 @@ export function usePaginatedChannels({
         if (isInitial) {
           setChannels(result.channels);
           setTotalCount(result.totalCount);
+
+          // Write back to cache for unfiltered default views
+          if (playlistId && !debouncedSearchRef.current && (!stableGroups || stableGroups.length === 0)) {
+            useFirstPageCacheStore.getState().setCachedChannels(
+              playlistId, (contentType || 'live') as 'live' | 'movie', result.channels, result.totalCount
+            );
+          }
         } else {
           setChannels((prev) => [...prev, ...result.channels]);
         }
 
         offsetRef.current = offset + result.channels.length;
       } catch (err) {
+        if (generation !== fetchGenerationRef.current) return;
         const message = err instanceof Error ? err.message : 'Failed to fetch channels';
         console.error('[usePaginatedChannels] Error:', message);
         setError(message);
@@ -119,11 +141,16 @@ export function usePaginatedChannels({
           setChannels([]);
         }
       } finally {
-        isLoadingRef.current = false;
-        if (isInitial && showLoading) {
-          setIsLoading(false);
-        } else if (!isInitial) {
-          setIsLoadingMore(false);
+        if (generation === fetchGenerationRef.current) {
+          isLoadingRef.current = false;
+          if (isInitial) {
+            setLoadedPlaylistId(playlistId ?? null);
+            if (showLoading) {
+              setIsLoading(false);
+            }
+          } else {
+            setIsLoadingMore(false);
+          }
         }
       }
     },
@@ -132,6 +159,14 @@ export function usePaginatedChannels({
 
   // Reset and fetch first page when filters change
   useEffect(() => {
+    // Don't clear data when hook is deactivated — stale data isn't rendered
+    if (!playlistId) return;
+
+    // Invalidate any in-flight fetch so its results are discarded
+    fetchGenerationRef.current++;
+    // Reset loading guard so new filter combinations can fetch
+    isLoadingRef.current = false;
+
     // Clear any pending debounce timer
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
@@ -139,22 +174,46 @@ export function usePaginatedChannels({
 
     const isSearchChange = search !== debouncedSearchRef.current;
 
-    // Debounce search changes
-    debounceTimerRef.current = setTimeout(() => {
+    const runFetch = () => {
       debouncedSearchRef.current = search;
       offsetRef.current = 0;
+
+      // Check cache for unfiltered default views
+      const isDefaultView = !search && (!stableGroups || stableGroups.length === 0);
+      if (isDefaultView) {
+        const cacheType = (contentType || 'live') as 'live' | 'movie';
+        const cached = useFirstPageCacheStore.getState().getCachedChannels(playlistId, cacheType);
+        const cachedExcludeAdult = useFirstPageCacheStore.getState().getExcludeAdult(playlistId);
+        if (cached && cached.items.length > 0 && cachedExcludeAdult === excludeAdult) {
+          setChannels(cached.items);
+          setTotalCount(cached.totalCount);
+          setHasMore(cached.items.length < cached.totalCount);
+          setLoadedPlaylistId(playlistId);
+          offsetRef.current = cached.items.length;
+          // Background revalidation (no loading spinner)
+          fetchPage(0, true, false);
+          return;
+        }
+      }
 
       setChannels([]);
       setHasMore(true);
       fetchPage(0, true);
-    }, isSearchChange ? SEARCH_DEBOUNCE_MS : 0);
+    };
+
+    // Only debounce actual search changes — run everything else synchronously
+    if (isSearchChange) {
+      debounceTimerRef.current = setTimeout(runFetch, SEARCH_DEBOUNCE_MS);
+    } else {
+      runFetch();
+    }
 
     return () => {
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
       }
     };
-  }, [playlistId, stableGroups, search, contentType, fetchPage]);
+  }, [playlistId, stableGroups, search, contentType, excludeAdult, fetchPage]);
 
   // Load more channels (next page)
   const loadMore = useCallback(() => {
@@ -172,13 +231,12 @@ export function usePaginatedChannels({
     fetchPage(0, true);
   }, [fetchPage]);
 
-  // Mark favorites in the channel list (favorites appear in natural position with star icon)
-  // This is a lightweight client-side operation since favoriteChannelIds is typically small
-  const channelsWithFavoriteInfo = channels;
+  // Consider loading if explicitly loading OR if playlistId changed but data hasn't loaded yet
+  const isEffectivelyLoading = isLoading || (!!playlistId && loadedPlaylistId !== playlistId);
 
   return {
-    channels: channelsWithFavoriteInfo,
-    isLoading,
+    channels,
+    isLoading: isEffectivelyLoading,
     isLoadingMore,
     hasMore,
     error,

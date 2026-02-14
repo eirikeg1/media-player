@@ -2,7 +2,7 @@ import InfiniteParallaxGrid from '@/components/ui/containers/infinite-parallax-g
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
-import { LiveLoadingSpinner } from '@/features/live/live-loading-spinner';
+import { SkeletonGrid } from '@/components/ui/display/skeleton-grid';
 import { MovieItem } from '@/features/videos/movie-item';
 import { SeriesItem } from '@/features/videos/series-item';
 import { VideosEmptyState } from '@/features/videos/videos-empty-state';
@@ -114,15 +114,6 @@ export function VideosScreenContent({
     );
   }, [searchText, selectedGroup, iconColor, contentType]);
 
-  const LoadingComponent = useCallback(() => {
-    return (
-      <LiveLoadingSpinner
-        isLoading={isLoading}
-        tintColor={tintColor}
-      />
-    );
-  }, [isLoading, tintColor]);
-
   // Loading more indicator for pagination
   const LoadingMoreComponent = useMemo(() => {
     if (!isLoadingMore) return undefined;
@@ -174,7 +165,7 @@ export function VideosScreenContent({
     onRefresh,
   };
 
-  // Show loading spinner if data hasn't loaded yet
+  // Show skeleton loading if data hasn't loaded yet
   if (isLoading) {
     return (
       <View style={[styles.container, { backgroundColor }]}>
@@ -184,7 +175,7 @@ export function VideosScreenContent({
             renderItem={renderSeriesItem}
             keyExtractor={seriesKeyExtractor}
             {...gridProps}
-            ListEmptyComponent={<LoadingComponent />}
+            ListEmptyComponent={<SkeletonGrid variant="series" />}
           />
         ) : (
           <InfiniteParallaxGrid
@@ -192,7 +183,7 @@ export function VideosScreenContent({
             renderItem={renderChannelItem}
             keyExtractor={channelKeyExtractor}
             {...gridProps}
-            ListEmptyComponent={<LoadingComponent />}
+            ListEmptyComponent={<SkeletonGrid variant="movie" />}
           />
         )}
       </View>

@@ -1,6 +1,6 @@
 import { ChannelItem } from '@/features/live/channel-item';
 import { LiveEmptyState } from '@/features/live/live-empty-state';
-import { LiveLoadingSpinner } from '@/features/live/live-loading-spinner';
+import { SkeletonGrid } from '@/components/ui/display/skeleton-grid';
 import { LiveTopBar } from '@/features/live/live-top-bar';
 import InfiniteParallaxGrid from '@/components/ui/containers/infinite-parallax-grid';
 import { Image } from 'expo-image';
@@ -85,15 +85,6 @@ export function LiveScreenContent({
     );
   }, [searchText, selectedGroup, iconColor]);
 
-  const LoadingComponent = useCallback(() => {
-    return (
-      <LiveLoadingSpinner
-        isLoading={isLoading}
-        tintColor={tintColor}
-      />
-    );
-  }, [isLoading, tintColor]);
-
   // Loading more indicator for pagination
   const LoadingMoreComponent = useMemo(() => {
     if (!isLoadingMore) return undefined;
@@ -143,7 +134,7 @@ export function LiveScreenContent({
           columns={4}
           padding={5}
           gap={4}
-          ListEmptyComponent={<LoadingComponent />}
+          ListEmptyComponent={<SkeletonGrid variant="channel" />}
           refreshing={isRefreshing}
           onRefresh={onRefresh}
         />

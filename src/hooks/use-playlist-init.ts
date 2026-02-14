@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { usePlaylistStore } from '@/stores/playlist/playlist-store';
 import { useUserStore } from '@/stores/user/user-store';
+import { useFirstPageCacheStore } from '@/stores/cache';
 import { initializeDatabase } from '@/db/migrations';
 
 /**
@@ -32,6 +33,26 @@ export function usePlaylistInit() {
         console.log('[App] Loading playlists...');
         await loadPlaylists();
         console.log('[App] Playlists loaded successfully');
+
+        // Pre-fetch first pages for instant tab switching
+        const activePlaylistId = usePlaylistStore.getState().activePlaylistId;
+        const currentUser = useUserStore.getState().currentUser;
+        const excludeAdult = currentUser?.settings?.parentalControlEnabled ?? false;
+
+        // Load favorites before pre-fetching so cached pages have correct sort order
+        if (currentUser) {
+          console.log('[App] Loading favorite channels...');
+          await useUserStore.getState().loadFavoriteChannels(currentUser.id);
+        }
+        const favoriteChannels = useUserStore.getState().favoriteChannels;
+
+        if (activePlaylistId) {
+          console.log('[App] Pre-fetching first pages...');
+          await useFirstPageCacheStore.getState().preFetchAll(
+            activePlaylistId, excludeAdult, favoriteChannels
+          );
+          console.log('[App] First pages pre-fetched successfully');
+        }
       } catch (error) {
         console.error('[App] Failed to initialize app:', error);
       }

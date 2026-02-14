@@ -1,3 +1,4 @@
+import type { GroupCount } from 'expo-m3u-parser';
 import type { Channel } from '@/types/playlist.types';
 
 export const FAVORITES_GROUP_SENTINEL = '__favorites__';
@@ -75,6 +76,35 @@ export function sortGroupsWithAdultLast(groups: GroupOption[]): GroupOption[] {
   adult.sort((a, b) => a.name.localeCompare(b.name));
 
   return [...nonAdult, ...adult];
+}
+
+/**
+ * Process raw GroupCount results from the Rust backend into GroupOption[].
+ * Calculates total count, converts to GroupOption format, sorts with adult last,
+ * and prepends an "All" entry.
+ */
+export function processRawGroupCounts(groupCounts: GroupCount[]): GroupOption[] {
+  const totalCount = groupCounts.reduce((sum, g) => sum + g.count, 0);
+  const groupOptions = groupCounts.map((g) => ({ name: g.name, channelCount: g.count }));
+  const sorted = sortGroupsWithAdultLast(groupOptions);
+  return [{ name: '', channelCount: totalCount }, ...sorted];
+}
+
+/**
+ * Intersect favorite groups with groups available for the current content type.
+ * Returns matched group names, or undefined if no favorites match (shows all content).
+ */
+export function getEffectiveFavoriteGroups(
+  favoriteGroups: string[],
+  availableGroups: GroupOption[],
+): string[] | undefined {
+  const availableNames = new Set(
+    availableGroups
+      .filter((g) => g.name !== '' && g.name !== FAVORITES_GROUP_SENTINEL)
+      .map((g) => g.name),
+  );
+  const matched = favoriteGroups.filter((g) => availableNames.has(g));
+  return matched.length > 0 ? matched : undefined;
 }
 
 /**

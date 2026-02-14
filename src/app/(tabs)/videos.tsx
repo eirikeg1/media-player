@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import type { SeriesInfo } from 'expo-m3u-parser';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import { useFavoriteChannels } from '@/features/live/hooks/use-favorite-channels';
 import { useFavoriteGroups } from '@/features/live/hooks/use-favorite-groups';
@@ -13,7 +13,8 @@ import { SeriesDetailModal } from '@/features/videos/series-detail-modal';
 import { VideosScreenContent } from '@/features/videos/videos-screen-content';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { getChannelId } from '@/lib/channel-utils';
-import { FAVORITES_GROUP_SENTINEL } from '@/lib/group-utils';
+import { FAVORITES_GROUP_SENTINEL, getEffectiveFavoriteGroups } from '@/lib/group-utils';
+import { useFirstPageCacheStore } from '@/stores/cache';
 import { useUserStore } from '@/stores/user/user-store';
 import type { Channel } from '@/types/playlist.types';
 
@@ -40,7 +41,7 @@ export default function VideosScreen() {
   const [movieModalVisible, setMovieModalVisible] = useState(false);
 
   // Filter state managed locally, passed to paginated hook
-  const [selectedGroupName, setSelectedGroupName] = useState<string>('');
+  const [userGroupSelection, setUserGroupSelection] = useState<string | null>(null);
   const [searchText, setSearchText] = useState<string>('');
 
   // Custom hooks for data management
@@ -49,7 +50,6 @@ export default function VideosScreen() {
     favoriteChannels,
     hasLoadedFavorites,
     isRefreshing,
-    isInitialLoading,
     handleRefresh
   } = useFavoriteChannels(activePlaylist, hasLoadedPlaylist);
 
@@ -59,35 +59,38 @@ export default function VideosScreen() {
   // Server-side groups fetching (with favorites support)
   const { groups } = useGroups(activePlaylist?.id, contentType, favoriteGroups, excludeAdult);
 
-  // Reset filter state when switching playlists
+  // Synchronous state derivation: reset filters on playlist/content type change
+  // (avoids useEffect timing issues where stale groups reach hooks before reset)
   const activePlaylistId = activePlaylist?.id;
-  useEffect(() => {
-    setSelectedGroupName('');
-    setSearchText('');
-    hasSetDefaultGroup.current = false;
-  }, [activePlaylistId]);
+  const [prevActivePlaylistId, setPrevActivePlaylistId] = useState(activePlaylistId);
+  const [prevContentType, setPrevContentType] = useState(contentType);
 
-  // Reset filter state when switching content type
-  useEffect(() => {
-    setSelectedGroupName('');
+  if (activePlaylistId !== prevActivePlaylistId) {
+    setPrevActivePlaylistId(activePlaylistId);
+    setUserGroupSelection(null);
     setSearchText('');
-    hasSetDefaultGroup.current = false;
-  }, [contentType]);
+  }
 
-  // One-time default: Favorites if available, otherwise All Channels
-  const hasSetDefaultGroup = useRef(false);
-  useEffect(() => {
-    if (!hasSetDefaultGroup.current && !isLoadingFavoriteGroups) {
-      hasSetDefaultGroup.current = true;
-      if (favoriteGroups.length > 0) {
-        setSelectedGroupName(FAVORITES_GROUP_SENTINEL);
-      }
-    }
-  }, [favoriteGroups, isLoadingFavoriteGroups]);
+  if (contentType !== prevContentType) {
+    setPrevContentType(contentType);
+    setUserGroupSelection(null);
+    setSearchText('');
+  }
+
+  // Derive selectedGroupName: user selection takes priority, otherwise default to favorites
+  const selectedGroupName = userGroupSelection !== null
+    ? userGroupSelection
+    : (!isLoadingFavoriteGroups && favoriteGroups.length > 0)
+      ? FAVORITES_GROUP_SENTINEL
+      : '';
+
+  // Defer fetching until favorites + groups are resolved to prevent flash of unfiltered content
+  const shouldDeferFetch = !hasLoadedFavorites || isLoadingFavoriteGroups
+    || (selectedGroupName === FAVORITES_GROUP_SENTINEL && groups.length === 0);
 
   // Translate FAVORITES_GROUP_SENTINEL for the paginated channels query
   const channelGroups = selectedGroupName === FAVORITES_GROUP_SENTINEL
-    ? favoriteGroups
+    ? getEffectiveFavoriteGroups(favoriteGroups, groups)
     : selectedGroupName
       ? [selectedGroupName]
       : undefined;
@@ -101,7 +104,7 @@ export default function VideosScreen() {
     loadMore: loadMoreChannels,
     refresh: refreshChannels,
   } = usePaginatedChannels({
-    playlistId: contentType === 'movie' ? activePlaylist?.id : undefined,
+    playlistId: (contentType === 'movie' && !shouldDeferFetch) ? activePlaylist?.id : undefined,
     groups: channelGroups,
     search: searchText,
     contentType: 'movie',
@@ -118,15 +121,16 @@ export default function VideosScreen() {
     loadMore: loadMoreSeries,
     refresh: refreshSeries,
   } = usePaginatedSeries({
-    playlistId: contentType === 'series' ? activePlaylist?.id : undefined,
+    playlistId: (contentType === 'series' && !shouldDeferFetch) ? activePlaylist?.id : undefined,
     groups: channelGroups,
     search: searchText,
     excludeAdult,
+    favoriteChannelIds: favoriteChannels,
   });
 
   // Event handlers for filters
   const handleGroupSelect = useCallback((groupName: string) => {
-    setSelectedGroupName(groupName);
+    setUserGroupSelection(groupName);
   }, []);
 
   const handleSearchTextChange = useCallback((text: string) => {
@@ -183,7 +187,7 @@ export default function VideosScreen() {
 
   // Determine loading/pagination state based on content type
   const isSeries = contentType === 'series';
-  const isLoading = !hasLoadedPlaylist || !hasLoadedFavorites || isInitialLoading
+  const isLoading = !hasLoadedPlaylist || shouldDeferFetch
     || (isSeries ? isLoadingSeries : isLoadingChannels);
   const isLoadingMore = isSeries ? isLoadingMoreSeries : isLoadingMoreChannels;
   const hasMore = isSeries ? hasMoreSeries : hasMoreChannels;
@@ -191,13 +195,16 @@ export default function VideosScreen() {
 
   // Combined refresh handler
   const handleCombinedRefresh = useCallback(() => {
+    if (activePlaylist?.id) {
+      useFirstPageCacheStore.getState().invalidatePlaylist(activePlaylist.id);
+    }
     handleRefresh();
     if (isSeries) {
       refreshSeries();
     } else {
       refreshChannels();
     }
-  }, [handleRefresh, refreshChannels, refreshSeries, isSeries]);
+  }, [handleRefresh, refreshChannels, refreshSeries, isSeries, activePlaylist?.id]);
 
   return (
     <>

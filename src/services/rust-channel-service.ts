@@ -198,6 +198,7 @@ export class RustChannelService {
       sortBy?: 'title' | 'group' | 'tvgName';
       sortOrder?: 'asc' | 'desc';
       excludeAdult?: boolean;
+      favoriteIds?: string[];
     }
   ): Promise<{ channels: Channel[]; totalCount: number }> {
     const db = await getRustDatabase();
@@ -223,6 +224,7 @@ export class RustChannelService {
       limit?: number;
       offset?: number;
       excludeAdult?: boolean;
+      favoriteNames?: string[];
     }
   ): Promise<{ series: SeriesInfo[]; totalCount: number }> {
     const db = await getRustDatabase();

@@ -1,6 +1,28 @@
 import { useState, useEffect, useRef } from 'react';
 import { RustChannelService } from '@/services/rust-channel-service';
-import { FAVORITES_GROUP_SENTINEL, sortGroupsWithAdultLast, type GroupOption } from '@/lib/group-utils';
+import { useFirstPageCacheStore } from '@/stores/cache';
+import { FAVORITES_GROUP_SENTINEL, processRawGroupCounts, type GroupOption } from '@/lib/group-utils';
+
+/**
+ * Insert a Favorites entry after the "All" entry if favorite groups exist.
+ * Groups from cache/fetch don't include the Favorites entry since it's user-specific.
+ */
+function addFavoritesEntry(groups: GroupOption[], favoriteGroups?: string[]): GroupOption[] {
+  if (!favoriteGroups || favoriteGroups.length === 0) return groups;
+
+  const result: GroupOption[] = [];
+  for (const group of groups) {
+    result.push(group);
+    // Insert Favorites right after the "All" entry (empty name)
+    if (group.name === '') {
+      const favoritesCount = groups
+        .filter((g) => favoriteGroups.includes(g.name))
+        .reduce((sum, g) => sum + g.channelCount, 0);
+      result.push({ name: FAVORITES_GROUP_SENTINEL, channelCount: favoritesCount });
+    }
+  }
+  return result;
+}
 
 /**
  * Hook to fetch channel groups from the Rust database.
@@ -35,45 +57,34 @@ export function useGroups(
 
     let cancelled = false;
 
+    // Check cache for instant display
+    const groupContentType = (contentType || 'live') as 'live' | 'movie' | 'series';
+    const cached = useFirstPageCacheStore.getState().getCachedGroups(playlistId!, groupContentType);
+    const cachedExcludeAdult = useFirstPageCacheStore.getState().getExcludeAdult(playlistId!);
+    if (cached && cachedExcludeAdult === excludeAdult) {
+      const withFavorites = addFavoritesEntry(cached, stableFavoriteGroups);
+      setGroups(withFavorites);
+      // Still fetch in background but skip loading spinner
+    }
+
     async function fetchGroups() {
-      setIsLoading(true);
+      // Only show loading if we don't have cached data
+      if (!cached || cachedExcludeAdult !== excludeAdult) {
+        setIsLoading(true);
+      }
       setError(null);
 
       try {
-        // Fetch groups with counts from Rust backend
         const groupCounts = await RustChannelService.getGroupsWithCountsByPlaylist(playlistId!, contentType, excludeAdult);
 
         if (cancelled) return;
 
-        // Calculate total channel count for "All Channels" option
-        const totalCount = groupCounts.reduce((sum, g) => sum + g.count, 0);
+        const processed = processRawGroupCounts(groupCounts);
 
-        // Convert to GroupOption format
-        const groupOptions: GroupOption[] = groupCounts.map((g) => ({
-          name: g.name,
-          channelCount: g.count,
-        }));
+        // Write back to cache
+        useFirstPageCacheStore.getState().setCachedGroups(playlistId!, groupContentType, processed);
 
-        // Sort alphabetically with adult groups at the bottom
-        const sortedGroups = sortGroupsWithAdultLast(groupOptions);
-
-        // Build final list: All Channels → Favorites (if applicable) → sorted groups
-        const result: GroupOption[] = [];
-
-        // Add "All Channels" option (empty string name means "all")
-        result.push({ name: '', channelCount: totalCount });
-
-        // Add Favorites entry if there are favorite groups
-        if (stableFavoriteGroups && stableFavoriteGroups.length > 0) {
-          const favoritesCount = groupCounts
-            .filter((g) => stableFavoriteGroups.includes(g.name))
-            .reduce((sum, g) => sum + g.count, 0);
-          result.push({ name: FAVORITES_GROUP_SENTINEL, channelCount: favoritesCount });
-        }
-
-        // Add sorted groups
-        result.push(...sortedGroups);
-
+        const result = addFavoritesEntry(processed, stableFavoriteGroups);
         setGroups(result);
       } catch (err) {
         if (cancelled) return;
@@ -81,7 +92,10 @@ export function useGroups(
         const message = err instanceof Error ? err.message : 'Failed to fetch groups';
         console.error('[useGroups] Error:', message);
         setError(message);
-        setGroups([]);
+        // Only clear groups if we didn't have cached data
+        if (!cached || cachedExcludeAdult !== excludeAdult) {
+          setGroups([]);
+        }
       } finally {
         if (!cancelled) {
           setIsLoading(false);

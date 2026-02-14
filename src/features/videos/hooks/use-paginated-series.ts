@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { RustChannelService } from '@/services/rust-channel-service';
+import { useFirstPageCacheStore } from '@/stores/cache';
 import type { SeriesInfo } from 'expo-m3u-parser';
 
 const DEFAULT_PAGE_SIZE = 50;
@@ -11,6 +12,7 @@ interface UsePaginatedSeriesOptions {
   search?: string;
   pageSize?: number;
   excludeAdult?: boolean;
+  favoriteChannelIds?: string[];
 }
 
 interface UsePaginatedSeriesReturn {
@@ -34,6 +36,7 @@ export function usePaginatedSeries({
   search,
   pageSize = DEFAULT_PAGE_SIZE,
   excludeAdult,
+  favoriteChannelIds,
 }: UsePaginatedSeriesOptions): UsePaginatedSeriesReturn {
   const [series, setSeries] = useState<SeriesInfo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -41,6 +44,14 @@ export function usePaginatedSeries({
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState(0);
+  const [loadedPlaylistId, setLoadedPlaylistId] = useState<string | null>(null);
+
+  // Use a ref for favorite names so toggling a favorite doesn't trigger re-fetch.
+  // Extract series names from favorite IDs by stripping the "series:" prefix.
+  const favoriteNamesRef = useRef<string[]>([]);
+  favoriteNamesRef.current = (favoriteChannelIds ?? [])
+    .filter((id) => id.startsWith('series:'))
+    .map((id) => id.slice(7));
 
   // Stabilize groups reference
   const groupsRef = useRef(groups);
@@ -54,11 +65,13 @@ export function usePaginatedSeries({
 
   const offsetRef = useRef(0);
   const isLoadingRef = useRef(false);
+  // Generation counter to discard stale fetch results after filter changes
+  const fetchGenerationRef = useRef(0);
   const debouncedSearchRef = useRef<string | undefined>(search);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchPage = useCallback(
-    async (offset: number, isInitial: boolean) => {
+    async (offset: number, isInitial: boolean, showLoading: boolean = true) => {
       if (!playlistId) {
         setSeries([]);
         setHasMore(false);
@@ -67,11 +80,13 @@ export function usePaginatedSeries({
       }
 
       if (isLoadingRef.current) return;
+
+      const generation = fetchGenerationRef.current;
       isLoadingRef.current = true;
 
-      if (isInitial) {
+      if (isInitial && showLoading) {
         setIsLoading(true);
-      } else {
+      } else if (!isInitial) {
         setIsLoadingMore(true);
       }
       setError(null);
@@ -83,7 +98,11 @@ export function usePaginatedSeries({
           limit: pageSize,
           offset,
           excludeAdult,
+          favoriteNames: favoriteNamesRef.current.length > 0 ? favoriteNamesRef.current : undefined,
         });
+
+        // Discard stale results from superseded fetches
+        if (generation !== fetchGenerationRef.current) return;
 
         const hasMorePages = offset + result.series.length < result.totalCount;
         setHasMore(hasMorePages);
@@ -91,12 +110,20 @@ export function usePaginatedSeries({
         if (isInitial) {
           setSeries(result.series);
           setTotalCount(result.totalCount);
+
+          // Write back to cache for unfiltered default views
+          if (playlistId && !debouncedSearchRef.current && (!stableGroups || stableGroups.length === 0)) {
+            useFirstPageCacheStore.getState().setCachedSeries(
+              playlistId, result.series, result.totalCount
+            );
+          }
         } else {
           setSeries((prev) => [...prev, ...result.series]);
         }
 
         offsetRef.current = offset + result.series.length;
       } catch (err) {
+        if (generation !== fetchGenerationRef.current) return;
         const message = err instanceof Error ? err.message : 'Failed to fetch series';
         console.error('[usePaginatedSeries] Error:', message);
         setError(message);
@@ -104,11 +131,16 @@ export function usePaginatedSeries({
           setSeries([]);
         }
       } finally {
-        isLoadingRef.current = false;
-        if (isInitial) {
-          setIsLoading(false);
-        } else {
-          setIsLoadingMore(false);
+        if (generation === fetchGenerationRef.current) {
+          isLoadingRef.current = false;
+          if (isInitial) {
+            setLoadedPlaylistId(playlistId ?? null);
+            if (showLoading) {
+              setIsLoading(false);
+            }
+          } else {
+            setIsLoadingMore(false);
+          }
         }
       }
     },
@@ -117,26 +149,59 @@ export function usePaginatedSeries({
 
   // Reset and fetch first page when filters change
   useEffect(() => {
+    // Don't clear data when hook is deactivated — stale data isn't rendered
+    if (!playlistId) return;
+
+    // Invalidate any in-flight fetch so its results are discarded
+    fetchGenerationRef.current++;
+    // Reset loading guard so new filter combinations can fetch
+    isLoadingRef.current = false;
+
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
     }
 
     const isSearchChange = search !== debouncedSearchRef.current;
 
-    debounceTimerRef.current = setTimeout(() => {
+    const runFetch = () => {
       debouncedSearchRef.current = search;
       offsetRef.current = 0;
+
+      // Check cache for unfiltered default views
+      const isDefaultView = !search && (!stableGroups || stableGroups.length === 0);
+      if (isDefaultView) {
+        const cached = useFirstPageCacheStore.getState().getCachedSeries(playlistId);
+        const cachedExcludeAdult = useFirstPageCacheStore.getState().getExcludeAdult(playlistId);
+        if (cached && cached.items.length > 0 && cachedExcludeAdult === excludeAdult) {
+          setSeries(cached.items);
+          setTotalCount(cached.totalCount);
+          setHasMore(cached.items.length < cached.totalCount);
+          setLoadedPlaylistId(playlistId);
+          offsetRef.current = cached.items.length;
+          // Background revalidation (no loading spinner)
+          fetchPage(0, true, false);
+          return;
+        }
+      }
+
       setSeries([]);
       setHasMore(true);
       fetchPage(0, true);
-    }, isSearchChange ? SEARCH_DEBOUNCE_MS : 0);
+    };
+
+    // Only debounce actual search changes — run everything else synchronously
+    if (isSearchChange) {
+      debounceTimerRef.current = setTimeout(runFetch, SEARCH_DEBOUNCE_MS);
+    } else {
+      runFetch();
+    }
 
     return () => {
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
       }
     };
-  }, [playlistId, stableGroups, search, fetchPage]);
+  }, [playlistId, stableGroups, search, excludeAdult, fetchPage]);
 
   const loadMore = useCallback(() => {
     if (!hasMore || isLoadingRef.current) return;
@@ -150,9 +215,12 @@ export function usePaginatedSeries({
     fetchPage(0, true);
   }, [fetchPage]);
 
+  // Consider loading if explicitly loading OR if playlistId changed but data hasn't loaded yet
+  const isEffectivelyLoading = isLoading || (!!playlistId && loadedPlaylistId !== playlistId);
+
   return {
     series,
-    isLoading,
+    isLoading: isEffectivelyLoading,
     isLoadingMore,
     hasMore,
     error,
