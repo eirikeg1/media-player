@@ -55,6 +55,7 @@ export function usePlaylistInit() {
         }
       } catch (error) {
         console.error('[App] Failed to initialize app:', error);
+        // Error is logged; splash timeout will ensure app remains usable
       }
     };
 

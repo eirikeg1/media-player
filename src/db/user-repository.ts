@@ -188,6 +188,8 @@ interface RecentlyWatchedRow {
   tvgLogo: string | null;
   watchCount: number;
   lastWatchedAt: string;
+  lastPosition: number;
+  totalDuration: number | null;
 }
 
 /**
@@ -768,7 +770,7 @@ class SQLiteUserRepository implements IUserRepository {
 
   async getRecentlyWatched(userId: string, playlistId: string, limit: number = 20): Promise<RecentlyWatchedItem[]> {
     const rows = await executeQuery<RecentlyWatchedRow>(
-      `SELECT channelId, channelName, groupTitle, contentType, tvgLogo, watchCount, lastWatchedAt
+      `SELECT channelId, channelName, groupTitle, contentType, tvgLogo, watchCount, lastWatchedAt, lastPosition, totalDuration
        FROM channel_watch_stats
        WHERE userId = ? AND playlistId = ?
        ORDER BY lastWatchedAt DESC
@@ -784,6 +786,8 @@ class SQLiteUserRepository implements IUserRepository {
       tvgLogo: row.tvgLogo ?? undefined,
       watchCount: row.watchCount,
       lastWatchedAt: row.lastWatchedAt,
+      lastPosition: row.lastPosition || undefined,
+      totalDuration: row.totalDuration ?? undefined,
     }));
   }
 

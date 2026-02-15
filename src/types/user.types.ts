@@ -158,6 +158,8 @@ export interface RecentlyWatchedItem {
   tvgLogo?: string;
   watchCount: number;
   lastWatchedAt: string;
+  lastPosition?: number;
+  totalDuration?: number;
 }
 
 /**

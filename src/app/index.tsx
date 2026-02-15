@@ -1,33 +1,25 @@
-import { View, ActivityIndicator, Text } from 'react-native';
+import { View } from 'react-native';
 import { Redirect } from 'expo-router';
 import { useUserStore } from '@/stores/user/user-store';
+import { usePlaylistStore } from '@/stores/playlist/playlist-store';
 
 /**
- * Root index - redirects to user-select or tabs based on user state
+ * Root index - redirects to user-select or tabs based on user state.
+ * Renders an invisible View while loading so the splash screen stays visible.
  */
 export default function Index() {
   const users = useUserStore(state => state.users);
   const isLoading = useUserStore(state => state.isLoading);
+  const isPlaylistInitialized = usePlaylistStore(state => state.isInitialized);
 
-  console.log('[Index] Render - isLoading:', isLoading, 'users.length:', users.length);
-
-  // Show loading while initializing
-  if (isLoading) {
-    console.log('[Index] Showing loading screen');
-    return (
-      <View className="flex-1 bg-white dark:bg-gray-950 items-center justify-center">
-        <ActivityIndicator size="large" />
-        <Text className="mt-4 text-gray-600 dark:text-gray-400">Loading...</Text>
-      </View>
-    );
+  // Wait until users AND playlists are fully loaded before navigating
+  if (isLoading || !isPlaylistInitialized) {
+    return <View style={{ flex: 1 }} />;
   }
 
-  // Redirect based on whether users exist
   if (users.length === 0) {
-    console.log('[Index] No users, redirecting to user-select');
     return <Redirect href="/user-select" />;
   }
 
-  console.log('[Index] Users exist, redirecting to tabs');
   return <Redirect href="/(tabs)" />;
 }

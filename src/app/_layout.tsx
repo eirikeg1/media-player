@@ -1,6 +1,7 @@
 import { ThemeProvider } from '@react-navigation/native';
 import { PortalHost } from '@rn-primitives/portal';
 import { Stack } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -11,6 +12,8 @@ import '../global.css';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { usePlaylistInit } from '@/hooks/use-playlist-init';
 import { NAV_THEME } from '@/lib/theme';
+
+SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();

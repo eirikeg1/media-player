@@ -12,6 +12,8 @@ import { generatePlaylistId, sanitizePlaylistName } from '@/lib/playlist-utils';
 interface PlaylistState {
   playlists: Playlist[];
   activePlaylistId: string | null;
+
+  isInitialized: boolean;
   isLoading: boolean;
   error: string | null;
 
@@ -28,6 +30,8 @@ interface PlaylistState {
 export const usePlaylistStore = create<PlaylistState>((set, get) => ({
   playlists: [],
   activePlaylistId: null,
+
+  isInitialized: false,
   isLoading: false,
   error: null,
 
@@ -311,12 +315,13 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
       set({
         playlists,
         activePlaylistId,
+        isInitialized: true,
         isLoading: false,
       });
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Failed to load playlists';
-      set({ error: errorMessage, isLoading: false });
+      set({ error: errorMessage, isInitialized: true, isLoading: false });
       throw error;
     }
   },

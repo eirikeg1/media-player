@@ -195,7 +195,7 @@ export class RustChannelService {
       contentType?: 'live' | 'movie' | 'series';
       limit?: number;
       offset?: number;
-      sortBy?: 'title' | 'group' | 'tvgName';
+      sortBy?: 'title' | 'group' | 'tvgName' | 'random';
       sortOrder?: 'asc' | 'desc';
       excludeAdult?: boolean;
       favoriteIds?: string[];
@@ -226,6 +226,7 @@ export class RustChannelService {
       excludeAdult?: boolean;
       favoriteNames?: string[];
       sortOrder?: 'asc' | 'desc';
+      random?: boolean;
     }
   ): Promise<{ series: SeriesInfo[]; totalCount: number }> {
     const db = await getRustDatabase();
