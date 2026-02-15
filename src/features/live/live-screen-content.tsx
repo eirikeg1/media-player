@@ -9,6 +9,7 @@ import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
 import { isChannelFavorite } from '@/lib/channel-utils';
 import type { GroupOption } from '@/lib/group-utils';
+import type { SortOption } from '@/types/sort.types';
 import type { Channel, Playlist } from '@/types/playlist.types';
 import type { ListRenderItemInfo } from '@shopify/flash-list';
 import { useCallback, useMemo } from 'react';
@@ -35,6 +36,10 @@ interface LiveScreenContentProps {
   tintColor: string;
   favoriteGroups: string[];
   onToggleFavoriteGroup: (name: string) => void;
+  sortOptions: SortOption[];
+  selectedSortId: string;
+  sortOrder: 'asc' | 'desc';
+  onSortSelect: (id: string) => void;
 }
 
 export function LiveScreenContent({
@@ -58,6 +63,10 @@ export function LiveScreenContent({
   tintColor,
   favoriteGroups,
   onToggleFavoriteGroup,
+  sortOptions,
+  selectedSortId,
+  sortOrder,
+  onSortSelect,
 }: LiveScreenContentProps) {
   const keyExtractor = useCallback((item: Channel, index: number) => {
     return `channel-${item.name}-${index}`;
@@ -128,6 +137,10 @@ export function LiveScreenContent({
                 onSearchTextChange={onSearchChange}
                 favoriteGroups={favoriteGroups}
                 onToggleFavoriteGroup={onToggleFavoriteGroup}
+                sortOptions={sortOptions}
+                selectedSortId={selectedSortId}
+                sortOrder={sortOrder}
+                onSortSelect={onSortSelect}
               />
             </ThemedView>
           }
@@ -184,6 +197,10 @@ export function LiveScreenContent({
                 onSearchTextChange={onSearchChange}
                 favoriteGroups={favoriteGroups}
                 onToggleFavoriteGroup={onToggleFavoriteGroup}
+                sortOptions={sortOptions}
+                selectedSortId={selectedSortId}
+                sortOrder={sortOrder}
+                onSortSelect={onSortSelect}
               />
           </ThemedView>
         }

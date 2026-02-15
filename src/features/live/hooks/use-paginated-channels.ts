@@ -14,6 +14,8 @@ interface UsePaginatedChannelsOptions {
   favoriteChannelIds: string[];
   pageSize?: number;
   excludeAdult?: boolean;
+  sortBy?: 'title' | 'group' | 'tvgName';
+  sortOrder?: 'asc' | 'desc';
 }
 
 interface UsePaginatedChannelsReturn {
@@ -39,6 +41,8 @@ export function usePaginatedChannels({
   favoriteChannelIds,
   pageSize = DEFAULT_PAGE_SIZE,
   excludeAdult,
+  sortBy,
+  sortOrder,
 }: UsePaginatedChannelsOptions): UsePaginatedChannelsReturn {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -104,8 +108,8 @@ export function usePaginatedChannels({
           contentType: contentType || undefined,
           limit: pageSize,
           offset,
-          sortBy: 'title',
-          sortOrder: 'asc',
+          sortBy: sortBy || undefined,
+          sortOrder: sortOrder || 'asc',
           excludeAdult,
           favoriteIds: favoriteIdsRef.current.length > 0 ? favoriteIdsRef.current : undefined,
         });
@@ -121,8 +125,8 @@ export function usePaginatedChannels({
           setChannels(result.channels);
           setTotalCount(result.totalCount);
 
-          // Write back to cache for unfiltered default views
-          if (playlistId && !debouncedSearchRef.current && (!stableGroups || stableGroups.length === 0)) {
+          // Write back to cache for unfiltered default views (only for default sort)
+          if (playlistId && !debouncedSearchRef.current && (!stableGroups || stableGroups.length === 0) && !sortBy) {
             useFirstPageCacheStore.getState().setCachedChannels(
               playlistId, (contentType || 'live') as 'live' | 'movie', result.channels, result.totalCount
             );
@@ -154,7 +158,7 @@ export function usePaginatedChannels({
         }
       }
     },
-    [playlistId, stableGroups, contentType, pageSize, excludeAdult]
+    [playlistId, stableGroups, contentType, pageSize, excludeAdult, sortBy, sortOrder]
   );
 
   // Reset and fetch first page when filters change
@@ -178,8 +182,8 @@ export function usePaginatedChannels({
       debouncedSearchRef.current = search;
       offsetRef.current = 0;
 
-      // Check cache for unfiltered default views
-      const isDefaultView = !search && (!stableGroups || stableGroups.length === 0);
+      // Check cache for unfiltered default views (only for default sort)
+      const isDefaultView = !search && (!stableGroups || stableGroups.length === 0) && !sortBy;
       if (isDefaultView) {
         const cacheType = (contentType || 'live') as 'live' | 'movie';
         const cached = useFirstPageCacheStore.getState().getCachedChannels(playlistId, cacheType);
@@ -213,7 +217,7 @@ export function usePaginatedChannels({
         clearTimeout(debounceTimerRef.current);
       }
     };
-  }, [playlistId, stableGroups, search, contentType, excludeAdult, fetchPage]);
+  }, [playlistId, stableGroups, search, contentType, excludeAdult, sortBy, sortOrder, fetchPage]);
 
   // Load more channels (next page)
   const loadMore = useCallback(() => {

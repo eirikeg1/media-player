@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import type { SeriesInfo } from 'expo-m3u-parser';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import { useFavoriteChannels } from '@/features/live/hooks/use-favorite-channels';
 import { useFavoriteGroups } from '@/features/live/hooks/use-favorite-groups';
@@ -16,6 +16,7 @@ import { getChannelId } from '@/lib/channel-utils';
 import { FAVORITES_GROUP_SENTINEL, getEffectiveFavoriteGroups } from '@/lib/group-utils';
 import { useFirstPageCacheStore } from '@/stores/cache';
 import { useUserStore } from '@/stores/user/user-store';
+import { MOVIE_SORT_OPTIONS, SERIES_SORT_OPTIONS } from '@/types/sort.types';
 import type { Channel } from '@/types/playlist.types';
 
 export default function VideosScreen() {
@@ -43,6 +44,10 @@ export default function VideosScreen() {
   // Filter state managed locally, passed to paginated hook
   const [userGroupSelection, setUserGroupSelection] = useState<string | null>(null);
   const [searchText, setSearchText] = useState<string>('');
+  const [movieSortId, setMovieSortId] = useState('alphabetical');
+  const [movieSortOrder, setMovieSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [seriesSortId, setSeriesSortId] = useState('alphabetical');
+  const [seriesSortOrder, setSeriesSortOrder] = useState<'asc' | 'desc'>('asc');
 
   // Custom hooks for data management
   const { activePlaylist, hasLoadedPlaylist } = usePlaylistData();
@@ -69,6 +74,10 @@ export default function VideosScreen() {
     setPrevActivePlaylistId(activePlaylistId);
     setUserGroupSelection(null);
     setSearchText('');
+    setMovieSortId('alphabetical');
+    setMovieSortOrder('asc');
+    setSeriesSortId('alphabetical');
+    setSeriesSortOrder('asc');
   }
 
   if (contentType !== prevContentType) {
@@ -95,6 +104,16 @@ export default function VideosScreen() {
       ? [selectedGroupName]
       : undefined;
 
+  // Derive active sort options based on content type
+  const isSeries = contentType === 'series';
+  const activeSortOptions = isSeries ? SERIES_SORT_OPTIONS : MOVIE_SORT_OPTIONS;
+  const selectedSortId = isSeries ? seriesSortId : movieSortId;
+  const activeSortOrder = isSeries ? seriesSortOrder : movieSortOrder;
+  const activeSortOption = useMemo(
+    () => activeSortOptions.find((o) => o.id === selectedSortId) ?? activeSortOptions[0],
+    [activeSortOptions, selectedSortId],
+  );
+
   // Paginated channels with server-side filtering (active for movies)
   const {
     channels,
@@ -110,6 +129,8 @@ export default function VideosScreen() {
     contentType: 'movie',
     favoriteChannelIds: favoriteChannels,
     excludeAdult,
+    sortBy: activeSortOption.sortBy,
+    sortOrder: activeSortOrder,
   });
 
   // Paginated series (active for series)
@@ -126,6 +147,7 @@ export default function VideosScreen() {
     search: searchText,
     excludeAdult,
     favoriteChannelIds: favoriteChannels,
+    sortOrder: activeSortOrder,
   });
 
   // Event handlers for filters
@@ -140,6 +162,21 @@ export default function VideosScreen() {
   const handleContentTypeChange = useCallback((type: 'movie' | 'series') => {
     setContentType(type);
   }, []);
+
+  const handleSortSelect = useCallback((id: string) => {
+    const currentId = isSeries ? seriesSortId : movieSortId;
+    const setId = isSeries ? setSeriesSortId : setMovieSortId;
+    const setOrder = isSeries ? setSeriesSortOrder : setMovieSortOrder;
+    const options = isSeries ? SERIES_SORT_OPTIONS : MOVIE_SORT_OPTIONS;
+
+    if (id === currentId) {
+      setOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      const option = options.find((o) => o.id === id);
+      setId(id);
+      setOrder(option?.defaultOrder ?? 'asc');
+    }
+  }, [isSeries, seriesSortId, movieSortId]);
 
   // Event handlers
   const handleChannelPress = useCallback((channel: Channel) => {
@@ -186,7 +223,6 @@ export default function VideosScreen() {
   }, [handleChannelPress]);
 
   // Determine loading/pagination state based on content type
-  const isSeries = contentType === 'series';
   const isLoading = !hasLoadedPlaylist || shouldDeferFetch
     || (isSeries ? isLoadingSeries : isLoadingChannels);
   const isLoadingMore = isSeries ? isLoadingMoreSeries : isLoadingMoreChannels;
@@ -233,6 +269,10 @@ export default function VideosScreen() {
         onToggleFavoriteGroup={toggleFavoriteGroup}
         seriesList={seriesList}
         onSeriesPress={handleSeriesPress}
+        sortOptions={activeSortOptions}
+        selectedSortId={selectedSortId}
+        sortOrder={activeSortOrder}
+        onSortSelect={handleSortSelect}
       />
       <MovieDetailModal
         visible={movieModalVisible}

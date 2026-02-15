@@ -1,6 +1,8 @@
+import { SortButton } from '@/components/domain/sort/sort-button';
 import { Button } from '@/components/ui/controls/button';
 import { Input } from '@/components/ui/controls/inputs/input';
 import { ChannelGroupButton } from '@/features/live/channel-group-button';
+import type { SortOption } from '@/types/sort.types';
 import { StyleSheet, View } from 'react-native';
 
 interface GroupOption {
@@ -18,6 +20,10 @@ interface VideosTopBarProps {
   onSearchTextChange: (text: string) => void;
   favoriteGroups: string[];
   onToggleFavoriteGroup: (name: string) => void;
+  sortOptions: SortOption[];
+  selectedSortId: string;
+  sortOrder: 'asc' | 'desc';
+  onSortSelect: (id: string) => void;
 }
 
 export function VideosTopBar({
@@ -30,6 +36,10 @@ export function VideosTopBar({
   onSearchTextChange,
   favoriteGroups,
   onToggleFavoriteGroup,
+  sortOptions,
+  selectedSortId,
+  sortOrder,
+  onSortSelect,
 }: VideosTopBarProps) {
   return (
     <View style={styles.container}>
@@ -52,24 +62,28 @@ export function VideosTopBar({
           />
         </View>
 
-        {/* Group Selector Button */}
-        <View style={styles.buttonContainer}>
-          <ChannelGroupButton
-            groups={groups}
-            selectedGroupName={selectedGroupName}
-            onGroupSelect={onGroupSelect}
-            favoriteGroups={favoriteGroups}
-            onToggleFavoriteGroup={onToggleFavoriteGroup}
-          />
-        </View>
+        {/* Group Selector */}
+        <ChannelGroupButton
+          groups={groups}
+          selectedGroupName={selectedGroupName}
+          onGroupSelect={onGroupSelect}
+          favoriteGroups={favoriteGroups}
+          onToggleFavoriteGroup={onToggleFavoriteGroup}
+        />
 
-        {/* Search Input */}
-        <View style={styles.searchContainer}>
+        {/* Search Input + Sort Button */}
+        <View style={styles.searchRow}>
           <Input
             placeholder="Search videos..."
             value={searchText}
             onChangeText={onSearchTextChange}
             style={styles.searchInput}
+          />
+          <SortButton
+            options={sortOptions}
+            selectedId={selectedSortId}
+            sortOrder={sortOrder}
+            onSelect={onSortSelect}
           />
         </View>
       </View>
@@ -94,14 +108,10 @@ const styles = StyleSheet.create({
   toggleButton: {
     flex: 1,
   },
-  buttonContainer: {
-    alignSelf: 'flex-start',
-  },
-  searchContainer: {
-    flex: 1,
+  searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    position: 'relative',
+    gap: 8,
   },
   searchInput: {
     flex: 1,

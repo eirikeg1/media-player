@@ -6,6 +6,7 @@ export const FAVORITES_GROUP_SENTINEL = '__favorites__';
 export interface GroupOption {
   name: string;
   channelCount: number;
+  firstPosition?: number;
 }
 
 /**
@@ -85,7 +86,11 @@ export function sortGroupsWithAdultLast(groups: GroupOption[]): GroupOption[] {
  */
 export function processRawGroupCounts(groupCounts: GroupCount[]): GroupOption[] {
   const totalCount = groupCounts.reduce((sum, g) => sum + g.count, 0);
-  const groupOptions = groupCounts.map((g) => ({ name: g.name, channelCount: g.count }));
+  const groupOptions = groupCounts.map((g) => ({
+    name: g.name,
+    channelCount: g.count,
+    firstPosition: g.firstPosition,
+  }));
   const sorted = sortGroupsWithAdultLast(groupOptions);
   return [{ name: '', channelCount: totalCount }, ...sorted];
 }

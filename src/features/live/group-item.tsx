@@ -10,6 +10,7 @@ export type SelectionColors = ReturnType<typeof useSelectionColors>;
 export interface GroupItem {
   name: string;
   channelCount: number;
+  firstPosition?: number;
 }
 
 export interface GroupItemProps {

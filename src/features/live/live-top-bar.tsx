@@ -1,4 +1,6 @@
+import { SortButton } from '@/components/domain/sort/sort-button';
 import { Input } from '@/components/ui/controls/inputs/input';
+import type { SortOption } from '@/types/sort.types';
 import { StyleSheet, View } from 'react-native';
 import { ChannelGroupButton } from './channel-group-button';
 
@@ -15,6 +17,10 @@ interface LiveTopBarProps {
   onSearchTextChange: (text: string) => void;
   favoriteGroups: string[];
   onToggleFavoriteGroup: (name: string) => void;
+  sortOptions: SortOption[];
+  selectedSortId: string;
+  sortOrder: 'asc' | 'desc';
+  onSortSelect: (id: string) => void;
 }
 
 export function LiveTopBar({
@@ -25,28 +31,36 @@ export function LiveTopBar({
   onSearchTextChange,
   favoriteGroups,
   onToggleFavoriteGroup,
+  sortOptions,
+  selectedSortId,
+  sortOrder,
+  onSortSelect,
 }: LiveTopBarProps) {
   return (
     <View style={styles.container}>
       <View style={styles.content}>
-        {/* Group Selector Button */}
-        <View style={styles.buttonContainer}>
-          <ChannelGroupButton
-            groups={groups}
-            selectedGroupName={selectedGroupName}
-            onGroupSelect={onGroupSelect}
-            favoriteGroups={favoriteGroups}
-            onToggleFavoriteGroup={onToggleFavoriteGroup}
-          />
-        </View>
+        {/* Group Selector */}
+        <ChannelGroupButton
+          groups={groups}
+          selectedGroupName={selectedGroupName}
+          onGroupSelect={onGroupSelect}
+          favoriteGroups={favoriteGroups}
+          onToggleFavoriteGroup={onToggleFavoriteGroup}
+        />
 
-        {/* Search Input */}
-        <View style={styles.searchContainer}>
+        {/* Search Input + Sort Button */}
+        <View style={styles.searchRow}>
           <Input
             placeholder="Search channels..."
             value={searchText}
             onChangeText={onSearchTextChange}
             style={styles.searchInput}
+          />
+          <SortButton
+            options={sortOptions}
+            selectedId={selectedSortId}
+            sortOrder={sortOrder}
+            onSelect={onSortSelect}
           />
         </View>
       </View>
@@ -63,14 +77,10 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     gap: 12,
   },
-  buttonContainer: {
-    alignSelf: 'flex-start',
-  },
-  searchContainer: {
-    flex: 1,
+  searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    position: 'relative',
+    gap: 8,
   },
   searchInput: {
     flex: 1,

@@ -47,7 +47,7 @@ export const UserSettings = memo(function UserSettings() {
               </ThemedText>
             </View>
             <ThemedText style={styles.username}>{currentUser.username}</ThemedText>
-            <IconSymbol name="arrow.up.arrow.down" size={28} color="#007AFF" />
+            <IconSymbol name="person.2" size={28} color="#007AFF" />
           </View>
         </Pressable>
       </View>

@@ -225,6 +225,7 @@ export class RustChannelService {
       offset?: number;
       excludeAdult?: boolean;
       favoriteNames?: string[];
+      sortOrder?: 'asc' | 'desc';
     }
   ): Promise<{ series: SeriesInfo[]; totalCount: number }> {
     const db = await getRustDatabase();

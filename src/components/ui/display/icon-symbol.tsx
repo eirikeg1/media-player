@@ -180,6 +180,7 @@ const MAPPING = {
   'person': 'person',
   'person.fill': 'person',
   'person.circle': 'account-circle',
+  'person.2': 'people',
   'person.circle.fill': 'account-circle',
   'ellipsis': 'more-horiz',
   'ellipsis.circle': 'more-horiz',

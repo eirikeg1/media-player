@@ -1,14 +1,19 @@
 import { ModalHeader } from '@/components/ui/containers/modal/modal-header';
+import { IconSymbol } from '@/components/ui/display/icon-symbol';
+import { ThemedText } from '@/components/ui/display/themed-text';
 import { Input } from '@/components/ui/controls/inputs/input';
 import { ThemedView } from '@/components/ui/display/themed-view';
 import { useSelectionColors } from '@/constants/selection-theme';
 import { GroupItemComponent, type GroupItem } from '@/features/live/group-item';
 import { FAVORITES_GROUP_SENTINEL, isAdultGroup } from '@/lib/group-utils';
+import type { GroupSortOption } from '@/types/sort.types';
+import { useThemeColor } from '@/hooks/use-theme-color';
 import { FlashList } from '@shopify/flash-list';
 import { useCallback, useMemo, useState } from 'react';
 import {
   Modal,
   StyleSheet,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -35,8 +40,18 @@ export function GroupSelectionModal({
   onToggleFavoriteGroup,
 }: GroupSelectionModalProps) {
   const [filterText, setFilterText] = useState('');
+  const [groupSort, setGroupSort] = useState<GroupSortOption>('alphabetical');
+  const [showSortDropdown, setShowSortDropdown] = useState(false);
   const selectionColors = useSelectionColors();
   const insets = useSafeAreaInsets();
+  const tintColor = useThemeColor({}, 'tint');
+  const textColor = useThemeColor({}, 'text');
+
+  const GROUP_SORT_LABELS: Record<GroupSortOption, string> = {
+    alphabetical: 'A-Z',
+    channelCount: 'Count',
+    playlistOrder: 'Playlist',
+  };
 
   // Filter and sort groups
   const displayedGroups = useMemo(() => {
@@ -52,7 +67,7 @@ export function GroupSelectionModal({
     }
 
     // Sort: non-adult favorites > non-adult non-favorites > adult favorites > adult non-favorites
-    // Alphabetical within each tier
+    // Secondary sort within each tier based on groupSort
     const sorted = [...sortable].sort((a, b) => {
       const isAAdult = isAdultGroup(a.name);
       const isBAdult = isAdultGroup(b.name);
@@ -67,30 +82,37 @@ export function GroupSelectionModal({
       if (isAFav && !isBFav) return -1;
       if (!isAFav && isBFav) return 1;
 
-      return a.name.localeCompare(b.name);
+      // Secondary sort based on groupSort option
+      switch (groupSort) {
+        case 'channelCount':
+          return b.channelCount - a.channelCount;
+        case 'playlistOrder':
+          return (a.firstPosition ?? 0) - (b.firstPosition ?? 0);
+        case 'alphabetical':
+        default:
+          return a.name.localeCompare(b.name);
+      }
     });
 
     return [...pinned, ...sorted];
-  }, [groups, filterText, favoriteGroups]);
-
-  // Debug logging
-  if (__DEV__ && visible) {
-    console.log('Modal is visible, groups:', groups.length);
-    console.log('Selected group:', selectedGroupName);
-    console.log('Filter text:', filterText);
-    console.log('Displayed groups:', displayedGroups.length);
-  }
+  }, [groups, filterText, favoriteGroups, groupSort]);
 
   const handleGroupSelect = useCallback((groupName: string) => {
     onGroupSelect(groupName);
-    setFilterText(''); // Clear filter when selecting a group
+    setFilterText('');
     onClose();
   }, [onGroupSelect, onClose]);
 
   const handleClose = useCallback(() => {
-    setFilterText(''); // Clear filter when closing modal
+    setFilterText('');
+    setShowSortDropdown(false);
     onClose();
   }, [onClose]);
+
+  const handleSortSelect = useCallback((sort: GroupSortOption) => {
+    setGroupSort(sort);
+    setShowSortDropdown(false);
+  }, []);
 
   const renderItem = useCallback(({ item }: { item: GroupItem }) => {
     const isFavoritesSentinel = item.name === FAVORITES_GROUP_SENTINEL;
@@ -121,16 +143,59 @@ export function GroupSelectionModal({
             onClose={handleClose}
           />
 
-          {/* Filter Input */}
+          {/* Filter Input + Sort Button */}
           <ThemedView style={styles.filterContainer}>
-            <View style={styles.inputWrapper}>
-              <Input
-                placeholder="Filter groups..."
-                value={filterText}
-                onChangeText={setFilterText}
-                style={styles.filterInput}
-              />
+            <View style={styles.filterRow}>
+              <View style={styles.inputWrapper}>
+                <Input
+                  placeholder="Filter groups..."
+                  value={filterText}
+                  onChangeText={setFilterText}
+                  style={styles.filterInput}
+                />
+              </View>
+              <TouchableOpacity
+                style={styles.sortIconButton}
+                onPress={() => setShowSortDropdown((v) => !v)}
+                activeOpacity={0.7}
+                accessibilityLabel={`Sort groups by ${GROUP_SORT_LABELS[groupSort]}`}
+              >
+                <IconSymbol
+                  name="arrow.up.arrow.down"
+                  size={20}
+                  color={textColor}
+                />
+              </TouchableOpacity>
             </View>
+
+            {/* Sort Dropdown */}
+            {showSortDropdown && (
+              <View style={styles.sortDropdown}>
+                {(Object.keys(GROUP_SORT_LABELS) as GroupSortOption[]).map((option) => {
+                  const isActive = groupSort === option;
+                  return (
+                    <TouchableOpacity
+                      key={option}
+                      style={styles.sortDropdownRow}
+                      onPress={() => handleSortSelect(option)}
+                      activeOpacity={0.7}
+                    >
+                      <ThemedText
+                        style={[
+                          styles.sortDropdownLabel,
+                          isActive && { color: tintColor, fontWeight: '600' },
+                        ]}
+                      >
+                        {GROUP_SORT_LABELS[option]}
+                      </ThemedText>
+                      {isActive && (
+                        <IconSymbol name="checkmark" size={16} color={tintColor} />
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
           </ThemedView>
 
           <View style={styles.listWrapper}>
@@ -156,12 +221,40 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     zIndex: 1,
   },
+  filterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   inputWrapper: {
+    flex: 1,
     height: 44,
   },
   filterInput: {
     height: 40,
     fontSize: 16,
+  },
+  sortIconButton: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+  },
+  sortDropdown: {
+    marginTop: 8,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  sortDropdownRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  sortDropdownLabel: {
+    fontSize: 15,
   },
   listWrapper: {
     flex: 1,

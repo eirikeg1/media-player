@@ -13,6 +13,7 @@ interface UsePaginatedSeriesOptions {
   pageSize?: number;
   excludeAdult?: boolean;
   favoriteChannelIds?: string[];
+  sortOrder?: 'asc' | 'desc';
 }
 
 interface UsePaginatedSeriesReturn {
@@ -37,6 +38,7 @@ export function usePaginatedSeries({
   pageSize = DEFAULT_PAGE_SIZE,
   excludeAdult,
   favoriteChannelIds,
+  sortOrder,
 }: UsePaginatedSeriesOptions): UsePaginatedSeriesReturn {
   const [series, setSeries] = useState<SeriesInfo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -99,6 +101,7 @@ export function usePaginatedSeries({
           offset,
           excludeAdult,
           favoriteNames: favoriteNamesRef.current.length > 0 ? favoriteNamesRef.current : undefined,
+          sortOrder: sortOrder || undefined,
         });
 
         // Discard stale results from superseded fetches
@@ -111,8 +114,8 @@ export function usePaginatedSeries({
           setSeries(result.series);
           setTotalCount(result.totalCount);
 
-          // Write back to cache for unfiltered default views
-          if (playlistId && !debouncedSearchRef.current && (!stableGroups || stableGroups.length === 0)) {
+          // Write back to cache for unfiltered default views (only for default sort)
+          if (playlistId && !debouncedSearchRef.current && (!stableGroups || stableGroups.length === 0) && !sortOrder) {
             useFirstPageCacheStore.getState().setCachedSeries(
               playlistId, result.series, result.totalCount
             );
@@ -144,7 +147,7 @@ export function usePaginatedSeries({
         }
       }
     },
-    [playlistId, stableGroups, pageSize, excludeAdult]
+    [playlistId, stableGroups, pageSize, excludeAdult, sortOrder]
   );
 
   // Reset and fetch first page when filters change
@@ -167,8 +170,8 @@ export function usePaginatedSeries({
       debouncedSearchRef.current = search;
       offsetRef.current = 0;
 
-      // Check cache for unfiltered default views
-      const isDefaultView = !search && (!stableGroups || stableGroups.length === 0);
+      // Check cache for unfiltered default views (only for default sort)
+      const isDefaultView = !search && (!stableGroups || stableGroups.length === 0) && !sortOrder;
       if (isDefaultView) {
         const cached = useFirstPageCacheStore.getState().getCachedSeries(playlistId);
         const cachedExcludeAdult = useFirstPageCacheStore.getState().getExcludeAdult(playlistId);
@@ -201,7 +204,7 @@ export function usePaginatedSeries({
         clearTimeout(debounceTimerRef.current);
       }
     };
-  }, [playlistId, stableGroups, search, excludeAdult, fetchPage]);
+  }, [playlistId, stableGroups, search, excludeAdult, sortOrder, fetchPage]);
 
   const loadMore = useCallback(() => {
     if (!hasMore || isLoadingRef.current) return;

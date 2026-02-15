@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import { LiveScreenContent } from '@/features/live/live-screen-content';
 import { useFavoriteChannels } from '@/features/live/hooks/use-favorite-channels';
@@ -12,6 +12,7 @@ import { getChannelId } from '@/lib/channel-utils';
 import { FAVORITES_GROUP_SENTINEL, getEffectiveFavoriteGroups } from '@/lib/group-utils';
 import { useFirstPageCacheStore } from '@/stores/cache';
 import { useUserStore } from '@/stores/user/user-store';
+import { LIVE_SORT_OPTIONS } from '@/types/sort.types';
 import type { Channel } from '@/types/playlist.types';
 
 export default function LiveScreen() {
@@ -28,6 +29,8 @@ export default function LiveScreen() {
   // Filter state managed locally, passed to paginated hook
   const [userGroupSelection, setUserGroupSelection] = useState<string | null>(null);
   const [searchText, setSearchText] = useState<string>('');
+  const [selectedSortId, setSelectedSortId] = useState('playlist');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
   // Custom hooks for data management
   const { activePlaylist, hasLoadedPlaylist } = usePlaylistData();
@@ -52,6 +55,8 @@ export default function LiveScreen() {
     setPrevActivePlaylistId(activePlaylistId);
     setUserGroupSelection(null);
     setSearchText('');
+    setSelectedSortId('playlist');
+    setSortOrder('asc');
   }
 
   // Derive selectedGroupName: user selection takes priority, otherwise default to favorites
@@ -72,6 +77,12 @@ export default function LiveScreen() {
       ? [selectedGroupName]
       : undefined;
 
+  // Derive sort params from selected option
+  const activeSortOption = useMemo(
+    () => LIVE_SORT_OPTIONS.find((o) => o.id === selectedSortId) ?? LIVE_SORT_OPTIONS[0],
+    [selectedSortId],
+  );
+
   // Paginated channels with server-side filtering
   const {
     channels,
@@ -88,6 +99,8 @@ export default function LiveScreen() {
     favoriteChannelIds: favoriteChannels,
     excludeAdult,
     pageSize: 100,
+    sortBy: activeSortOption.sortBy,
+    sortOrder,
   });
 
   // Event handlers for filters
@@ -98,6 +111,16 @@ export default function LiveScreen() {
   const handleSearchTextChange = useCallback((text: string) => {
     setSearchText(text);
   }, []);
+
+  const handleSortSelect = useCallback((id: string) => {
+    if (id === selectedSortId) {
+      setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      const option = LIVE_SORT_OPTIONS.find((o) => o.id === id);
+      setSelectedSortId(id);
+      setSortOrder(option?.defaultOrder ?? 'asc');
+    }
+  }, [selectedSortId]);
 
   // Event handlers
   const handleChannelPress = useCallback((channel: Channel) => {
@@ -148,6 +171,10 @@ export default function LiveScreen() {
       tintColor={tintColor}
       favoriteGroups={favoriteGroups}
       onToggleFavoriteGroup={toggleFavoriteGroup}
+      sortOptions={LIVE_SORT_OPTIONS}
+      selectedSortId={selectedSortId}
+      sortOrder={sortOrder}
+      onSortSelect={handleSortSelect}
     />
   );
 }

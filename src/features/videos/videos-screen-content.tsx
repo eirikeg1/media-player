@@ -9,6 +9,7 @@ import { VideosEmptyState } from '@/features/videos/videos-empty-state';
 import { VideosTopBar } from '@/features/videos/videos-top-bar';
 import { isChannelFavorite, isSeriesFavorite } from '@/lib/channel-utils';
 import type { GroupOption } from '@/lib/group-utils';
+import type { SortOption } from '@/types/sort.types';
 import type { Channel, Playlist } from '@/types/playlist.types';
 import type { ListRenderItemInfo } from '@shopify/flash-list';
 import { Image } from 'expo-image';
@@ -41,6 +42,10 @@ interface VideosScreenContentProps {
   onToggleFavoriteGroup: (name: string) => void;
   seriesList?: SeriesInfo[];
   onSeriesPress?: (series: SeriesInfo) => void;
+  sortOptions: SortOption[];
+  selectedSortId: string;
+  sortOrder: 'asc' | 'desc';
+  onSortSelect: (id: string) => void;
 }
 
 export function VideosScreenContent({
@@ -68,6 +73,10 @@ export function VideosScreenContent({
   onToggleFavoriteGroup,
   seriesList,
   onSeriesPress,
+  sortOptions,
+  selectedSortId,
+  sortOrder,
+  onSortSelect,
 }: VideosScreenContentProps) {
   const isSeries = contentType === 'series';
 
@@ -143,6 +152,10 @@ export function VideosScreenContent({
         onSearchTextChange={onSearchChange}
         favoriteGroups={favoriteGroups}
         onToggleFavoriteGroup={onToggleFavoriteGroup}
+        sortOptions={sortOptions}
+        selectedSortId={selectedSortId}
+        sortOrder={sortOrder}
+        onSortSelect={onSortSelect}
       />
     </ThemedView>
   );
