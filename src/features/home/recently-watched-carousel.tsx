@@ -14,11 +14,13 @@ import Animated, { useAnimatedStyle, withTiming } from 'react-native-reanimated'
 import { RecentlyWatchedCard } from './recently-watched-card';
 
 // Carousel layout constants
-const CARD_SIZE = 130;
-const CARD_CONTAINER_SIZE = 150;
-const OVERLAP = 50;
-const PADDING_LEFT = 16;
-const INACTIVE_SCALE = 0.85;
+const CARD_SIZE = 160;
+const CARD_CONTAINER_SIZE = 200;
+const OVERLAP = 70;
+const PADDING_LEFT = 40;
+const ACTIVE_SCALE = 1.2;
+const SIZE_STEP = 6;
+const MIN_SCALE = 0.7;
 const SCALE_DURATION = 200;
 const SCROLL_THROTTLE = 16;
 
@@ -41,21 +43,17 @@ function OverlapCard({
   children: React.ReactElement;
   onPress: () => void;
 }) {
-  const isActive = index === activeIndex;
+  const distance = Math.abs(index - activeIndex);
+  const scale =
+    distance === 0
+      ? ACTIVE_SCALE
+      : Math.max((CARD_SIZE - distance * SIZE_STEP) / CARD_SIZE, MIN_SCALE);
 
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [
-      {
-        scale: withTiming(isActive ? 1.0 : INACTIVE_SCALE, {
-          duration: SCALE_DURATION,
-        }),
-      },
-    ],
+    transform: [{ scale: withTiming(scale, { duration: SCALE_DURATION }) }],
   }));
 
-  const zIndex = isActive
-    ? totalItems + 1
-    : totalItems - Math.abs(index - activeIndex);
+  const zIndex = distance === 0 ? totalItems + 1 : totalItems - distance;
 
   return (
     <Pressable

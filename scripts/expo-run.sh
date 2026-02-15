@@ -10,4 +10,12 @@ if [ "$CURRENT_VARIANT" != "$VARIANT" ]; then
   echo "$VARIANT" > "$PLATFORM/.app-variant"
 fi
 
+# Auto-detect LAN IP for dev server (workaround for broken lanNetworkSync)
+if [ -z "$REACT_NATIVE_PACKAGER_HOSTNAME" ]; then
+  LAN_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+  if [ -n "$LAN_IP" ]; then
+    export REACT_NATIVE_PACKAGER_HOSTNAME="$LAN_IP"
+  fi
+fi
+
 npx expo run:"$PLATFORM" "$@"

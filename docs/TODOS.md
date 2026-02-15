@@ -54,3 +54,9 @@
 ## Both
 * Recommendations fetched from backend, displayed to the user
 * Watch history sync between app and backend
+
+
+
+
+## Bugs
+* When a video fails to load you get an error up, then an infinite loading spinner
