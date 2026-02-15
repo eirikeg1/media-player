@@ -1,10 +1,8 @@
-import { ThemedText } from '@/components/ui/display/themed-text';
-import { ThemedView } from '@/components/ui/display/themed-view';
 import { THEME } from '@/lib/theme';
 import type { RecentlyWatchedItem } from '@/types/user.types';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useState } from 'react';
-import { Image, StyleSheet, useColorScheme, View } from 'react-native';
+import { Image, StyleSheet, Text, useColorScheme, View } from 'react-native';
 
 interface RecentlyWatchedCardProps {
   item: RecentlyWatchedItem;
@@ -15,8 +13,9 @@ interface RecentlyWatchedCardProps {
 export function RecentlyWatchedCard({ item, isActive, size }: RecentlyWatchedCardProps) {
   const colorScheme = useColorScheme() ?? 'dark';
   const [imageError, setImageError] = useState(false);
-  const hasLogo = !!item.tvgLogo && !imageError;
-  const initial = item.channelName.charAt(0).toUpperCase();
+  const imageUrl = item.seriesPoster ?? item.tvgLogo;
+  const hasLogo = !!imageUrl && !imageError;
+  const initial = (item.seriesName ?? item.channelName).charAt(0).toUpperCase();
 
   const showProgress =
     item.lastPosition != null &&
@@ -33,15 +32,15 @@ export function RecentlyWatchedCard({ item, isActive, size }: RecentlyWatchedCar
     <View style={[styles.imageWrapper, { width: size, height: size }]}>
       {hasLogo ? (
         <Image
-          source={{ uri: item.tvgLogo }}
+          source={{ uri: imageUrl }}
           style={styles.poster}
           resizeMode="cover"
           onError={() => setImageError(true)}
         />
       ) : (
-        <ThemedView style={[styles.poster, styles.fallbackPoster]}>
-          <ThemedText style={styles.fallbackText}>{initial}</ThemedText>
-        </ThemedView>
+        <View style={[styles.poster, styles.fallbackPoster]}>
+          <Text style={styles.fallbackText}>{initial}</Text>
+        </View>
       )}
 
       {!isActive && (
@@ -80,6 +79,7 @@ const styles = StyleSheet.create({
   fallbackText: {
     fontSize: 28,
     fontWeight: '600',
+    color: '#eff0f4',
   },
   progressTrack: {
     position: 'absolute',

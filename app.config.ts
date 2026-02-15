@@ -50,6 +50,14 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     ],
     "expo-video",
     "react-native-google-cast",
+    [
+      "expo-build-properties",
+      {
+        android: {
+          usesCleartextTraffic: true,
+        },
+      },
+    ],
   ],
   experiments: {
     typedRoutes: true,

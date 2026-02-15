@@ -87,12 +87,11 @@ export default function HomeScreen() {
       if (!playlistId) return;
 
       if (item.contentType === 'series') {
-        try {
-          // Look up the channel to find the series name
-          const channel = await RustChannelService.getChannelById(playlistId, item.channelId);
-          if (channel?.tvg?.name) {
+        const seriesName = item.seriesName;
+        if (seriesName) {
+          try {
             const result = await RustChannelService.getSeriesList(playlistId, {
-              search: channel.tvg.name,
+              search: seriesName,
               limit: 1,
               excludeAdult,
             });
@@ -101,9 +100,9 @@ export default function HomeScreen() {
               setSeriesModalVisible(true);
               return;
             }
+          } catch (error) {
+            console.error('[HomeScreen] Error looking up series:', error);
           }
-        } catch (error) {
-          console.error('[HomeScreen] Error looking up series:', error);
         }
       }
 

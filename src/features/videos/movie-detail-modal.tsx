@@ -56,7 +56,7 @@ export function MovieDetailModal({
   const categories = useMemo(() => {
     if (!movie?.group.title) return [];
     return movie.group.title
-      .split(/\s*[|/]\s*/)
+      .split(/\s*(?:\||\/)\s*/)
       .map((s) => s.trim())
       .filter(Boolean);
   }, [movie?.group.title]);

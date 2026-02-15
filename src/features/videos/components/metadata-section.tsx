@@ -28,7 +28,7 @@ export function MetadataSection({
   if (!metadata) return null;
 
   const genreList = metadata.genre
-    ?.split(/\s*[,/]\s*/)
+    ?.split(/\s*(?:,|\/)\s*/)
     .map((g) => g.trim())
     .filter(Boolean);
 

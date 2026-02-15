@@ -1,4 +1,6 @@
 import { ThemedText } from '@/components/ui/display/themed-text';
+import { parseEpisodeInfo } from '@/lib/series-utils';
+import type { Channel } from '@/types/playlist.types';
 import type { RecentlyWatchedItem } from '@/types/user.types';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -136,7 +138,17 @@ export function RecentlyWatchedCarousel({ items, onItemPress }: RecentlyWatchedC
 
   if (items.length === 0) return null;
 
-  const activeName = items[activeIndex]?.channelName ?? '';
+  const activeItem = items[activeIndex];
+  const activeName = (() => {
+    if (!activeItem) return '';
+    if (activeItem.seriesName) {
+      const { season, episode } = parseEpisodeInfo(
+        { name: activeItem.channelName } as Channel,
+      );
+      return `${activeItem.seriesName} · S${season} E${episode}`;
+    }
+    return activeItem.channelName;
+  })();
 
   return (
     <View style={styles.container}>
@@ -208,8 +220,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a1a1a',
   },
   activeName: {
-    fontSize: 12,
-    opacity: 0.7,
+    fontSize: 16,
+    opacity: 0.85,
     paddingHorizontal: PADDING_LEFT,
     fontWeight: '500',
   },

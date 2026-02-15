@@ -1,3 +1,4 @@
+import { Button } from '@/components/ui/controls/button';
 import { ModalHeader } from '@/components/ui/containers/modal/modal-header';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
@@ -5,6 +6,7 @@ import { CategoryPill } from '@/features/videos/category-pill';
 import { MetadataSection } from '@/features/videos/components/metadata-section';
 import { FavoriteStar } from '@/features/live/favorite-star';
 import { SeasonAccordion } from '@/features/videos/season-accordion';
+import { useSeriesContinueEpisode } from '@/features/videos/hooks/use-series-continue-episode';
 import { useSeriesEpisodes } from '@/features/videos/hooks/use-series-episodes';
 import { useSeriesMetadata } from '@/features/videos/hooks/use-series-metadata';
 import { useThemeColor } from '@/hooks/use-theme-color';
@@ -60,6 +62,11 @@ export function SeriesDetailModal({
     visible
   );
 
+  const { continueEpisode } = useSeriesContinueEpisode(
+    visible ? playlistId : null,
+    episodes
+  );
+
   const seasonMap = useMemo(() => {
     if (!episodes.length) return new Map();
     return groupEpisodesBySeason(episodes);
@@ -69,6 +76,12 @@ export function SeriesDetailModal({
     () => Array.from(seasonMap.keys()).sort((a, b) => a - b),
     [seasonMap]
   );
+
+  const firstEpisode = useMemo(() => {
+    const firstSeason = sortedSeasons[0];
+    if (firstSeason == null) return null;
+    return seasonMap.get(firstSeason)?.[0] ?? null;
+  }, [sortedSeasons, seasonMap]);
 
   const posterUrl = series?.poster || metadata?.backdropPath;
 
@@ -82,7 +95,7 @@ export function SeriesDetailModal({
   const categories = useMemo(() => {
     if (!series?.groupName) return [];
     return series.groupName
-      .split(/\s*[|/]\s*/)
+      .split(/\s*(?:\||\/)\s*/)
       .map((s) => s.trim())
       .filter(Boolean);
   }, [series?.groupName]);
@@ -148,6 +161,31 @@ export function SeriesDetailModal({
             isLoading={isLoadingMetadata}
             tintColor={tintColor}
           />
+
+          {/* Continue watching / Play from Beginning button */}
+          {!isLoadingEpisodes && (continueEpisode || firstEpisode) && (
+            <View style={styles.continueButtonContainer}>
+              {continueEpisode ? (
+                <Button
+                  title={`Continue S${continueEpisode.season}-E${continueEpisode.episode}`}
+                  icon="play.fill"
+                  variant="primary"
+                  size="large"
+                  fullWidth
+                  onPress={() => onEpisodePress(continueEpisode.channel)}
+                />
+              ) : firstEpisode ? (
+                <Button
+                  title={`Play from Beginning · S${firstEpisode.season} E${firstEpisode.episode}`}
+                  icon="play.fill"
+                  variant="secondary"
+                  size="large"
+                  fullWidth
+                  onPress={() => onEpisodePress(firstEpisode.channel)}
+                />
+              ) : null}
+            </View>
+          )}
 
           {/* Loading state */}
           {isLoadingEpisodes && (
@@ -218,6 +256,11 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     justifyContent: 'center',
     gap: 6,
+  },
+  continueButtonContainer: {
+    paddingHorizontal: 16,
+    marginTop: 24,
+    marginBottom: 16,
   },
   loadingContainer: {
     alignItems: 'center',

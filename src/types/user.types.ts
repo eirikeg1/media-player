@@ -160,6 +160,8 @@ export interface RecentlyWatchedItem {
   lastWatchedAt: string;
   lastPosition?: number;
   totalDuration?: number;
+  seriesName?: string;
+  seriesPoster?: string;
 }
 
 /**

@@ -7,6 +7,11 @@ export interface ParsedEpisode {
   channel: Channel;
 }
 
+// Using RegExp constructor instead of regex literal to prevent Tailwind JIT scanner
+// from treating the character class as a utility class and generating invalid CSS.
+const TRAILING_PUNCTUATION = new RegExp('[\\-:|]+\\s*$');
+const SURROUNDING_PUNCTUATION = new RegExp('^[\\s\\-:|]+|[\\s\\-:|]+$', 'g');
+
 const PATTERNS = [
   // S01E01, S01 E01, s01e01
   /S(\d+)\s*E(\d+)/i,
@@ -29,7 +34,7 @@ export function parseEpisodeInfo(channel: Channel, fallbackIndex: number = 0): P
       const season = parseInt(match[1], 10);
       const episode = parseInt(match[2], 10);
       // Remove the matched pattern to get the episode title
-      const episodeTitle = title.replace(pattern, '').replace(/^[\s\-:|]+|[\s\-:|]+$/g, '').trim() || title;
+      const episodeTitle = title.replace(pattern, '').replace(SURROUNDING_PUNCTUATION, '').trim() || title;
       return { season, episode, episodeTitle, channel };
     }
   }
@@ -41,6 +46,20 @@ export function parseEpisodeInfo(channel: Channel, fallbackIndex: number = 0): P
     episodeTitle: title,
     channel,
   };
+}
+
+/**
+ * Strip episode identifiers from a title to get the base series name.
+ * TypeScript equivalent of Rust's `strip_episode_info` SQL function.
+ */
+export function stripEpisodeInfo(input: string): string {
+  let result = input;
+  result = result.replace(/S\d+\s*E\d+/gi, '');
+  result = result.replace(/\d+x\d+/gi, '');
+  result = result.replace(/Season\s*\d+.*?Episode\s*\d+/gi, '');
+  result = result.replace(/\s+-\s+-\s+.*/g, '');
+  result = result.trim().replace(TRAILING_PUNCTUATION, '').trim();
+  return result || 'Untitled';
 }
 
 /**
