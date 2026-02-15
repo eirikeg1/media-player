@@ -25,6 +25,7 @@ export const PlaylistManager = memo(function PlaylistManager() {
   const currentUser = useUserStore((state) => state.currentUser);
   const updateSettings = useUserStore((state) => state.updateSettings);
   const playlistSharingEnabled = currentUser?.settings?.playlistSharingEnabled ?? true;
+  const parentalControlEnabled = currentUser?.settings?.parentalControlEnabled ?? true;
 
   const handleCloseModal = useCallback(() => {
     setShowModal(false);
@@ -42,12 +43,32 @@ export const PlaylistManager = memo(function PlaylistManager() {
     [currentUser, updateSettings],
   );
 
+  const handleToggleParentalControl = useCallback(
+    (value: boolean) => {
+      if (!currentUser) return;
+      updateSettings(currentUser.id, { parentalControlEnabled: value });
+    },
+    [currentUser, updateSettings],
+  );
+
   return (
     <ThemedView style={styles.container}>
       <View style={styles.content}>
         <ThemedText type="subtitle" style={styles.header}>
           Playlist Management
         </ThemedText>
+
+        <View style={styles.preferenceRow}>
+          <View style={styles.labelContainer}>
+            <ThemedText style={styles.label}>Hide Adult Content</ThemedText>
+          </View>
+          <Switch
+            value={parentalControlEnabled}
+            onValueChange={handleToggleParentalControl}
+            trackColor={{ false: '#767577', true: '#007AFF' }}
+            accessibilityLabel="Hide adult content"
+          />
+        </View>
 
         <View style={styles.preferenceRow}>
           <View style={styles.labelContainer}>

@@ -8,18 +8,9 @@ export const AppPreferences = memo(function AppPreferences() {
   const currentUser = useUserStore((state) => state.currentUser);
   const updateSettings = useUserStore((state) => state.updateSettings);
 
-  const parentalControlEnabled = currentUser?.settings?.parentalControlEnabled ?? true;
   const showHomeTab = currentUser?.settings?.showHomeTab ?? true;
   const showLiveTab = currentUser?.settings?.showLiveTab ?? true;
   const showVideosTab = currentUser?.settings?.showVideosTab ?? true;
-
-  const handleToggleParentalControl = useCallback(
-    (value: boolean) => {
-      if (!currentUser) return;
-      updateSettings(currentUser.id, { parentalControlEnabled: value });
-    },
-    [currentUser, updateSettings],
-  );
 
   const handleToggleHomeTab = useCallback(
     (value: boolean) => {
@@ -52,22 +43,6 @@ export const AppPreferences = memo(function AppPreferences() {
   return (
     <ThemedView style={styles.container}>
       <View style={styles.content}>
-        <ThemedText type="subtitle" style={styles.header}>
-          Preferences
-        </ThemedText>
-
-        <View style={styles.preferenceRow}>
-          <View style={styles.labelContainer}>
-            <ThemedText style={styles.label}>Hide Adult Content</ThemedText>
-          </View>
-          <Switch
-            value={parentalControlEnabled}
-            onValueChange={handleToggleParentalControl}
-            trackColor={{ false: '#767577', true: '#007AFF' }}
-            accessibilityLabel="Hide adult content"
-          />
-        </View>
-
         <ThemedText type="subtitle" style={styles.header}>
           Visible Tabs
         </ThemedText>
