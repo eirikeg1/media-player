@@ -35,9 +35,8 @@ export default function HomeScreen() {
   const { items: recentlyWatched } = useRecentlyWatched(20);
   const { movies, series, isLoading: isContentLoading } = useRandomContent(30);
 
-  // Ready when playlists are initialized AND either we have content, content finished loading, or there's no playlist
-  const hasContent = movies.length > 0 || series.length > 0;
-  const isReady = isPlaylistInitialized && (!playlistId || hasContent || !isContentLoading);
+  // Ready when playlists are initialized AND either content finished loading or there's no playlist
+  const isReady = isPlaylistInitialized && (!playlistId || !isContentLoading);
 
   // Hide splash screen once ready
   const splashHidden = useRef(false);

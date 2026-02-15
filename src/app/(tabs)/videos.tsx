@@ -223,8 +223,8 @@ export default function VideosScreen() {
   }, [handleChannelPress]);
 
   // Determine loading/pagination state based on content type
-  const isLoading = !hasLoadedPlaylist || shouldDeferFetch
-    || (isSeries ? isLoadingSeries : isLoadingChannels);
+  const isLoading = !hasLoadedPlaylist
+    || (!!activePlaylist && (shouldDeferFetch || (isSeries ? isLoadingSeries : isLoadingChannels)));
   const isLoadingMore = isSeries ? isLoadingMoreSeries : isLoadingMoreChannels;
   const hasMore = isSeries ? hasMoreSeries : hasMoreChannels;
   const loadMore = isSeries ? loadMoreSeries : loadMoreChannels;

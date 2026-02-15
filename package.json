@@ -3,10 +3,12 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
-    "start": "expo start",
+    "start": "APP_VARIANT=development expo start",
     "reset-project": "node ./scripts/reset-project.js",
-    "android": "expo run:android",
-    "ios": "expo run:ios",
+    "android": "APP_VARIANT=development bash scripts/expo-run.sh android --device",
+    "android:release": "bash scripts/expo-run.sh android --variant release --device",
+    "ios": "APP_VARIANT=development bash scripts/expo-run.sh ios --device",
+    "ios:release": "bash scripts/expo-run.sh ios --configuration Release --device",
     "web": "expo start --web",
     "lint": "expo lint",
     "typecheck": "npx tsc --noEmit"

@@ -56,3 +56,6 @@ After implementing ANY change:
 
 ### Failure to Follow Guidelines
 Not following these guidelines is unacceptable. Code quality and error-free implementation are non-negotiable requirements.
+
+### Follow Official documentation
+When making decisions for how to implement project/framework specific changes, the expo documentation should be used to ensure best practices. Spend some time navigating relevant pages on url `docs.expo.dev` before making any final decisions.

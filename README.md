@@ -10,18 +10,25 @@ This is a basic app to watch movies and tv streams. Currently supports m3u playl
    npm install
    ```
 
-2. Start the app
+2. Run a development build
 
    ```bash
-   npx expo start
+   npm run android        # Android dev build
+   npm run ios            # iOS dev build
    ```
 
-The project has been developed for Android, but in the output, you'll find options to open the app in a
+3. Run a release build
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+   ```bash
+   npm run android:release
+   npm run ios:release
+   ```
+
+Development and release builds use separate application IDs, so both can be installed on the same device simultaneously. The dev build appears as **"Media Player dev"** on the device.
+
+### How variant switching works
+
+A helper script (`scripts/expo-run.sh`) tracks which build variant was last prebuilt via a marker file (e.g. `android/.app-variant`). When you switch between dev and release, it automatically runs `npx expo prebuild --clean` to apply the correct app name and package ID. Same-variant rebuilds skip prebuild entirely for faster builds.
 
 ## Documentation
 

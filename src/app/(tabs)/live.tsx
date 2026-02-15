@@ -138,7 +138,8 @@ export default function LiveScreen() {
     });
   }, [router, activePlaylist?.id]);
 
-  const isLoading = !hasLoadedPlaylist || shouldDeferFetch || isLoadingChannels;
+  const isLoading = !hasLoadedPlaylist
+    || (!!activePlaylist && (shouldDeferFetch || isLoadingChannels));
 
   // Combined refresh handler
   const handleCombinedRefresh = useCallback(() => {
