@@ -26,7 +26,7 @@ export const UserSettings = memo(function UserSettings() {
       {/* Current User Section */}
       <View style={styles.content}>
         <ThemedText type="subtitle" style={styles.header}>
-          Profile
+          Profiles
         </ThemedText>
 
         <Pressable

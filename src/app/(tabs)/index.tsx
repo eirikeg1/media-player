@@ -12,6 +12,7 @@ import { SeriesItem } from '@/features/videos/series-item';
 import { SeriesDetailModal } from '@/features/videos/series-detail-modal';
 import { RustChannelService } from '@/services/rust-channel-service';
 
+import { HomeSkeletonContent } from '@/features/home/home-skeleton-content';
 import { usePlaylistStore } from '@/stores/playlist/playlist-store';
 import { useUserStore } from '@/stores/user/user-store';
 import type { Channel } from '@/types/playlist.types';
@@ -32,8 +33,8 @@ export default function HomeScreen() {
   const isPlaylistInitialized = usePlaylistStore((s) => s.isInitialized);
 
   // Data hooks
-  const { items: recentlyWatched } = useRecentlyWatched(20);
-  const { movies, series, isLoading: isContentLoading } = useRandomContent(30);
+  const { items: recentlyWatched, refresh: refreshRecentlyWatched } = useRecentlyWatched(20);
+  const { movies, series, isLoading: isContentLoading, refresh: refreshContent } = useRandomContent(30);
 
   // Ready when playlists are initialized AND either content finished loading or there's no playlist
   const isReady = isPlaylistInitialized && (!playlistId || !isContentLoading);
@@ -57,6 +58,14 @@ export default function HomeScreen() {
     }, 10_000);
     return () => clearTimeout(timeout);
   }, []);
+
+  // Pull-to-refresh
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    await Promise.all([refreshRecentlyWatched(), refreshContent()]);
+    setIsRefreshing(false);
+  }, [refreshRecentlyWatched, refreshContent]);
 
   // Movie detail modal
   const [selectedMovie, setSelectedMovie] = useState<Channel | null>(null);
@@ -159,9 +168,26 @@ export default function HomeScreen() {
     [navigateToPlayer],
   );
 
-  // Empty view behind splash screen — splash stays visible until isReady
+  // Skeleton content behind splash screen — if splash hides before content loads, users see loading UI
   if (!isReady) {
-    return <View style={{ flex: 1 }} />;
+    return (
+      <ParallaxScrollView
+        headerBackgroundColor={{ light: '#2D2D2D', dark: '#1A1A1A' }}
+        padding={0}
+        showsVerticalScrollIndicator={false}
+        headerImage={
+          <View style={styles.headerContainer}>
+            <Image
+              source={require('../../../assets/images/parallax-headers/movies/rick-and-morty-colorful.jpg')}
+              style={styles.headerBackground}
+              contentFit="cover"
+            />
+          </View>
+        }
+      >
+        <HomeSkeletonContent />
+      </ParallaxScrollView>
+    );
   }
 
   // No active playlist state
@@ -182,6 +208,8 @@ export default function HomeScreen() {
         headerBackgroundColor={{ light: '#2D2D2D', dark: '#1A1A1A' }}
         padding={0}
         showsVerticalScrollIndicator={false}
+        refreshing={isRefreshing}
+        onRefresh={handleRefresh}
         headerImage={
           <View style={styles.headerContainer}>
             <Image

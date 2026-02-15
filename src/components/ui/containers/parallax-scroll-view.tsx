@@ -1,9 +1,10 @@
 import type { PropsWithChildren, ReactElement } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { RefreshControl, StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedRef } from 'react-native-reanimated';
 
 import { ThemedView } from '@/components/ui/display/themed-view';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useThemeColor } from '@/hooks/use-theme-color';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -19,6 +20,8 @@ type Props = PropsWithChildren<{
   stickyHeaderIndices?: number[];
   padding?: number;
   showsVerticalScrollIndicator?: boolean;
+  refreshing?: boolean;
+  onRefresh?: () => void;
 }>;
 
 export default function ParallaxScrollView({
@@ -28,12 +31,18 @@ export default function ParallaxScrollView({
   stickyHeaderIndices,
   padding = 8,
   showsVerticalScrollIndicator = true,
+  refreshing = false,
+  onRefresh,
 }: Props) {
   const colorScheme = useColorScheme() ?? 'light';
+  const tintColor = useThemeColor({}, 'tint');
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
   const scrollRef = useAnimatedRef<Animated.ScrollView>();
   const { headerAnimatedStyle } = useParallaxHeader(scrollRef);
+
+  const refreshArrowColor = colorScheme === 'dark' ? tintColor : '#3d4560';
+  const refreshBackgroundColor = colorScheme === 'dark' ? '#1f2740' : '#dbe0ec';
 
   return (
     <ThemedView style={[parallaxStyles.container, { paddingTop: insets.top }]}>
@@ -54,6 +63,18 @@ export default function ParallaxScrollView({
         stickyHeaderIndices={stickyHeaderIndices}
         contentOffset={{ x: 0, y: INITIAL_SCROLL_OFFSET }}
         showsVerticalScrollIndicator={showsVerticalScrollIndicator}
+        nestedScrollEnabled
+        refreshControl={
+          onRefresh ? (
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={refreshArrowColor}
+              colors={[refreshArrowColor]}
+              progressBackgroundColor={refreshBackgroundColor}
+            />
+          ) : undefined
+        }
       >
         <View style={parallaxStyles.headerSpacer} />
         <ThemedView style={[styles.content, { padding, paddingBottom: padding + tabBarHeight }]}>{children}</ThemedView>

@@ -144,6 +144,7 @@ export default function InfiniteParallaxGrid<T>({
         keyboardShouldPersistTaps="handled"
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
+        nestedScrollEnabled
         onLoad={handleLoad}
         refreshControl={
           onRefresh ? (
