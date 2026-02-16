@@ -162,7 +162,7 @@ export function VideosScreenContent({
 
   const headerImage = (
     <Image
-      source={require('../../../assets/images/parallax-headers/movies/jack-sparrow.jpg')}
+      source={require('../../../assets/images/parallax-headers/general/green-paper-cut-abstract.jpg')}
       style={styles.headerImage}
       contentFit="cover"
     />

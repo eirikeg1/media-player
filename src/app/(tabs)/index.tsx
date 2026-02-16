@@ -178,7 +178,7 @@ export default function HomeScreen() {
         headerImage={
           <View style={styles.headerContainer}>
             <Image
-              source={require('../../../assets/images/parallax-headers/movies/rick-and-morty-colorful.jpg')}
+              source={require('../../../assets/images/parallax-headers/general/blue-minimalist-wavy.jpg')}
               style={styles.headerBackground}
               contentFit="cover"
             />
@@ -213,7 +213,7 @@ export default function HomeScreen() {
         headerImage={
           <View style={styles.headerContainer}>
             <Image
-              source={require('../../../assets/images/parallax-headers/movies/rick-and-morty-colorful.jpg')}
+              source={require('../../../assets/images/parallax-headers/general/blue-minimalist-wavy.jpg')}
               style={styles.headerBackground}
               contentFit="cover"
             />
