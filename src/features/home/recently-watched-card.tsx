@@ -53,7 +53,7 @@ export function RecentlyWatchedCard({ item, isActive, size }: RecentlyWatchedCar
         />
       )}
 
-      {showProgress && (
+      {isActive && showProgress && (
         <View style={styles.progressTrack}>
           <View style={[styles.progressBar, { width: `${progressPercent}%`, backgroundColor: THEME[colorScheme].ring }]} />
         </View>
