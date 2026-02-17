@@ -7,7 +7,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   name: IS_DEV ? "Media Player dev" : "Media Player",
   slug: "media-player",
   version: "1.0.0",
-  icon: "./assets/images/app-icon.png",
+  icon: "./assets/icons/play_2.png",
   scheme: "mediaplayer",
   userInterfaceStyle: "automatic",
   newArchEnabled: true,
@@ -24,9 +24,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   android: {
     adaptiveIcon: {
-      backgroundColor: "#8524A6",
-      foregroundImage: "./assets/images/app-icon.png",
-      monochromeImage: "./assets/images/android-icon-monochrome.png",
+      backgroundColor: "#f0dff6",
+      foregroundImage: "./assets/icons/play_2.png",
+      monochromeImage: "./assets/icons/play_2.png",
     },
     edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: false,
@@ -36,14 +36,14 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   web: {
     output: "static" as const,
-    favicon: "./assets/images/favicon.png",
+    favicon: "./assets/icons/play_2.png",
   },
   plugins: [
     "expo-router",
     [
       "expo-splash-screen",
       {
-        image: "./assets/images/splash-icon.png",
+        image: "./assets/icons/play_3.png",
         imageWidth: 400,
         resizeMode: "contain",
       },
