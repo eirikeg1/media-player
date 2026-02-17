@@ -187,7 +187,7 @@ export function LiveScreenContent({
         headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
         headerImage={
           <Image
-            source={require('../../../assets/images/parallax-headers/live/header-champions-league.jpg')}
+            source={customHeader ?? DEFAULT_LIVE_HEADER}
             style={styles.headerImage}
             contentFit="cover"
           />

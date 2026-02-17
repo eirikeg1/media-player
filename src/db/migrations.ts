@@ -1,9 +1,10 @@
+import * as SQLite from 'expo-sqlite';
 import { getDatabase } from './sqlite-client';
 
 interface Migration {
   version: number;
   name: string;
-  up: (db: any) => Promise<void>;
+  up: (db: SQLite.SQLiteDatabase) => Promise<void>;
 }
 
 const migrations: Migration[] = [
@@ -477,7 +478,7 @@ const migrations: Migration[] = [
 /**
  * Get the current database version
  */
-async function getCurrentVersion(db: any): Promise<number> {
+async function getCurrentVersion(db: SQLite.SQLiteDatabase): Promise<number> {
   try {
     const result = await db.getFirstAsync(
       'SELECT MAX(version) as version FROM migrations'

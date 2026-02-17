@@ -1,9 +1,12 @@
 import { useEffect } from 'react';
-import { View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Redirect } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import { ThemedText } from '@/components/ui/display/themed-text';
+import { ThemedView } from '@/components/ui/display/themed-view';
 import { useUserStore } from '@/stores/user/user-store';
 import { usePlaylistStore } from '@/stores/playlist/playlist-store';
+import { retryInit } from '@/hooks/use-playlist-init';
 
 /**
  * Root index - redirects to user-select or tabs based on user state.
@@ -13,20 +16,39 @@ export default function Index() {
   const users = useUserStore(state => state.users);
   const isLoading = useUserStore(state => state.isLoading);
   const isPlaylistInitialized = usePlaylistStore(state => state.isInitialized);
+  const initError = usePlaylistStore(state => state.initError);
 
   const shouldRedirectToUserSelect = !isLoading && isPlaylistInitialized && users.length === 0;
 
-  // Hide splash before redirecting to user-select, since HomeScreen (which
-  // normally hides the splash) will never mount on this path.
+  // Hide splash before redirecting to user-select or showing error, since
+  // HomeScreen (which normally hides the splash) will never mount on this path.
   useEffect(() => {
-    if (shouldRedirectToUserSelect) {
+    if (shouldRedirectToUserSelect || initError) {
       SplashScreen.hideAsync();
     }
-  }, [shouldRedirectToUserSelect]);
+  }, [shouldRedirectToUserSelect, initError]);
 
   // Wait until users AND playlists are fully loaded before navigating
   if (isLoading || !isPlaylistInitialized) {
     return <View style={{ flex: 1 }} />;
+  }
+
+  // Show error screen if initialization failed
+  if (initError) {
+    return (
+      <ThemedView style={styles.errorContainer}>
+        <ThemedText style={styles.errorTitle}>Failed to Initialize</ThemedText>
+        <ThemedText style={styles.errorMessage} type="subtitle">
+          {initError}
+        </ThemedText>
+        <ThemedText
+          style={styles.retryButton}
+          onPress={retryInit}
+        >
+          Tap to Retry
+        </ThemedText>
+      </ThemedView>
+    );
   }
 
   if (users.length === 0) {
@@ -35,3 +57,30 @@ export default function Index() {
 
   return <Redirect href="/(tabs)" />;
 }
+
+const styles = StyleSheet.create({
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+    gap: 12,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+  },
+  errorMessage: {
+    fontSize: 14,
+    textAlign: 'center',
+    opacity: 0.7,
+    lineHeight: 20,
+  },
+  retryButton: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#007AFF',
+    marginTop: 16,
+    padding: 12,
+  },
+});

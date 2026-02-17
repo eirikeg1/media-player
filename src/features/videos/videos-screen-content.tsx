@@ -106,13 +106,14 @@ export function VideosScreenContent({
   }, [favoriteChannels, onChannelPress]);
 
   const renderSeriesItem = useCallback(({ item: series }: ListRenderItemInfo<SeriesInfo>) => {
+    if (!onSeriesPress) return null;
     const isFavorite = isSeriesFavorite(series, favoriteChannels);
 
     return (
       <SeriesItem
         series={series}
         isFavorite={isFavorite}
-        onPress={onSeriesPress!}
+        onPress={onSeriesPress}
       />
     );
   }, [favoriteChannels, onSeriesPress]);

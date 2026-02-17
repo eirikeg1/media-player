@@ -38,16 +38,6 @@ export async function getRustDatabase(): Promise<Database> {
 }
 
 /**
- * Close the Rust database connection
- */
-export async function closeRustDatabase(): Promise<void> {
-  if (database) {
-    await database.close();
-    database = null;
-  }
-}
-
-/**
  * Convert Rust Channel to JS Channel format
  */
 function rustChannelToJsChannel(rustChannel: RustChannel): Channel {

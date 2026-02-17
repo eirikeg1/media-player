@@ -16,6 +16,7 @@ interface PlaylistState {
   isInitialized: boolean;
   isLoading: boolean;
   error: string | null;
+  initError: string | null;
 
   addPlaylist: (input: CreatePlaylistInput) => Promise<void>;
   removePlaylist: (id: string) => Promise<void>;
@@ -34,6 +35,7 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
   isInitialized: false,
   isLoading: false,
   error: null,
+  initError: null,
 
   addPlaylist: async (input: CreatePlaylistInput) => {
     console.log('[PlaylistStore] addPlaylist called with:', {

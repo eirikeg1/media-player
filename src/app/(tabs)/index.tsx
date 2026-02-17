@@ -68,8 +68,11 @@ export default function HomeScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
-    await Promise.all([refreshRecentlyWatched(), refreshContent()]);
-    setIsRefreshing(false);
+    try {
+      await Promise.allSettled([refreshRecentlyWatched(), refreshContent()]);
+    } finally {
+      setIsRefreshing(false);
+    }
   }, [refreshRecentlyWatched, refreshContent]);
 
   // Movie detail modal

@@ -1,7 +1,6 @@
 import { useEffect } from 'react';
 import { StyleSheet, useColorScheme, View } from 'react-native';
 import Animated, {
-  interpolateColor,
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
@@ -16,12 +15,6 @@ const CAROUSEL_CARD_COUNT = 5;
 const ACTIVE_SCALE = 1.2;
 const STRIP_GAP = 8;
 const SCALE_OVERFLOW = (CARD_SIZE * (ACTIVE_SCALE - 1)) / 2;
-
-// Skeleton color pulse endpoints (solid colors to avoid overlap artifacts)
-const SKELETON_DARK_LOW = '#1f1f1f';
-const SKELETON_DARK_HIGH = '#2a2a2a';
-const SKELETON_LIGHT_LOW = '#d4d4d4';
-const SKELETON_LIGHT_HIGH = '#e0e0e0';
 
 // Discover row constants (matching discover-row.tsx)
 const ITEM_WIDTH = 120;
@@ -42,18 +35,6 @@ export function HomeSkeletonContent() {
     opacity: opacity.value,
   }));
 
-  // Carousel cards: animate backgroundColor instead of opacity to avoid overlap artifacts
-  const colorLow = colorScheme === 'dark' ? SKELETON_DARK_LOW : SKELETON_LIGHT_LOW;
-  const colorHigh = colorScheme === 'dark' ? SKELETON_DARK_HIGH : SKELETON_LIGHT_HIGH;
-
-  const animatedCardStyle = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(
-      opacity.value,
-      [0.3, 0.7],
-      [colorLow, colorHigh]
-    ),
-  }));
-
   return (
     <View style={styles.container}>
       {/* Skeleton carousel */}
@@ -72,7 +53,8 @@ export function HomeSkeletonContent() {
                   : i === 1
                     ? { width: CARD_SIZE - OVERLAP - STRIP_GAP - SCALE_OVERFLOW, marginLeft: STRIP_GAP + SCALE_OVERFLOW }
                     : { width: CARD_SIZE - OVERLAP - STRIP_GAP, marginLeft: STRIP_GAP },
-                animatedCardStyle,
+                { backgroundColor: placeholderColor },
+                animatedStyle,
               ]}
             />
           ))}
