@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { usePlaylistStore } from '@/stores/playlist/playlist-store';
 import { useUserStore } from '@/stores/user/user-store';
+import { useHeaderBackgroundStore } from '@/stores/header-background';
 import { useFirstPageCacheStore } from '@/stores/cache';
 import { initializeDatabase } from '@/db/migrations';
 
@@ -43,6 +44,10 @@ export function usePlaylistInit() {
         if (currentUser) {
           console.log('[App] Loading favorite channels...');
           await useUserStore.getState().loadFavoriteChannels(currentUser.id);
+
+          // Load header background selections
+          console.log('[App] Loading header background selections...');
+          await useHeaderBackgroundStore.getState().loadSelections(currentUser.id);
         }
         const favoriteChannels = useUserStore.getState().favoriteChannels;
 
@@ -55,7 +60,9 @@ export function usePlaylistInit() {
         }
       } catch (error) {
         console.error('[App] Failed to initialize app:', error);
-        // Error is logged; splash timeout will ensure app remains usable
+        // Force stores out of loading state so navigation can proceed
+        usePlaylistStore.setState({ isInitialized: true });
+        useUserStore.setState({ isLoading: false });
       }
     };
 

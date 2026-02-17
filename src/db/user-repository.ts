@@ -109,6 +109,7 @@ interface UserSettingsRow {
   showVideosTab: number;
   playlistSharingEnabled: number;
   privateModeExpiresAt: string | null;
+  shareUploadedBackgrounds: number;
 }
 
 interface UserFavoriteChannelRow {
@@ -231,6 +232,7 @@ class SQLiteUserRepository implements IUserRepository {
       showVideosTab: row.showVideosTab === 1,
       playlistSharingEnabled: row.playlistSharingEnabled === 1,
       privateModeExpiresAt: row.privateModeExpiresAt || undefined,
+      shareUploadedBackgrounds: row.shareUploadedBackgrounds === 1,
     };
   }
 
@@ -292,8 +294,8 @@ class SQLiteUserRepository implements IUserRepository {
 
       // Insert default settings
       await tx.runAsync(
-        `INSERT INTO user_settings (userId, theme, language, defaultQuality, defaultSubtitles, activePlaylistId, channelSortBy, parentalControlEnabled, parentalControlPin, showHomeTab, showLiveTab, showVideosTab, playlistSharingEnabled, privateModeExpiresAt)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO user_settings (userId, theme, language, defaultQuality, defaultSubtitles, activePlaylistId, channelSortBy, parentalControlEnabled, parentalControlPin, showHomeTab, showLiveTab, showVideosTab, playlistSharingEnabled, privateModeExpiresAt, shareUploadedBackgrounds)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           userId,
           DEFAULT_USER_SETTINGS.theme,
@@ -309,6 +311,7 @@ class SQLiteUserRepository implements IUserRepository {
           DEFAULT_USER_SETTINGS.showVideosTab ? 1 : 0,
           DEFAULT_USER_SETTINGS.playlistSharingEnabled ? 1 : 0,
           null,
+          DEFAULT_USER_SETTINGS.shareUploadedBackgrounds ? 1 : 0,
         ]
       );
     });
@@ -393,7 +396,7 @@ class SQLiteUserRepository implements IUserRepository {
        SET theme = ?, language = ?, defaultQuality = ?, defaultSubtitles = ?, activePlaylistId = ?,
            channelSortBy = ?, parentalControlEnabled = ?, parentalControlPin = ?,
            showHomeTab = ?, showLiveTab = ?, showVideosTab = ?, playlistSharingEnabled = ?,
-           privateModeExpiresAt = ?
+           privateModeExpiresAt = ?, shareUploadedBackgrounds = ?
        WHERE userId = ?`,
       [
         updated.theme,
@@ -409,6 +412,7 @@ class SQLiteUserRepository implements IUserRepository {
         updated.showVideosTab ? 1 : 0,
         updated.playlistSharingEnabled ? 1 : 0,
         updated.privateModeExpiresAt || null,
+        updated.shareUploadedBackgrounds ? 1 : 0,
         userId,
       ]
     );

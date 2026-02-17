@@ -1,5 +1,7 @@
+import { useEffect } from 'react';
 import { View } from 'react-native';
 import { Redirect } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
 import { useUserStore } from '@/stores/user/user-store';
 import { usePlaylistStore } from '@/stores/playlist/playlist-store';
 
@@ -11,6 +13,16 @@ export default function Index() {
   const users = useUserStore(state => state.users);
   const isLoading = useUserStore(state => state.isLoading);
   const isPlaylistInitialized = usePlaylistStore(state => state.isInitialized);
+
+  const shouldRedirectToUserSelect = !isLoading && isPlaylistInitialized && users.length === 0;
+
+  // Hide splash before redirecting to user-select, since HomeScreen (which
+  // normally hides the splash) will never mount on this path.
+  useEffect(() => {
+    if (shouldRedirectToUserSelect) {
+      SplashScreen.hideAsync();
+    }
+  }, [shouldRedirectToUserSelect]);
 
   // Wait until users AND playlists are fully loaded before navigating
   if (isLoading || !isPlaylistInitialized) {

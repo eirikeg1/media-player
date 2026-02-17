@@ -8,12 +8,15 @@ import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
 import { isChannelFavorite } from '@/lib/channel-utils';
+import { useHeaderBackground } from '@/hooks/use-header-background';
 import type { GroupOption } from '@/lib/group-utils';
 import type { SortOption } from '@/types/sort.types';
 import type { Channel, Playlist } from '@/types/playlist.types';
 import type { ListRenderItemInfo } from '@shopify/flash-list';
 import { useCallback, useMemo } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
+
+const DEFAULT_LIVE_HEADER = require('../../../assets/images/parallax-headers/live/header-champions-league.jpg');
 
 interface LiveScreenContentProps {
   isLoading: boolean;
@@ -68,6 +71,8 @@ export function LiveScreenContent({
   sortOrder,
   onSortSelect,
 }: LiveScreenContentProps) {
+  const customHeader = useHeaderBackground('live');
+
   const keyExtractor = useCallback((item: Channel, index: number) => {
     return `channel-${item.name}-${index}`;
   }, []);
@@ -122,7 +127,7 @@ export function LiveScreenContent({
           headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
           headerImage={
             <Image
-              source={require('../../../assets/images/parallax-headers/live/header-champions-league.jpg')}
+              source={customHeader ?? DEFAULT_LIVE_HEADER}
               style={styles.headerImage}
               contentFit="cover"
             />

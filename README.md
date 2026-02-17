@@ -37,3 +37,5 @@ A helper script (`scripts/expo-run.sh`) tracks which build variant was last preb
 - [Playlist Usage](docs/PLAYLIST_USAGE.md) - How to use the playlist features.
 - [Icon Reference](docs/ICON_REFERENCE.md) - Guide for using icons in the app.
 
+# Attribution
+App icon is from [Play button icons created by Azland Studio - Flaticon<](https://www.flaticon.com/free-icons/play-button)

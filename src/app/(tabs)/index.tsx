@@ -15,6 +15,7 @@ import { RustChannelService } from '@/services/rust-channel-service';
 import { HomeSkeletonContent } from '@/features/home/home-skeleton-content';
 import { usePlaylistStore } from '@/stores/playlist/playlist-store';
 import { useUserStore } from '@/stores/user/user-store';
+import { useHeaderBackground } from '@/hooks/use-header-background';
 import type { Channel } from '@/types/playlist.types';
 import type { RecentlyWatchedItem } from '@/types/user.types';
 import { Image } from 'expo-image';
@@ -25,12 +26,16 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { getChannelId } from '@/lib/channel-utils';
 
+const DEFAULT_HOME_HEADER = require('../../../assets/images/parallax-headers/general/blue-minimalist-wavy.jpg');
+
 export default function HomeScreen() {
   const router = useRouter();
   const { activePlaylist } = usePlaylistData();
   const playlistId = activePlaylist?.id;
   const excludeAdult = useUserStore((s) => s.currentUser?.settings?.parentalControlEnabled ?? false);
   const isPlaylistInitialized = usePlaylistStore((s) => s.isInitialized);
+  const customHeader = useHeaderBackground('home');
+  const headerSource = customHeader ?? DEFAULT_HOME_HEADER;
 
   // Data hooks
   const { items: recentlyWatched, refresh: refreshRecentlyWatched } = useRecentlyWatched(20);
@@ -178,7 +183,7 @@ export default function HomeScreen() {
         headerImage={
           <View style={styles.headerContainer}>
             <Image
-              source={require('../../../assets/images/parallax-headers/general/blue-minimalist-wavy.jpg')}
+              source={headerSource}
               style={styles.headerBackground}
               contentFit="cover"
             />
@@ -213,7 +218,7 @@ export default function HomeScreen() {
         headerImage={
           <View style={styles.headerContainer}>
             <Image
-              source={require('../../../assets/images/parallax-headers/general/blue-minimalist-wavy.jpg')}
+              source={headerSource}
               style={styles.headerBackground}
               contentFit="cover"
             />

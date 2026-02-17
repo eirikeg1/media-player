@@ -8,6 +8,7 @@ import { SeriesItem } from '@/features/videos/series-item';
 import { VideosEmptyState } from '@/features/videos/videos-empty-state';
 import { VideosTopBar } from '@/features/videos/videos-top-bar';
 import { isChannelFavorite, isSeriesFavorite } from '@/lib/channel-utils';
+import { useHeaderBackground } from '@/hooks/use-header-background';
 import type { GroupOption } from '@/lib/group-utils';
 import type { SortOption } from '@/types/sort.types';
 import type { Channel, Playlist } from '@/types/playlist.types';
@@ -16,6 +17,8 @@ import { Image } from 'expo-image';
 import type { SeriesInfo } from 'expo-m3u-parser';
 import { useCallback, useMemo } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
+
+const DEFAULT_VIDEOS_HEADER = require('../../../assets/images/parallax-headers/general/green-paper-cut-abstract.jpg');
 
 interface VideosScreenContentProps {
   contentType: 'movie' | 'series';
@@ -79,6 +82,8 @@ export function VideosScreenContent({
   onSortSelect,
 }: VideosScreenContentProps) {
   const isSeries = contentType === 'series';
+  const customMoviesHeader = useHeaderBackground('movies');
+  const customSeriesHeader = useHeaderBackground('series');
 
   const channelKeyExtractor = useCallback((item: Channel, index: number) => {
     return `channel-${item.name}-${index}`;
@@ -160,9 +165,13 @@ export function VideosScreenContent({
     </ThemedView>
   );
 
+  const headerImageSource = isSeries
+    ? (customSeriesHeader ?? DEFAULT_VIDEOS_HEADER)
+    : (customMoviesHeader ?? DEFAULT_VIDEOS_HEADER);
+
   const headerImage = (
     <Image
-      source={require('../../../assets/images/parallax-headers/general/green-paper-cut-abstract.jpg')}
+      source={headerImageSource}
       style={styles.headerImage}
       contentFit="cover"
     />

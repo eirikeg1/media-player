@@ -30,6 +30,7 @@ export interface UserSettings {
   showVideosTab: boolean;
   playlistSharingEnabled: boolean;
   privateModeExpiresAt?: string;
+  shareUploadedBackgrounds: boolean;
 }
 
 /**
@@ -197,4 +198,5 @@ export const DEFAULT_USER_SETTINGS: Omit<UserSettings, 'userId'> = {
   showLiveTab: true,
   showVideosTab: true,
   playlistSharingEnabled: true,
+  shareUploadedBackgrounds: true,
 };

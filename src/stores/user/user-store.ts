@@ -163,6 +163,14 @@ export const useUserStore = create<UserState>((set, get) => ({
       // Hydrate favorite channels for the new user
       get().loadFavoriteChannels(userId);
 
+      // Reload header background selections for the new user
+      try {
+        const { useHeaderBackgroundStore } = await import('../header-background/header-background-store');
+        await useHeaderBackgroundStore.getState().loadSelections(userId);
+      } catch (error) {
+        console.error('[UserStore] Failed to reload header backgrounds after user switch:', error);
+      }
+
       // Reload playlist store to get the correct active playlist for this user
       try {
         const { usePlaylistStore } = await import('../playlist/playlist-store');

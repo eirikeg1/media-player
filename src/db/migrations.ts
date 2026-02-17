@@ -429,6 +429,49 @@ const migrations: Migration[] = [
       console.log('[Migration] Added privateModeExpiresAt column to user_settings');
     },
   },
+  {
+    version: 11,
+    name: 'add_header_background_tables',
+    up: async (db) => {
+      // Pool of uploaded background images
+      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS user_uploaded_backgrounds (
+          id TEXT PRIMARY KEY NOT NULL,
+          userId TEXT NOT NULL,
+          pageId TEXT NOT NULL,
+          fileUri TEXT NOT NULL,
+          createdAt TEXT NOT NULL,
+          FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE
+        );
+      `);
+      await db.execAsync(
+        'CREATE INDEX IF NOT EXISTS idx_uub_userId ON user_uploaded_backgrounds (userId);',
+      );
+      await db.execAsync(
+        'CREATE INDEX IF NOT EXISTS idx_uub_userId_pageId ON user_uploaded_backgrounds (userId, pageId);',
+      );
+
+      // Current header selection per user per page
+      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS user_header_selections (
+          userId TEXT NOT NULL,
+          pageId TEXT NOT NULL,
+          type TEXT NOT NULL,
+          value TEXT NOT NULL,
+          updatedAt TEXT NOT NULL,
+          PRIMARY KEY (userId, pageId),
+          FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE
+        );
+      `);
+
+      // Share-uploads toggle on user_settings
+      await db.execAsync(
+        'ALTER TABLE user_settings ADD COLUMN shareUploadedBackgrounds INTEGER NOT NULL DEFAULT 1;',
+      );
+
+      console.log('[Migration] Added header background tables and shareUploadedBackgrounds setting');
+    },
+  },
 ];
 
 /**

@@ -9,6 +9,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import 'react-native-reanimated';
 import '../global.css';
 
+import { useEffect } from 'react';
+
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { usePlaylistInit } from '@/hooks/use-playlist-init';
 import { NAV_THEME } from '@/lib/theme';
@@ -20,6 +22,14 @@ export default function RootLayout() {
 
   // Initialize playlists and users on app load
   usePlaylistInit();
+
+  // Safety timeout: hide splash after 10s no matter what
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      SplashScreen.hideAsync();
+    }, 10_000);
+    return () => clearTimeout(timeout);
+  }, []);
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? NAV_THEME.dark : NAV_THEME.light}>

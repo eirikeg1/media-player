@@ -5,7 +5,7 @@ import { useUserStore } from '@/stores/user/user-store';
 import type { UpdateUserInput, User } from '@/types/user.types';
 import { router } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 // Constants
@@ -44,7 +44,7 @@ function FirstUserScreen({ username, isCreating, onUsernameChange, onSubmit }: U
     <SafeAreaView className="flex-1 bg-white dark:bg-gray-950" edges={['top']}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior="padding"
       >
         <ScrollView
           contentContainerStyle={{ flexGrow: 1 }}
