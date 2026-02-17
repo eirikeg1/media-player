@@ -473,6 +473,15 @@ const migrations: Migration[] = [
       console.log('[Migration] Added header background tables and shareUploadedBackgrounds setting');
     },
   },
+  {
+    version: 12,
+    name: 'add_playlist_epg_url',
+    up: async (db) => {
+      await db.execAsync(`ALTER TABLE playlists ADD COLUMN epgUrl TEXT;`);
+
+      console.log('[Migration] Added epgUrl column to playlists');
+    },
+  },
 ];
 
 /**

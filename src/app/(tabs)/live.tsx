@@ -1,7 +1,9 @@
 import { useRouter } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { ChannelDetailModal } from '@/features/live/channel-detail-modal';
 import { LiveScreenContent } from '@/features/live/live-screen-content';
+import { useCurrentProgrammes } from '@/features/live/hooks/use-current-programmes';
 import { useFavoriteChannels } from '@/features/live/hooks/use-favorite-channels';
 import { useFavoriteGroups } from '@/features/live/hooks/use-favorite-groups';
 import { useGroups } from '@/features/live/hooks/use-groups';
@@ -10,10 +12,12 @@ import { usePlaylistData } from '@/features/live/hooks/use-playlist-data';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { getChannelId } from '@/lib/channel-utils';
 import { FAVORITES_GROUP_SENTINEL, getEffectiveFavoriteGroups } from '@/lib/group-utils';
+import { EpgService } from '@/services/epg-service';
 import { useFirstPageCacheStore } from '@/stores/cache';
 import { useUserStore } from '@/stores/user/user-store';
 import { LIVE_SORT_OPTIONS } from '@/types/sort.types';
 import type { Channel } from '@/types/playlist.types';
+import type { EpgProgramme } from 'expo-m3u-parser';
 
 export default function LiveScreen() {
   const router = useRouter();
@@ -103,6 +107,36 @@ export default function LiveScreen() {
     sortOrder,
   });
 
+  // EPG: bulk current programmes for visible channels
+  const { programmes: currentProgrammes } = useCurrentProgrammes(channels);
+
+  // Channel detail modal state
+  const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
+  const [channelModalVisible, setChannelModalVisible] = useState(false);
+  const [nextProgramme, setNextProgramme] = useState<EpgProgramme | null>(null);
+  const nextProgrammeFetchRef = useRef(0);
+
+  // Fetch next programme when modal opens
+  useEffect(() => {
+    if (!channelModalVisible || !selectedChannel?.tvg?.id) {
+      setNextProgramme(null);
+      return;
+    }
+
+    const fetchId = ++nextProgrammeFetchRef.current;
+    EpgService.getNextProgramme(selectedChannel.tvg.id)
+      .then((result) => {
+        if (fetchId === nextProgrammeFetchRef.current) {
+          setNextProgramme(result);
+        }
+      })
+      .catch(() => {
+        if (fetchId === nextProgrammeFetchRef.current) {
+          setNextProgramme(null);
+        }
+      });
+  }, [channelModalVisible, selectedChannel]);
+
   // Event handlers for filters
   const handleGroupSelect = useCallback((groupName: string) => {
     setUserGroupSelection(groupName);
@@ -122,12 +156,15 @@ export default function LiveScreen() {
     }
   }, [selectedSortId]);
 
-  // Event handlers
+  // Tap opens info modal instead of playing directly
   const handleChannelPress = useCallback((channel: Channel) => {
-    if (__DEV__) {
-      console.log('Channel pressed:', channel.name);
-    }
+    setSelectedChannel(channel);
+    setChannelModalVisible(true);
+  }, []);
 
+  // Play from modal
+  const handlePlayPress = useCallback((channel: Channel) => {
+    setChannelModalVisible(false);
     router.push({
       pathname: '/video-player',
       params: {
@@ -137,6 +174,10 @@ export default function LiveScreen() {
       },
     });
   }, [router, activePlaylist?.id]);
+
+  const handleModalClose = useCallback(() => {
+    setChannelModalVisible(false);
+  }, []);
 
   const isLoading = !hasLoadedPlaylist
     || (!!activePlaylist && (shouldDeferFetch || isLoadingChannels));
@@ -150,33 +191,50 @@ export default function LiveScreen() {
     refreshChannels();
   }, [handleRefresh, refreshChannels, activePlaylist?.id]);
 
+  // Get current programme for selected channel (for modal)
+  const selectedChannelProgramme = selectedChannel?.tvg?.id
+    ? currentProgrammes.get(selectedChannel.tvg.id) ?? null
+    : null;
+
   return (
-    <LiveScreenContent
-      isLoading={isLoading}
-      playlist={activePlaylist}
-      channels={channels}
-      favoriteChannels={favoriteChannels}
-      groups={groups}
-      selectedGroup={selectedGroupName}
-      searchText={searchText}
-      isRefreshing={isRefreshing}
-      onGroupSelect={handleGroupSelect}
-      onSearchChange={handleSearchTextChange}
-      onChannelPress={handleChannelPress}
-      onRefresh={handleCombinedRefresh}
-      onLoadMore={loadMore}
-      isLoadingMore={isLoadingMore}
-      hasMore={hasMore}
-      backgroundColor={backgroundColor}
-      iconColor={iconColor}
-      tintColor={tintColor}
-      favoriteGroups={favoriteGroups}
-      onToggleFavoriteGroup={toggleFavoriteGroup}
-      sortOptions={LIVE_SORT_OPTIONS}
-      selectedSortId={selectedSortId}
-      sortOrder={sortOrder}
-      onSortSelect={handleSortSelect}
-    />
+    <>
+      <LiveScreenContent
+        isLoading={isLoading}
+        playlist={activePlaylist}
+        channels={channels}
+        favoriteChannels={favoriteChannels}
+        groups={groups}
+        selectedGroup={selectedGroupName}
+        searchText={searchText}
+        isRefreshing={isRefreshing}
+        onGroupSelect={handleGroupSelect}
+        onSearchChange={handleSearchTextChange}
+        onChannelPress={handleChannelPress}
+        onRefresh={handleCombinedRefresh}
+        onLoadMore={loadMore}
+        isLoadingMore={isLoadingMore}
+        hasMore={hasMore}
+        backgroundColor={backgroundColor}
+        iconColor={iconColor}
+        tintColor={tintColor}
+        favoriteGroups={favoriteGroups}
+        onToggleFavoriteGroup={toggleFavoriteGroup}
+        sortOptions={LIVE_SORT_OPTIONS}
+        selectedSortId={selectedSortId}
+        sortOrder={sortOrder}
+        onSortSelect={handleSortSelect}
+        currentProgrammes={currentProgrammes}
+      />
+
+      <ChannelDetailModal
+        visible={channelModalVisible}
+        onClose={handleModalClose}
+        channel={selectedChannel}
+        playlistId={activePlaylist?.id}
+        onPlayPress={handlePlayPress}
+        currentProgramme={selectedChannelProgramme}
+        nextProgramme={nextProgramme}
+      />
+    </>
   );
 }
-

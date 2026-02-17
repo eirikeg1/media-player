@@ -1,8 +1,10 @@
 import { FavoriteStar } from '@/features/live/favorite-star';
+import { ProgrammeProgress } from '@/features/live/programme-progress';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
 import { getChannelId } from '@/lib/channel-utils';
 import type { Channel } from '@/types/playlist.types';
+import type { EpgProgramme } from 'expo-m3u-parser';
 import { useState } from 'react';
 import { Image, StyleSheet, TouchableOpacity, View } from 'react-native';
 
@@ -10,13 +12,15 @@ interface ChannelItemProps {
   channel: Channel;
   isFavorite: boolean;
   onPress: (channel: Channel) => void;
+  currentProgramme?: EpgProgramme | null;
 }
 
-export function ChannelItem({ channel, isFavorite, onPress }: ChannelItemProps) {
+export function ChannelItem({ channel, isFavorite, onPress, currentProgramme }: ChannelItemProps) {
   const [imageError, setImageError] = useState(false);
   const hasLogo = !!channel.tvg.logo && !imageError;
   const initial = channel.name.charAt(0).toUpperCase();
   const channelId = getChannelId(channel);
+  const hasProgramme = !!currentProgramme;
 
   return (
     <View style={styles.container}>
@@ -26,7 +30,7 @@ export function ChannelItem({ channel, isFavorite, onPress }: ChannelItemProps) 
         activeOpacity={0.7}
         accessibilityRole="button"
         accessibilityLabel={`${channel.name} channel`}
-        accessibilityHint="Tap to play this channel"
+        accessibilityHint="Tap to view channel details"
       >
         <View style={styles.imageWrapper}>
           {hasLogo ? (
@@ -41,12 +45,17 @@ export function ChannelItem({ channel, isFavorite, onPress }: ChannelItemProps) 
               <ThemedText style={styles.fallbackText}>{initial}</ThemedText>
             </ThemedView>
           )}
-
+          {currentProgramme && <ProgrammeProgress programme={currentProgramme} />}
         </View>
 
-        <ThemedText style={styles.channelName} numberOfLines={2}>
+        <ThemedText style={styles.channelName} numberOfLines={hasProgramme ? 1 : 2}>
           {channel.name}
         </ThemedText>
+        {currentProgramme && (
+          <ThemedText style={styles.programmeName} numberOfLines={1}>
+            {currentProgramme.title}
+          </ThemedText>
+        )}
       </TouchableOpacity>
 
       <View style={styles.starContainer}>
@@ -99,7 +108,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontWeight: '500',
     lineHeight: 13,
-    height: 26,
-    textAlignVertical: 'top',
+  },
+  programmeName: {
+    fontSize: 9,
+    textAlign: 'center',
+    opacity: 0.6,
+    lineHeight: 11,
   },
 });

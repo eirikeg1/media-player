@@ -60,3 +60,4 @@
 
 ## Bugs
 * When a video fails to load you get an error up, then an infinite loading spinner
+* When finishing watching a movie series and exit, the home page "Continue watching" does not add the next episode to the start of the list, but the one you just finished

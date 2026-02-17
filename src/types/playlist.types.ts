@@ -35,6 +35,7 @@ export interface Playlist {
   id: string;
   name: string;
   url: string;
+  epgUrl?: string;
   credentials?: PlaylistCredentials;
   parsedData?: ParsedPlaylist;
   channelCount?: number;
@@ -48,6 +49,7 @@ export interface Playlist {
 export interface CreatePlaylistInput {
   name: string;
   url: string;
+  epgUrl?: string;
   credentials?: PlaylistCredentials;
 }
 
@@ -55,6 +57,7 @@ export interface CreatePlaylistInput {
 export interface UpdatePlaylistInput {
   name?: string;
   url?: string;
+  epgUrl?: string;
   credentials?: PlaylistCredentials;
 }
 

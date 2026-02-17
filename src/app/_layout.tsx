@@ -14,6 +14,7 @@ import { useEffect } from 'react';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { usePlaylistInit } from '@/hooks/use-playlist-init';
 import { NAV_THEME } from '@/lib/theme';
+import { EpgService } from '@/services/epg-service';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -29,6 +30,13 @@ export default function RootLayout() {
       SplashScreen.hideAsync();
     }, 10_000);
     return () => clearTimeout(timeout);
+  }, []);
+
+  // Clean up expired EPG programmes on startup
+  useEffect(() => {
+    EpgService.cleanupExpired().catch((err) => {
+      console.warn('[RootLayout] EPG cleanup failed:', err);
+    });
   }, []);
 
   return (

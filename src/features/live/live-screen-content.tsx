@@ -11,6 +11,7 @@ import { isChannelFavorite } from '@/lib/channel-utils';
 import { useHeaderBackground } from '@/hooks/use-header-background';
 import type { GroupOption } from '@/lib/group-utils';
 import type { SortOption } from '@/types/sort.types';
+import type { EpgProgramme } from 'expo-m3u-parser';
 import type { Channel, Playlist } from '@/types/playlist.types';
 import type { ListRenderItemInfo } from '@shopify/flash-list';
 import { useCallback, useMemo } from 'react';
@@ -43,6 +44,7 @@ interface LiveScreenContentProps {
   selectedSortId: string;
   sortOrder: 'asc' | 'desc';
   onSortSelect: (id: string) => void;
+  currentProgrammes?: Map<string, EpgProgramme>;
 }
 
 export function LiveScreenContent({
@@ -70,6 +72,7 @@ export function LiveScreenContent({
   selectedSortId,
   sortOrder,
   onSortSelect,
+  currentProgrammes,
 }: LiveScreenContentProps) {
   const customHeader = useHeaderBackground('live');
 
@@ -79,15 +82,17 @@ export function LiveScreenContent({
 
   const renderChannelItem = useCallback(({ item: channel }: ListRenderItemInfo<Channel>) => {
     const isFavorite = isChannelFavorite(channel, favoriteChannels);
+    const programme = currentProgrammes?.get(channel.tvg?.id ?? '') ?? null;
 
     return (
       <ChannelItem
         channel={channel}
         isFavorite={isFavorite}
         onPress={onChannelPress}
+        currentProgramme={programme}
       />
     );
-  }, [favoriteChannels, onChannelPress]);
+  }, [favoriteChannels, onChannelPress, currentProgrammes]);
 
   const EmptyComponent = useCallback(() => {
     return (

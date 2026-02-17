@@ -5,6 +5,7 @@ import type {
   UpdatePlaylistInput,
 } from '@/types/playlist.types';
 import { PlaylistService } from '@/services/playlist-service';
+import { EpgService } from '@/services/epg-service';
 import { RustChannelService } from '@/services/rust-channel-service';
 import { playlistRepository } from '@/db/playlist-repository';
 import { generatePlaylistId, sanitizePlaylistName } from '@/lib/playlist-utils';
@@ -82,13 +83,14 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
       const playlistName = sanitizePlaylistName(input.name);
 
       console.log('[PlaylistStore] Fetching and importing playlist via Rust...');
+      const importStart = Date.now();
       const channelCount = await RustChannelService.fetchAndImportPlaylist(
         playlistId,
         playlistName,
         input.url,
         input.credentials
       );
-      console.log('[PlaylistStore] Playlist fetched and imported successfully');
+      console.log(`[PlaylistStore] Playlist imported: ${channelCount} channels (${Date.now() - importStart}ms)`);
 
       if (channelCount === 0) {
         throw new Error('No channels found in playlist. Please verify the M3U format.');
@@ -99,6 +101,7 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
         id: playlistId,
         name: playlistName,
         url: input.url.trim(),
+        epgUrl: input.epgUrl?.trim() || undefined,
         credentials: input.credentials,
         // parsedData is no longer stored - channels live in Rust DB
         channelCount,
@@ -116,6 +119,11 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
 
       await playlistRepository.create(playlist);
       console.log('[PlaylistStore] Playlist saved to repository');
+
+      // Fire-and-forget: detect and fetch EPG data
+      EpgService.detectAndFetchEpgSources(playlistId, playlist.epgUrl).catch((err) => {
+        console.warn('[PlaylistStore] EPG auto-import failed:', err);
+      });
 
       set((state) => ({
         playlists: [...state.playlists, playlist],
@@ -199,16 +207,23 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
       }
 
       console.log('[PlaylistStore] Refreshing playlist via Rust:', id);
+      const importStart = Date.now();
       const channelCount = await RustChannelService.fetchAndImportPlaylist(
         id,
         playlist.name,
         playlist.url,
         playlist.credentials
       );
+      console.log(`[PlaylistStore] Refresh imported: ${channelCount} channels (${Date.now() - importStart}ms)`);
 
       if (channelCount === 0) {
         throw new Error('No channels found in playlist. Please verify the M3U format.');
       }
+
+      // Fire-and-forget: detect and fetch EPG data
+      EpgService.detectAndFetchEpgSources(id, playlist.epgUrl).catch((err) => {
+        console.warn('[PlaylistStore] EPG auto-import failed:', err);
+      });
 
       const updated = await playlistRepository.update(id, {
         channelCount,
@@ -248,18 +263,30 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
         }
 
         console.log('[PlaylistStore] Re-fetching playlist via Rust:', id);
+        const importStart = Date.now();
         channelCount = await RustChannelService.fetchAndImportPlaylist(
           id,
           updates.name ? sanitizePlaylistName(updates.name) : playlist.name,
           newUrl,
           newCredentials
         );
+        console.log(`[PlaylistStore] Update imported: ${channelCount} channels (${Date.now() - importStart}ms)`);
 
         if (channelCount === 0) {
           throw new Error('No channels found in playlist. Please verify the M3U format.');
         }
 
         lastFetchedAt = new Date();
+      }
+
+      // Resolve the effective epgUrl (updated value takes priority)
+      const effectiveEpgUrl = updates.epgUrl !== undefined ? updates.epgUrl : playlist.epgUrl;
+
+      // Fire-and-forget: detect and fetch EPG data if URL/credentials changed or epgUrl was updated
+      if (updates.url || updates.credentials || updates.epgUrl !== undefined) {
+        EpgService.detectAndFetchEpgSources(id, effectiveEpgUrl || undefined).catch((err) => {
+          console.warn('[PlaylistStore] EPG auto-import failed:', err);
+        });
       }
 
       const updateData: Partial<Playlist> = {

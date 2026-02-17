@@ -28,6 +28,7 @@ export const PlaylistForm = memo(function PlaylistForm({ onSuccess, onCancel, pl
   const [useCredentials, setUseCredentials] = useState(!!playlist?.credentials);
   const [username, setUsername] = useState(playlist?.credentials?.username || '');
   const [password, setPassword] = useState(playlist?.credentials?.password || '');
+  const [epgUrl, setEpgUrl] = useState(playlist?.epgUrl || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,6 +39,7 @@ export const PlaylistForm = memo(function PlaylistForm({ onSuccess, onCancel, pl
     if (playlist) {
       setName(playlist.name);
       setUrl(playlist.url);
+      setEpgUrl(playlist.epgUrl || '');
       setUseCredentials(!!playlist.credentials);
       setUsername(playlist.credentials?.username || '');
       setPassword(playlist.credentials?.password || '');
@@ -75,10 +77,13 @@ export const PlaylistForm = memo(function PlaylistForm({ onSuccess, onCancel, pl
     setIsSubmitting(true);
 
     try {
+      const trimmedEpgUrl = epgUrl.trim() || undefined;
+
       if (isEditing && playlist) {
         await updatePlaylist(playlist.id, {
           name: name.trim(),
           url: url.trim(),
+          epgUrl: trimmedEpgUrl,
           credentials: useCredentials
             ? { username: username.trim(), password: password.trim() }
             : undefined,
@@ -88,6 +93,7 @@ export const PlaylistForm = memo(function PlaylistForm({ onSuccess, onCancel, pl
         await addPlaylist({
           name: name.trim(),
           url: url.trim(),
+          epgUrl: trimmedEpgUrl,
           credentials: useCredentials
             ? { username: username.trim(), password: password.trim() }
             : undefined,
@@ -98,6 +104,7 @@ export const PlaylistForm = memo(function PlaylistForm({ onSuccess, onCancel, pl
       if (!isEditing) {
         setName('');
         setUrl('');
+        setEpgUrl('');
         setUsername('');
         setPassword('');
         setUseCredentials(false);
@@ -113,7 +120,7 @@ export const PlaylistForm = memo(function PlaylistForm({ onSuccess, onCancel, pl
       setIsSubmitting(false);
       console.log('[PlaylistForm] Submit completed');
     }
-  }, [name, url, useCredentials, username, password, addPlaylist, updatePlaylist, onSuccess, isEditing, playlist]);
+  }, [name, url, epgUrl, useCredentials, username, password, addPlaylist, updatePlaylist, onSuccess, isEditing, playlist]);
 
   return (
     <ThemedView style={styles.container}>
@@ -166,6 +173,26 @@ export const PlaylistForm = memo(function PlaylistForm({ onSuccess, onCancel, pl
         />
         <ThemedText style={styles.helpText}>
           If your URL contains username/password parameters, paste the full URL and skip authentication below
+        </ThemedText>
+      </View>
+
+      <View style={styles.formGroup}>
+        <ThemedText style={styles.label}>EPG / XMLTV URL</ThemedText>
+        <Textarea
+          value={epgUrl}
+          onChangeText={setEpgUrl}
+          placeholder="https://example.com/xmltv.php"
+          keyboardType="url"
+          autoCapitalize="none"
+          autoCorrect={false}
+          editable={!isSubmitting}
+          accessibilityLabel="EPG URL"
+          accessibilityHint="Enter an optional XMLTV EPG URL"
+          returnKeyType="next"
+          textContentType="URL"
+        />
+        <ThemedText style={styles.helpText}>
+          Optional. Auto-detected for Xtream providers.
         </ThemedText>
       </View>
 
