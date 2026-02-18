@@ -281,7 +281,7 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
   },
 
   updatePlaylist: async (id: string, updates: UpdatePlaylistInput) => {
-    set({ isLoading: true, error: null });
+    set({ error: null });
 
     try {
       let channelCount: number | undefined;
@@ -355,12 +355,11 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
 
       set((state) => ({
         playlists: state.playlists.map((p) => (p.id === id ? updated : p)),
-        isLoading: false,
       }));
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Failed to update playlist';
-      set({ error: errorMessage, isLoading: false });
+      set({ error: errorMessage });
       throw error;
     }
   },

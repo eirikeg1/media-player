@@ -83,15 +83,19 @@ export const PlaylistForm = memo(function PlaylistForm({ onSuccess, onCancel, pl
       const trimmedEpgUrl = epgUrl.trim() || undefined;
 
       if (isEditing && playlist) {
-        await updatePlaylist(playlist.id, {
+        // Close modal immediately; progress shows inline on the playlist card
+        onSuccess?.();
+        updatePlaylist(playlist.id, {
           name: name.trim(),
           url: url.trim(),
           epgUrl: trimmedEpgUrl,
           credentials: useCredentials
             ? { username: username.trim(), password: password.trim() }
             : undefined,
+        }).catch((err) => {
+          console.error('[PlaylistForm] Update error (surfaced via store):', err);
         });
-        console.log('[PlaylistForm] Playlist updated successfully');
+        return;
       } else {
         await addPlaylist({
           name: name.trim(),
