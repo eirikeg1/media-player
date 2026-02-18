@@ -8,16 +8,121 @@ import { usePlaylistStore } from '@/stores/playlist/playlist-store';
 import type { Playlist } from '@/types/playlist.types';
 import { memo, useCallback, useState } from 'react';
 import { Alert, FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ImportProgressBar } from './import-progress-bar';
 import { PlaylistModal } from './playlist-modal';
+
+interface PlaylistCardProps {
+  item: Playlist;
+  isActive: boolean;
+  onSelect: (playlist: Playlist) => void;
+  onEdit: (playlist: Playlist) => void;
+  onRefresh: (playlist: Playlist) => void;
+  onDelete: (playlist: Playlist) => void;
+}
+
+const PlaylistCard = memo(function PlaylistCard({
+  item,
+  isActive,
+  onSelect,
+  onEdit,
+  onRefresh,
+  onDelete,
+}: PlaylistCardProps) {
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const glass = isDark ? GlassColors.dark : GlassColors.light;
+
+  const cardStyle = [
+    styles.playlistCard,
+    {
+      backgroundColor: glass.surface,
+      borderColor: isActive ? '#007AFF' : glass.border,
+      borderWidth: isActive ? 2 : 1,
+    },
+  ];
+
+  return (
+    <TouchableOpacity
+      style={cardStyle}
+      onPress={() => onSelect(item)}
+      accessibilityRole="button"
+      accessibilityLabel={`${item.name} playlist`}
+      accessibilityHint="Tap to select this playlist as active"
+      accessibilityState={{ selected: isActive }}
+    >
+      <View style={styles.mainContent}>
+        <View style={styles.playlistInfo}>
+          <View style={styles.nameRow}>
+            <ThemedText type="defaultSemiBold" style={styles.playlistName}>
+              {item.name}
+            </ThemedText>
+            {isActive && (
+              <View style={styles.activeIndicator} />
+            )}
+          </View>
+          <View style={styles.metaRow}>
+            <IconSymbol name="tv" size={14} color={isDark ? '#7c869e' : '#5c6477'} />
+            <ThemedText style={styles.metaText}>
+              {item.channelCount || 0}
+            </ThemedText>
+            <ThemedText style={styles.separator}>•</ThemedText>
+            <ThemedText style={[styles.metaText, styles.urlText]} numberOfLines={1} ellipsizeMode="tail">
+              {extractCleanUrl(item.url)}
+            </ThemedText>
+          </View>
+        </View>
+
+        <View style={styles.playlistActions}>
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={(e) => {
+              e.stopPropagation();
+              onEdit(item);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Edit playlist"
+            accessibilityHint="Edit playlist details and settings"
+          >
+            <IconSymbol name="pencil" size={18} color={isDark ? '#7c869e' : '#5c6477'} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={(e) => {
+              e.stopPropagation();
+              onRefresh(item);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Refresh playlist"
+            accessibilityHint="Re-fetch and update the playlist channels"
+          >
+            <IconSymbol name="arrow.clockwise" size={18} color={isDark ? '#7c869e' : '#5c6477'} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={(e) => {
+              e.stopPropagation();
+              onDelete(item);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Delete playlist"
+            accessibilityHint="Remove this playlist from your library"
+          >
+            <IconSymbol name="trash" size={18} color="#FF3B30" />
+          </TouchableOpacity>
+        </View>
+      </View>
+      <ImportProgressBar playlistId={item.id} compact />
+    </TouchableOpacity>
+  );
+});
 
 /**
  * Displays a list of all playlists with management actions.
  * Used in settings for playlist management.
  */
 export const PlaylistList = memo(function PlaylistList() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
-
   const playlists = usePlaylistStore((state) => state.playlists);
   const activePlaylistId = usePlaylistStore((state) => state.activePlaylistId);
   const setActivePlaylist = usePlaylistStore((state) => state.setActivePlaylist);
@@ -69,94 +174,17 @@ export const PlaylistList = memo(function PlaylistList() {
   );
 
   const renderPlaylistCard = useCallback(
-    ({ item }: { item: Playlist }) => {
-      const glass = isDark ? GlassColors.dark : GlassColors.light;
-      const isActive = item.id === activePlaylistId;
-      const cardStyle = [
-        styles.playlistCard,
-        {
-          backgroundColor: glass.surface,
-          borderColor: isActive ? '#007AFF' : glass.border,
-          borderWidth: isActive ? 2 : 1,
-        },
-      ];
-
-      return (
-        <TouchableOpacity
-          style={cardStyle}
-          onPress={() => handleSelectPlaylist(item)}
-          accessibilityRole="button"
-          accessibilityLabel={`${item.name} playlist`}
-          accessibilityHint="Tap to select this playlist as active"
-          accessibilityState={{ selected: isActive }}
-        >
-          <View style={styles.mainContent}>
-            <View style={styles.playlistInfo}>
-              <View style={styles.nameRow}>
-                <ThemedText type="defaultSemiBold" style={styles.playlistName}>
-                  {item.name}
-                </ThemedText>
-                {isActive && (
-                  <View style={styles.activeIndicator} />
-                )}
-              </View>
-              <View style={styles.metaRow}>
-                <IconSymbol name="tv" size={14} color={isDark ? '#7c869e' : '#5c6477'} />
-                <ThemedText style={styles.metaText}>
-                  {item.channelCount || 0}
-                </ThemedText>
-                <ThemedText style={styles.separator}>•</ThemedText>
-                <ThemedText style={[styles.metaText, styles.urlText]} numberOfLines={1} ellipsizeMode="tail">
-                  {extractCleanUrl(item.url)}
-                </ThemedText>
-              </View>
-            </View>
-
-            <View style={styles.playlistActions}>
-              <TouchableOpacity
-                style={styles.actionButton}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  handleEdit(item);
-                }}
-                accessibilityRole="button"
-                accessibilityLabel="Edit playlist"
-                accessibilityHint="Edit playlist details and settings"
-              >
-                <IconSymbol name="pencil" size={18} color={isDark ? '#7c869e' : '#5c6477'} />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.actionButton}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  handleRefresh(item);
-                }}
-                accessibilityRole="button"
-                accessibilityLabel="Refresh playlist"
-                accessibilityHint="Re-fetch and update the playlist channels"
-              >
-                <IconSymbol name="arrow.clockwise" size={18} color={isDark ? '#7c869e' : '#5c6477'} />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.actionButton}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  handleDelete(item);
-                }}
-                accessibilityRole="button"
-                accessibilityLabel="Delete playlist"
-                accessibilityHint="Remove this playlist from your library"
-              >
-                <IconSymbol name="trash" size={18} color="#FF3B30" />
-              </TouchableOpacity>
-            </View>
-          </View>
-        </TouchableOpacity>
-      );
-    },
-    [activePlaylistId, isDark, handleSelectPlaylist, handleEdit, handleRefresh, handleDelete]
+    ({ item }: { item: Playlist }) => (
+      <PlaylistCard
+        item={item}
+        isActive={item.id === activePlaylistId}
+        onSelect={handleSelectPlaylist}
+        onEdit={handleEdit}
+        onRefresh={handleRefresh}
+        onDelete={handleDelete}
+      />
+    ),
+    [activePlaylistId, handleSelectPlaylist, handleEdit, handleRefresh, handleDelete]
   );
 
   const keyExtractor = useCallback((item: Playlist) => item.id, []);

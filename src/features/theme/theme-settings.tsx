@@ -24,7 +24,7 @@ export const ThemeSettings = memo(function ThemeSettings() {
           <View style={styles.labelContainer}>
             <ThemedText style={styles.label}>Page Header Backgrounds</ThemedText>
           </View>
-          <IconSymbol name="chevron.right" size={16} color={tintColor} />
+          <IconSymbol name="chevron.right" size={32} color={tintColor} />
         </Pressable>
       </View>
 

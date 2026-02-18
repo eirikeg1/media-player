@@ -9,6 +9,8 @@ import { EpgService } from '@/services/epg-service';
 import { RustChannelService } from '@/services/rust-channel-service';
 import { playlistRepository } from '@/db/playlist-repository';
 import { generatePlaylistId, sanitizePlaylistName } from '@/lib/playlist-utils';
+import { addImportProgressListener } from 'expo-m3u-parser';
+import { useImportProgressStore } from './import-progress-store';
 
 interface PlaylistState {
   playlists: Playlist[];
@@ -84,13 +86,28 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
 
       console.log('[PlaylistStore] Fetching and importing playlist via Rust...');
       const importStart = Date.now();
-      const channelCount = await RustChannelService.fetchAndImportPlaylist(
-        playlistId,
-        playlistName,
-        input.url,
-        input.credentials
-      );
+      const progressStore = useImportProgressStore.getState();
+      progressStore.startImport(playlistId);
+      progressStore.updateProgress(playlistId, 'downloading', 0, 1);
+
+      const progressSub = addImportProgressListener((event) => {
+        useImportProgressStore.getState().updateProgress(
+          event.playlistId, event.phase, event.current, event.total
+        );
+      });
+      let channelCount: number;
+      try {
+        channelCount = await RustChannelService.fetchAndImportPlaylist(
+          playlistId,
+          playlistName,
+          input.url,
+          input.credentials
+        );
+      } finally {
+        progressSub.remove();
+      }
       console.log(`[PlaylistStore] Playlist imported: ${channelCount} channels (${Date.now() - importStart}ms)`);
+      useImportProgressStore.getState().updateProgress(playlistId, 'saving', 0, 1);
 
       if (channelCount === 0) {
         throw new Error('No channels found in playlist. Please verify the M3U format.');
@@ -119,6 +136,7 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
 
       await playlistRepository.create(playlist);
       console.log('[PlaylistStore] Playlist saved to repository');
+      useImportProgressStore.getState().updateProgress(playlistId, 'complete', 1, 1);
 
       // Fire-and-forget: detect and fetch EPG data
       EpgService.detectAndFetchEpgSources(playlistId, playlist.epgUrl).catch((err) => {
@@ -208,13 +226,28 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
 
       console.log('[PlaylistStore] Refreshing playlist via Rust:', id);
       const importStart = Date.now();
-      const channelCount = await RustChannelService.fetchAndImportPlaylist(
-        id,
-        playlist.name,
-        playlist.url,
-        playlist.credentials
-      );
+      const progressStore = useImportProgressStore.getState();
+      progressStore.startImport(id);
+      progressStore.updateProgress(id, 'downloading', 0, 1);
+
+      const progressSub = addImportProgressListener((event) => {
+        useImportProgressStore.getState().updateProgress(
+          event.playlistId, event.phase, event.current, event.total
+        );
+      });
+      let channelCount: number;
+      try {
+        channelCount = await RustChannelService.fetchAndImportPlaylist(
+          id,
+          playlist.name,
+          playlist.url,
+          playlist.credentials
+        );
+      } finally {
+        progressSub.remove();
+      }
       console.log(`[PlaylistStore] Refresh imported: ${channelCount} channels (${Date.now() - importStart}ms)`);
+      useImportProgressStore.getState().updateProgress(id, 'saving', 0, 1);
 
       if (channelCount === 0) {
         throw new Error('No channels found in playlist. Please verify the M3U format.');
@@ -229,6 +262,7 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
         channelCount,
         lastFetchedAt: new Date(),
       });
+      useImportProgressStore.getState().updateProgress(id, 'complete', 1, 1);
 
       set((state) => ({
         playlists: state.playlists.map((p) => (p.id === id ? updated : p)),
@@ -264,13 +298,27 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
 
         console.log('[PlaylistStore] Re-fetching playlist via Rust:', id);
         const importStart = Date.now();
-        channelCount = await RustChannelService.fetchAndImportPlaylist(
-          id,
-          updates.name ? sanitizePlaylistName(updates.name) : playlist.name,
-          newUrl,
-          newCredentials
-        );
+        const progressStore = useImportProgressStore.getState();
+        progressStore.startImport(id);
+        progressStore.updateProgress(id, 'downloading', 0, 1);
+
+        const progressSub = addImportProgressListener((event) => {
+          useImportProgressStore.getState().updateProgress(
+            event.playlistId, event.phase, event.current, event.total
+          );
+        });
+        try {
+          channelCount = await RustChannelService.fetchAndImportPlaylist(
+            id,
+            updates.name ? sanitizePlaylistName(updates.name) : playlist.name,
+            newUrl,
+            newCredentials
+          );
+        } finally {
+          progressSub.remove();
+        }
         console.log(`[PlaylistStore] Update imported: ${channelCount} channels (${Date.now() - importStart}ms)`);
+        useImportProgressStore.getState().updateProgress(id, 'saving', 0, 1);
 
         if (channelCount === 0) {
           throw new Error('No channels found in playlist. Please verify the M3U format.');
@@ -297,6 +345,9 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
       };
 
       const updated = await playlistRepository.update(id, updateData);
+      if (channelCount !== undefined) {
+        useImportProgressStore.getState().updateProgress(id, 'complete', 1, 1);
+      }
 
       set((state) => ({
         playlists: state.playlists.map((p) => (p.id === id ? updated : p)),

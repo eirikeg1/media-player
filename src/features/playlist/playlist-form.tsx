@@ -4,10 +4,12 @@ import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { GlassColors } from '@/lib/theme';
+import { useImportProgressStore } from '@/stores/playlist/import-progress-store';
 import { usePlaylistStore } from '@/stores/playlist/playlist-store';
 import type { Playlist } from '@/types/playlist.types';
 import { memo, useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Switch, TouchableOpacity, View } from 'react-native';
+import { ImportProgressBar } from './import-progress-bar';
 
 interface PlaylistFormProps {
   onSuccess?: () => void;
@@ -34,6 +36,7 @@ export const PlaylistForm = memo(function PlaylistForm({ onSuccess, onCancel, pl
 
   const addPlaylist = usePlaylistStore((state) => state.addPlaylist);
   const updatePlaylist = usePlaylistStore((state) => state.updatePlaylist);
+  const phaseLabel = useImportProgressStore((s) => s.phaseLabel);
 
   useEffect(() => {
     if (playlist) {
@@ -134,9 +137,15 @@ export const PlaylistForm = memo(function PlaylistForm({ onSuccess, onCancel, pl
         <View style={[styles.loadingContainer, {
           backgroundColor: isDark ? GlassColors.dark.surface : GlassColors.light.surface,
         }]}>
-          <ActivityIndicator size="large" color="#007AFF" />
-          <ThemedText style={styles.loadingText}>
-            Fetching and parsing playlist... This may take a moment, do not close the app.
+          <View style={styles.loadingHeader}>
+            <ActivityIndicator size="small" color="#007AFF" />
+            <ThemedText style={styles.loadingText}>
+              {phaseLabel || 'Preparing import...'}
+            </ThemedText>
+          </View>
+          <ImportProgressBar showAlways />
+          <ThemedText style={styles.loadingHelpText}>
+            Please do not close the app during import.
           </ThemedText>
         </View>
       )}
@@ -333,13 +342,22 @@ const styles = StyleSheet.create({
   loadingContainer: {
     padding: 16,
     marginBottom: 16,
-    alignItems: 'center',
-    gap: 12,
+    gap: 8,
     borderRadius: 8,
+  },
+  loadingHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
   },
   loadingText: {
     fontSize: 14,
     color: '#007AFF',
+  },
+  loadingHelpText: {
+    fontSize: 12,
+    opacity: 0.6,
     textAlign: 'center',
   },
   buttonContainer: {
