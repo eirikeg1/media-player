@@ -29,6 +29,9 @@ export function DiscoverRow<T>({
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
+        initialNumToRender={data.length}
+        windowSize={11}
+        maxToRenderPerBatch={data.length}
       />
     </View>
   );
