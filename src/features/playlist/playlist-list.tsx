@@ -4,6 +4,7 @@ import { ThemedText } from '@/components/ui/display/themed-text';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { extractCleanUrl } from '@/lib/playlist-utils';
 import { GlassColors } from '@/lib/theme';
+import { useImportProgressStore } from '@/stores/playlist/import-progress-store';
 import { usePlaylistStore } from '@/stores/playlist/playlist-store';
 import type { Playlist } from '@/types/playlist.types';
 import { memo, useCallback, useState } from 'react';
@@ -31,6 +32,14 @@ const PlaylistCard = memo(function PlaylistCard({
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const glass = isDark ? GlassColors.dark : GlassColors.light;
+
+  const importPhase = useImportProgressStore((s) => s.phase);
+  const importPlaylistId = useImportProgressStore((s) => s.activePlaylistId);
+  const phaseLabel = useImportProgressStore((s) => s.phaseLabel);
+  const isImporting =
+    importPhase !== null &&
+    importPhase !== 'complete' &&
+    importPlaylistId === item.id;
 
   const cardStyle = [
     styles.playlistCard,
@@ -60,16 +69,23 @@ const PlaylistCard = memo(function PlaylistCard({
               <View style={styles.activeIndicator} />
             )}
           </View>
-          <View style={styles.metaRow}>
-            <IconSymbol name="tv" size={14} color={isDark ? '#7c869e' : '#5c6477'} />
-            <ThemedText style={styles.metaText}>
-              {item.channelCount || 0}
-            </ThemedText>
-            <ThemedText style={styles.separator}>•</ThemedText>
-            <ThemedText style={[styles.metaText, styles.urlText]} numberOfLines={1} ellipsizeMode="tail">
-              {extractCleanUrl(item.url)}
-            </ThemedText>
-          </View>
+          {isImporting ? (
+            <View style={styles.importArea}>
+              <ThemedText style={styles.metaText}>{phaseLabel}</ThemedText>
+              <ImportProgressBar playlistId={item.id} compact showAlways />
+            </View>
+          ) : (
+            <View style={styles.metaRow}>
+              <IconSymbol name="tv" size={14} color={isDark ? '#7c869e' : '#5c6477'} />
+              <ThemedText style={styles.metaText}>
+                {item.channelCount || 0}
+              </ThemedText>
+              <ThemedText style={styles.separator}>•</ThemedText>
+              <ThemedText style={[styles.metaText, styles.urlText]} numberOfLines={1} ellipsizeMode="tail">
+                {extractCleanUrl(item.url)}
+              </ThemedText>
+            </View>
+          )}
         </View>
 
         <View style={styles.playlistActions}>
@@ -113,7 +129,6 @@ const PlaylistCard = memo(function PlaylistCard({
           </TouchableOpacity>
         </View>
       </View>
-      <ImportProgressBar playlistId={item.id} compact />
     </TouchableOpacity>
   );
 });
@@ -151,7 +166,6 @@ export const PlaylistList = memo(function PlaylistList() {
     async (playlist: Playlist) => {
       try {
         await refreshPlaylist(playlist.id);
-        Alert.alert('Success', 'Playlist refreshed successfully');
       } catch (error) {
         Alert.alert(
           'Error',
@@ -276,6 +290,9 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     backgroundColor: '#007AFF',
+  },
+  importArea: {
+    gap: 2,
   },
   metaRow: {
     flexDirection: 'row',

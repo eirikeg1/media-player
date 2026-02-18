@@ -168,26 +168,31 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
       throw error;
     }
 
-    set({ isLoading: true, error: null });
+    // Optimistically remove from UI immediately
+    const removedPlaylist = get().getPlaylistById(id);
+    set((state) => ({
+      playlists: state.playlists.filter((p) => p.id !== id),
+      activePlaylistId:
+        state.activePlaylistId === id
+          ? state.playlists.find((p) => p.id !== id)?.id ?? null
+          : state.activePlaylistId,
+      error: null,
+    }));
 
     try {
       // Delete from both JS repository and Rust database
       await playlistRepository.delete(id);
       await RustChannelService.deletePlaylist(id);
-
-      set((state) => ({
-        playlists: state.playlists.filter((p) => p.id !== id),
-        activePlaylistId:
-          state.activePlaylistId === id
-            ? state.playlists.find((p) => p.id !== id)?.id ?? null
-            : state.activePlaylistId,
-        isLoading: false,
-        error: null,
-      }));
     } catch (error) {
+      // Re-add the playlist on failure
+      if (removedPlaylist) {
+        set((state) => ({
+          playlists: [...state.playlists, removedPlaylist],
+        }));
+      }
       const errorMessage =
         error instanceof Error ? error.message : 'Failed to remove playlist';
-      set({ error: errorMessage, isLoading: false });
+      set({ error: errorMessage });
       throw error;
     }
   },
@@ -216,7 +221,7 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
   },
 
   refreshPlaylist: async (id: string) => {
-    set({ isLoading: true, error: null });
+    set({ error: null });
 
     try {
       const playlist = get().getPlaylistById(id);
@@ -266,12 +271,11 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
 
       set((state) => ({
         playlists: state.playlists.map((p) => (p.id === id ? updated : p)),
-        isLoading: false,
       }));
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Failed to refresh playlist';
-      set({ error: errorMessage, isLoading: false });
+      set({ error: errorMessage });
       throw error;
     }
   },

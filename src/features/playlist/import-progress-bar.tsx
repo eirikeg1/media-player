@@ -4,7 +4,7 @@ import {
   PHASE_WEIGHTS,
   useImportProgressStore,
 } from '@/stores/playlist/import-progress-store';
-import { memo, useEffect } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, {
   Easing,
@@ -36,6 +36,7 @@ export const ImportProgressBar = memo(function ImportProgressBar({
   const phase = useImportProgressStore((s) => s.phase);
 
   const animatedProgress = useSharedValue(0);
+  const prevPhaseRef = useRef(phase);
 
   // Only show if actively importing the specified playlist (or any playlist if no ID given)
   const isActive =
@@ -45,34 +46,44 @@ export const ImportProgressBar = memo(function ImportProgressBar({
       (!playlistId || activePlaylistId === playlistId));
 
   useEffect(() => {
+    const phaseChanged = phase !== prevPhaseRef.current;
+    prevPhaseRef.current = phase;
+
     if (overallProgress < 100 && phase) {
       const weights = PHASE_WEIGHTS[phase];
       if (weights) {
-        // Stop 2% before the phase boundary so it doesn't feel done
-        const phaseCeiling = weights[1] - 2;
-        const target = Math.min(Math.max(phaseCeiling, overallProgress + 1), 99);
-
-        // Snap to real progress, then immediately trickle toward ceiling
-        animatedProgress.value = withSequence(
-          withTiming(overallProgress, {
-            duration: 600,
-            easing: Easing.out(Easing.cubic),
-          }),
-          withTiming(target, {
+        if (phaseChanged) {
+          // Catch up to real progress, then immediately resume trickle
+          const phaseCeiling = weights[1] - 2;
+          const target = Math.min(Math.max(phaseCeiling, overallProgress + 1), 99);
+          animatedProgress.value = withSequence(
+            withTiming(overallProgress, {
+              duration: 400,
+              easing: Easing.out(Easing.cubic),
+            }),
+            withTiming(target, {
+              duration: 8000,
+              easing: Easing.out(Easing.quad),
+            }),
+          );
+        } else {
+          // Same phase — trickle toward ceiling
+          const phaseCeiling = weights[1] - 2;
+          const target = Math.min(Math.max(phaseCeiling, overallProgress + 1), 99);
+          animatedProgress.value = withTiming(target, {
             duration: 8000,
             easing: Easing.out(Easing.quad),
-          }),
-        );
+          });
+        }
       } else {
         animatedProgress.value = withTiming(overallProgress, {
-          duration: 600,
+          duration: 400,
           easing: Easing.out(Easing.cubic),
         });
       }
     } else {
-      // Complete or no phase — just snap to the value
       animatedProgress.value = withTiming(overallProgress, {
-        duration: 600,
+        duration: 400,
         easing: Easing.out(Easing.cubic),
       });
     }
