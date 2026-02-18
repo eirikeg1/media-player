@@ -65,8 +65,13 @@ export function ScheduleProgrammeItem({ programme, isCurrent }: ScheduleProgramm
           </View>
         )}
 
-        {expanded && programme.description && (
-          <ThemedText style={styles.description}>{programme.description}</ThemedText>
+        {programme.description && (
+          <ThemedText
+            style={styles.description}
+            numberOfLines={expanded ? undefined : 2}
+          >
+            {programme.description}
+          </ThemedText>
         )}
       </View>
     </TouchableOpacity>

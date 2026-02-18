@@ -23,11 +23,11 @@ const PHASE_LABELS: Record<string, string> = {
 /** Phase weight mapping: [startPercent, endPercent] */
 export const PHASE_WEIGHTS: Record<string, [number, number]> = {
   preparing: [0, 5],
-  downloading: [5, 35],
-  importing: [35, 75],
-  processing: [75, 92],
-  enriching: [92, 96],
-  saving: [96, 98],
+  downloading: [5, 45],
+  importing: [45, 85],
+  processing: [85, 90],
+  enriching: [90, 98],
+  saving: [98, 100],
   complete: [100, 100],
 };
 

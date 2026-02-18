@@ -25,53 +25,26 @@ export function useRandomContent(limit = 50) {
     try {
       setIsLoading(true);
 
-      const [movieResult, seriesResult] = await Promise.all([
-        RustChannelService.getChannelsFilteredWithCount(activePlaylistId, {
-          contentType: 'movie',
-          limit,
-          offset: 0,
-          excludeAdult,
-          sortBy: 'random',
-        }),
-        RustChannelService.getSeriesList(activePlaylistId, {
-          limit,
-          offset: 0,
-          excludeAdult,
-          random: true,
-        }),
+      // Fetch cached recommendations (backend generates if cache is empty)
+      const [movieResults, seriesResults] = await Promise.all([
+        RustChannelService.getMovieRecommendations(activePlaylistId, excludeAdult, limit),
+        RustChannelService.getSeriesRecommendations(activePlaylistId, excludeAdult, limit),
       ]);
 
-      // Set series immediately — no HEAD validation needed
-      const uniqueSeries = seriesResult.series
-        .filter((s) => !!s.poster)
-        .filter((s, i, arr) => arr.findIndex((x) => x.seriesName === s.seriesName) === i);
-      setSeries(uniqueSeries);
-
-      // Filter movies that have a logo URL
-      const moviesWithLogo = movieResult.channels.filter((c) => !!c.tvg?.logo);
-
-      // Validate image URLs actually return a valid response
-      const validatedMovies = await Promise.all(
-        moviesWithLogo.map(async (channel) => {
-          try {
-            const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 5000);
-            const res = await globalThis.fetch(channel.tvg!.logo!, {
-              method: 'HEAD',
-              signal: controller.signal,
-            });
-            clearTimeout(timeout);
-            return res.ok ? channel : null;
-          } catch {
-            return null;
-          }
-        })
+      // Deduplicate
+      const uniqueMovies = movieResults.filter(
+        (c, i, arr) => arr.findIndex((x) => getChannelId(x) === getChannelId(c)) === i
+      );
+      const uniqueSeries = seriesResults.filter(
+        (s, i, arr) => arr.findIndex((x) => x.seriesName === s.seriesName) === i
       );
 
-      const uniqueMovies = validatedMovies
-        .filter((c): c is Channel => c !== null)
-        .filter((c, i, arr) => arr.findIndex((x) => getChannelId(x) === getChannelId(c)) === i);
       setMovies(uniqueMovies);
+      setSeries(uniqueSeries);
+
+      // Fire-and-forget: regenerate cache for next launch
+      RustChannelService.regenerateMovieRecommendations(activePlaylistId, excludeAdult, limit).catch(() => {});
+      RustChannelService.regenerateSeriesRecommendations(activePlaylistId, excludeAdult, limit).catch(() => {});
     } catch (error) {
       console.error('[useRandomContent] Error:', error);
       setMovies([]);

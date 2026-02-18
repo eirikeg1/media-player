@@ -6,8 +6,8 @@ import {
   type ChannelMetadata,
   type ChannelsWithCount as RustChannelsWithCount,
   type Credentials,
-  type PlaylistMetadata,
   type GroupCount,
+  type PlaylistMetadata,
   type SeriesInfo,
   type SeriesListResult,
 } from 'expo-m3u-parser';
@@ -241,6 +241,56 @@ export class RustChannelService {
     const db = await getRustDatabase();
     const rustChannels = await db.getSeriesEpisodes(playlistId, seriesName, groupName);
     return rustChannels.map(rustChannelToJsChannel);
+  }
+
+  /**
+   * Get movie recommendations from cache (generates on first call)
+   */
+  static async getMovieRecommendations(
+    playlistId: string,
+    excludeAdult: boolean,
+    limit: number
+  ): Promise<Channel[]> {
+    const db = await getRustDatabase();
+    const rustChannels = await db.getMovieRecommendations(playlistId, excludeAdult, limit);
+    return rustChannels.map(rustChannelToJsChannel);
+  }
+
+  /**
+   * Regenerate movie recommendations (fire-and-forget for next launch)
+   */
+  static async regenerateMovieRecommendations(
+    playlistId: string,
+    excludeAdult: boolean,
+    limit: number
+  ): Promise<Channel[]> {
+    const db = await getRustDatabase();
+    const rustChannels = await db.regenerateMovieRecommendations(playlistId, excludeAdult, limit);
+    return rustChannels.map(rustChannelToJsChannel);
+  }
+
+  /**
+   * Get series recommendations from cache (generates on first call)
+   */
+  static async getSeriesRecommendations(
+    playlistId: string,
+    excludeAdult: boolean,
+    limit: number
+  ): Promise<SeriesInfo[]> {
+    const db = await getRustDatabase();
+    return db.getSeriesRecommendations(playlistId, excludeAdult, limit);
+  }
+
+  /**
+   * Regenerate series recommendations (fire-and-forget for next launch)
+   */
+  static async regenerateSeriesRecommendations(
+    playlistId: string,
+    excludeAdult: boolean,
+    limit: number
+  ): Promise<SeriesInfo[]> {
+    const db = await getRustDatabase();
+    return db.regenerateSeriesRecommendations(playlistId, excludeAdult, limit);
   }
 
   /**
