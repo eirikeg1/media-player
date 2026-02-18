@@ -44,7 +44,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       "expo-splash-screen",
       {
         image: "./assets/icons/play_3.png",
-        imageWidth: 400,
+        imageWidth: 200,
         resizeMode: "contain",
       },
     ],

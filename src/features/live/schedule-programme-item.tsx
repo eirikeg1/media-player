@@ -1,6 +1,7 @@
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { CategoryPill } from '@/features/videos/category-pill';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { formatTime } from '@/lib/format-time';
 import { THEME } from '@/lib/theme';
 import type { EpgProgramme } from 'expo-m3u-parser';
 import { useState } from 'react';
@@ -9,11 +10,6 @@ import { StyleSheet, TouchableOpacity, View } from 'react-native';
 interface ScheduleProgrammeItemProps {
   programme: EpgProgramme;
   isCurrent: boolean;
-}
-
-function formatTime(unixSeconds: number): string {
-  const date = new Date(unixSeconds * 1000);
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
 export function ScheduleProgrammeItem({ programme, isCurrent }: ScheduleProgrammeItemProps) {

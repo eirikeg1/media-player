@@ -3,6 +3,7 @@ import { ModalHeader } from '@/components/ui/containers/modal/modal-header';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
 import { FavoriteStar } from '@/features/live/favorite-star';
+import { formatTime } from '@/lib/format-time';
 import { useChannelSchedule } from '@/features/live/hooks/use-channel-schedule';
 import { ScheduleProgrammeItem } from '@/features/live/schedule-programme-item';
 import { useThemeColor } from '@/hooks/use-theme-color';
@@ -35,11 +36,6 @@ interface ChannelDetailModalProps {
 
 function formatDate(date: Date): string {
   return date.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
-}
-
-function formatTime(unixSeconds: number): string {
-  const d = new Date(unixSeconds * 1000);
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
 export function ChannelDetailModal({

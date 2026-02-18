@@ -94,6 +94,7 @@ export class EpgService {
     }
 
     // Fetch programmes for each detected source in parallel
+    const failedSources: string[] = [];
     const fetchPromises = sources.map((source) => {
       const fetchStart = Date.now();
       return db
@@ -107,13 +108,23 @@ export class EpgService {
           return count;
         })
         .catch((err) => {
-          console.warn(`[EpgService] Failed to fetch EPG from ${source.url}:`, err);
+          failedSources.push(source.name || source.url);
+          console.error(
+            `[EpgService] Failed to fetch EPG source "${source.name}" (${source.url}):`,
+            err instanceof Error ? err.message : err
+          );
           return 0;
         });
     });
 
     const results = await Promise.all(fetchPromises);
     const totalProgrammes = results.reduce((sum, count) => sum + count, 0);
+
+    if (failedSources.length > 0) {
+      console.warn(
+        `[EpgService] ${failedSources.length}/${sources.length} EPG source(s) failed: ${failedSources.join(', ')}`
+      );
+    }
 
     if (__DEV__) {
       console.log(
