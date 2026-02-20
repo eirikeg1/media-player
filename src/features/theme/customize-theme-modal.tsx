@@ -1,4 +1,5 @@
 import { ModalHeader } from '@/components/ui/containers/modal/modal-header';
+import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
 import type { PageId } from '@/config/header-backgrounds';
 import { useUserStore } from '@/stores/user/user-store';
@@ -6,7 +7,6 @@ import { memo, useCallback } from 'react';
 import { Modal, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BackgroundSection } from './background-section';
-import { ThemedText } from '@/components/ui/display/themed-text';
 
 const PAGE_IDS: PageId[] = ['home', 'live', 'movies', 'series', 'settings'];
 
@@ -47,7 +47,7 @@ export const CustomizeThemeModal = memo(function CustomizeThemeModal({
           {/* Share toggle */}
           <View style={styles.shareRow}>
             <View style={styles.shareLabelContainer}>
-              <ThemedText style={styles.shareLabel}>Share uploaded images with users</ThemedText>
+              <ThemedText style={styles.shareLabel}>Share uploaded images with other users</ThemedText>
             </View>
             <Switch
               value={shareUploads}

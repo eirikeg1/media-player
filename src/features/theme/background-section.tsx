@@ -1,15 +1,15 @@
-import { HEADER_TEMPLATES, type PageId } from '@/config/header-backgrounds';
-import { headerBackgroundRepository } from '@/db/header-background-repository';
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
+import { HEADER_TEMPLATES, type PageId } from '@/config/header-backgrounds';
+import { headerBackgroundRepository } from '@/db/header-background-repository';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useHeaderBackgroundStore } from '@/stores/header-background';
 import { useUserStore } from '@/stores/user/user-store';
 import type { UserUploadedBackground } from '@/types/theme.types';
-import { Image } from 'expo-image';
-import { Paths, File, Directory } from 'expo-file-system';
-import * as ImagePicker from 'expo-image-picker';
 import { randomUUID } from 'expo-crypto';
+import { Directory, File, Paths } from 'expo-file-system';
+import { Image } from 'expo-image';
+import * as ImagePicker from 'expo-image-picker';
 import { memo, useCallback, useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
@@ -36,7 +36,6 @@ export const BackgroundSection = memo(function BackgroundSection({ pageId }: Bac
   const removeUploadedUri = useHeaderBackgroundStore((s) => s.removeUploadedUri);
 
   const tintColor = useThemeColor({}, 'tint');
-  const textColor = useThemeColor({}, 'text');
 
   const [uploads, setUploads] = useState<UserUploadedBackground[]>([]);
   const [sharedUploads, setSharedUploads] = useState<UserUploadedBackground[]>([]);
@@ -189,7 +188,7 @@ export const BackgroundSection = memo(function BackgroundSection({ pageId }: Bac
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
           {/* Upload button */}
           <Pressable style={styles.uploadButton} onPress={handleUpload}>
-            <IconSymbol name="photo.badge.plus" size={28} color={textColor} />
+            <IconSymbol name="plus" size={28} color="rgba(128,128,128,0.5)" />
           </Pressable>
 
           {allUploads.map((upload) => (
@@ -288,4 +287,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  uploadPlusIcon: {},
 });
