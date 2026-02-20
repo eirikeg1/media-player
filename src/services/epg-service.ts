@@ -226,6 +226,57 @@ export class EpgService {
     return db.getNextProgramme(channelId);
   }
 
+  /**
+   * Get programmes for multiple channels in a time range (for EPG guide grid).
+   * Returns a Map keyed by channelId with sorted programme arrays.
+   */
+  static async getProgrammesForChannels(
+    channelIds: string[],
+    from: number,
+    to: number
+  ): Promise<Map<string, EpgProgramme[]>> {
+    if (channelIds.length === 0) {
+      return new Map();
+    }
+
+    const db = await getRustDatabase();
+    const programmes = await db.getProgrammesForChannels(channelIds, from, to);
+
+    const map = new Map<string, EpgProgramme[]>();
+    for (const programme of programmes) {
+      const existing = map.get(programme.channelId);
+      if (existing) {
+        existing.push(programme);
+      } else {
+        map.set(programme.channelId, [programme]);
+      }
+    }
+
+    // Sort each channel's programmes by start time
+    for (const progs of map.values()) {
+      progs.sort((a, b) => a.start - b.start);
+    }
+
+    return map;
+  }
+
+  /**
+   * Search programmes by title with optional filters.
+   */
+  static async searchProgrammes(
+    query: string,
+    options?: {
+      from?: number;
+      to?: number;
+      category?: string;
+      limit?: number;
+      offset?: number;
+    }
+  ): Promise<{ programmes: EpgProgramme[]; totalCount: number }> {
+    const db = await getRustDatabase();
+    return db.searchProgrammes(query, options);
+  }
+
   // ========================================
   // Housekeeping
   // ========================================

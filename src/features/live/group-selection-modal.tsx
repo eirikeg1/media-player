@@ -1,4 +1,5 @@
 import { ModalHeader } from '@/components/ui/containers/modal/modal-header';
+import { Button } from '@/components/ui/controls/button';
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { Input } from '@/components/ui/controls/inputs/input';
@@ -9,7 +10,7 @@ import { FAVORITES_GROUP_SENTINEL, isAdultGroup } from '@/lib/group-utils';
 import type { GroupSortOption } from '@/types/sort.types';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { FlashList } from '@shopify/flash-list';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   Modal,
   StyleSheet,
@@ -27,6 +28,12 @@ interface GroupSelectionModalProps {
   onGroupSelect: (groupName: string) => void;
   favoriteGroups: string[];
   onToggleFavoriteGroup: (name: string) => void;
+  /** When true, allows selecting multiple groups with checkmarks + Apply button */
+  multiSelect?: boolean;
+  /** Currently selected group names (multi-select mode only) */
+  selectedGroupNames?: string[];
+  /** Called with the full selection when Apply is pressed (multi-select mode only) */
+  onGroupsSelect?: (names: string[]) => void;
 }
 
 
@@ -38,14 +45,26 @@ export function GroupSelectionModal({
   onGroupSelect,
   favoriteGroups,
   onToggleFavoriteGroup,
+  multiSelect,
+  selectedGroupNames,
+  onGroupsSelect,
 }: GroupSelectionModalProps) {
   const [filterText, setFilterText] = useState('');
   const [groupSort, setGroupSort] = useState<GroupSortOption>('alphabetical');
   const [showSortDropdown, setShowSortDropdown] = useState(false);
+  // Local multi-select state — initialized from props when modal opens
+  const [multiSelectLocal, setMultiSelectLocal] = useState<string[]>([]);
   const selectionColors = useSelectionColors();
   const insets = useSafeAreaInsets();
   const tintColor = useThemeColor({}, 'tint');
   const textColor = useThemeColor({}, 'text');
+
+  // Sync local multi-select state when modal becomes visible
+  const prevVisibleRef = useRef(visible);
+  if (visible && !prevVisibleRef.current && multiSelect) {
+    setMultiSelectLocal(selectedGroupNames ?? []);
+  }
+  prevVisibleRef.current = visible;
 
   const GROUP_SORT_LABELS: Record<GroupSortOption, string> = {
     alphabetical: 'A-Z',
@@ -98,10 +117,25 @@ export function GroupSelectionModal({
   }, [groups, filterText, favoriteGroups, groupSort]);
 
   const handleGroupSelect = useCallback((groupName: string) => {
+    if (multiSelect) {
+      // Toggle in local state without closing
+      setMultiSelectLocal((prev) =>
+        prev.includes(groupName)
+          ? prev.filter((n) => n !== groupName)
+          : [...prev, groupName]
+      );
+      return;
+    }
     onGroupSelect(groupName);
     setFilterText('');
     onClose();
-  }, [onGroupSelect, onClose]);
+  }, [multiSelect, onGroupSelect, onClose]);
+
+  const handleApplyMultiSelect = useCallback(() => {
+    onGroupsSelect?.(multiSelectLocal);
+    setFilterText('');
+    onClose();
+  }, [multiSelectLocal, onGroupsSelect, onClose]);
 
   const handleClose = useCallback(() => {
     setFilterText('');
@@ -116,17 +150,20 @@ export function GroupSelectionModal({
 
   const renderItem = useCallback(({ item }: { item: GroupItem }) => {
     const isFavoritesSentinel = item.name === FAVORITES_GROUP_SENTINEL;
+    const isSelected = multiSelect
+      ? multiSelectLocal.includes(item.name)
+      : item.name === selectedGroupName;
     return (
       <GroupItemComponent
         item={item}
-        isSelected={item.name === selectedGroupName}
+        isSelected={isSelected}
         onPress={handleGroupSelect}
         selectionColors={selectionColors}
         isFavorite={isFavoritesSentinel || favoriteGroups.includes(item.name)}
         onToggleFavorite={isFavoritesSentinel ? undefined : onToggleFavoriteGroup}
       />
     );
-  }, [selectedGroupName, handleGroupSelect, selectionColors, favoriteGroups, onToggleFavoriteGroup]);
+  }, [multiSelect, multiSelectLocal, selectedGroupName, handleGroupSelect, selectionColors, favoriteGroups, onToggleFavoriteGroup]);
 
   const keyExtractor = useCallback((item: GroupItem) => item.name || 'all-channels', []);
 
@@ -205,8 +242,20 @@ export function GroupSelectionModal({
               keyExtractor={keyExtractor}
               numColumns={2}
               contentContainerStyle={styles.listContent}
+              extraData={multiSelect ? multiSelectLocal : selectedGroupName}
             />
           </View>
+
+          {multiSelect && (
+            <View style={styles.applyButtonContainer}>
+              <Button
+                title={`Apply (${multiSelectLocal.length} selected)`}
+                variant="primary"
+                onPress={handleApplyMultiSelect}
+                fullWidth
+              />
+            </View>
+          )}
         </ThemedView>
     </Modal>
   );
@@ -264,5 +313,10 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 8,
     paddingBottom: 32,
+  },
+  applyButtonContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingBottom: 24,
   },
 });

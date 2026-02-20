@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChannelDetailModal } from '@/features/live/channel-detail-modal';
 import { LiveScreenContent } from '@/features/live/live-screen-content';
 import { useCurrentProgrammes } from '@/features/live/hooks/use-current-programmes';
+import type { LiveViewMode } from '@/features/live/live-top-bar';
 import { useFavoriteChannels } from '@/features/live/hooks/use-favorite-channels';
 import { useFavoriteGroups } from '@/features/live/hooks/use-favorite-groups';
 import { useGroups } from '@/features/live/hooks/use-groups';
@@ -29,6 +30,9 @@ export default function LiveScreen() {
 
   // Parental control: exclude adult content when enabled
   const excludeAdult = useUserStore((s) => s.currentUser?.settings?.parentalControlEnabled ?? false);
+
+  // View mode: channels grid vs EPG guide
+  const [viewMode, setViewMode] = useState<LiveViewMode>('channels');
 
   // Filter state managed locally, passed to paginated hook
   const [userGroupSelection, setUserGroupSelection] = useState<string | null>(null);
@@ -137,6 +141,11 @@ export default function LiveScreen() {
       });
   }, [channelModalVisible, selectedChannel]);
 
+  // View mode toggle handler
+  const handleViewModeChange = useCallback((mode: LiveViewMode) => {
+    setViewMode(mode);
+  }, []);
+
   // Event handlers for filters
   const handleGroupSelect = useCallback((groupName: string) => {
     setUserGroupSelection(groupName);
@@ -199,6 +208,8 @@ export default function LiveScreen() {
   return (
     <>
       <LiveScreenContent
+        viewMode={viewMode}
+        onViewModeChange={handleViewModeChange}
         isLoading={isLoading}
         playlist={activePlaylist}
         channels={channels}
@@ -224,6 +235,7 @@ export default function LiveScreen() {
         sortOrder={sortOrder}
         onSortSelect={handleSortSelect}
         currentProgrammes={currentProgrammes}
+        excludeAdult={excludeAdult}
       />
 
       <ChannelDetailModal
