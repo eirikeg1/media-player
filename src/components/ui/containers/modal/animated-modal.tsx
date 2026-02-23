@@ -157,6 +157,8 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 400,
     minHeight: 200,
+    maxHeight: '80%',
+    overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: {
       width: 0,

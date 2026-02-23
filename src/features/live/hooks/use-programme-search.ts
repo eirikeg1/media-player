@@ -53,8 +53,13 @@ export function useProgrammeSearch(
       try {
         const result = await EpgService.searchProgrammes(trimmed, optionsRef.current);
         if (generation !== fetchGenerationRef.current) return;
-        setResults(result.programmes);
-        setTotalCount(result.totalCount);
+        // Flatten grouped results into a flat array
+        const flat: EpgProgramme[] = [];
+        for (const group of result.groups) {
+          flat.push(...group.programmes);
+        }
+        setResults(flat);
+        setTotalCount(flat.length);
       } catch (err) {
         if (generation !== fetchGenerationRef.current) return;
         if (__DEV__) {

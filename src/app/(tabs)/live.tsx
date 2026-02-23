@@ -100,7 +100,7 @@ export default function LiveScreen() {
     loadMore,
     refresh: refreshChannels,
   } = usePaginatedChannels({
-    playlistId: !shouldDeferFetch ? activePlaylist?.id : undefined,
+    playlistId: activePlaylist?.id,
     groups: channelGroups,
     search: searchText,
     contentType: 'live',
@@ -109,6 +109,7 @@ export default function LiveScreen() {
     pageSize: 100,
     sortBy: activeSortOption.sortBy,
     sortOrder,
+    deferNetworkFetch: shouldDeferFetch,
   });
 
   // EPG: bulk current programmes for visible channels
@@ -189,7 +190,7 @@ export default function LiveScreen() {
   }, []);
 
   const isLoading = !hasLoadedPlaylist
-    || (!!activePlaylist && (shouldDeferFetch || isLoadingChannels));
+    || (!!activePlaylist && isLoadingChannels && channels.length === 0);
 
   // Combined refresh handler
   const handleCombinedRefresh = useCallback(() => {

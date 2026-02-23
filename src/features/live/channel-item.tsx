@@ -5,8 +5,9 @@ import { ThemedView } from '@/components/ui/display/themed-view';
 import { getChannelId } from '@/lib/channel-utils';
 import type { Channel } from '@/types/playlist.types';
 import type { EpgProgramme } from 'expo-m3u-parser';
+import { Image } from 'expo-image';
 import { useState } from 'react';
-import { Image, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, TouchableOpacity, View } from 'react-native';
 
 interface ChannelItemProps {
   channel: Channel;
@@ -37,7 +38,8 @@ export function ChannelItem({ channel, isFavorite, onPress, currentProgramme }: 
             <Image
               source={{ uri: channel.tvg.logo }}
               style={styles.poster}
-              resizeMode="cover"
+              contentFit="cover"
+              transition={200}
               onError={() => setImageError(true)}
             />
           ) : (

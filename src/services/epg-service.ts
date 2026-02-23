@@ -1,5 +1,5 @@
 import { getRustDatabase } from '@/services/rust-channel-service';
-import type { EpgProgramme, EpgSource } from 'expo-m3u-parser';
+import type { EpgProgramme, EpgSource, GroupedProgrammesResult } from 'expo-m3u-parser';
 
 /**
  * Service for managing EPG (Electronic Programme Guide) data via Rust backend.
@@ -229,6 +229,7 @@ export class EpgService {
   /**
    * Get programmes for multiple channels in a time range (for EPG guide grid).
    * Returns a Map keyed by channelId with sorted programme arrays.
+   * Grouping and sorting is done in Rust — this just converts to Map.
    */
   static async getProgrammesForChannels(
     channelIds: string[],
@@ -240,28 +241,18 @@ export class EpgService {
     }
 
     const db = await getRustDatabase();
-    const programmes = await db.getProgrammesForChannels(channelIds, from, to);
+    const groups = await db.getProgrammesForChannels(channelIds, from, to);
 
     const map = new Map<string, EpgProgramme[]>();
-    for (const programme of programmes) {
-      const existing = map.get(programme.channelId);
-      if (existing) {
-        existing.push(programme);
-      } else {
-        map.set(programme.channelId, [programme]);
-      }
+    for (const group of groups) {
+      map.set(group.channelId, group.programmes ?? []);
     }
-
-    // Sort each channel's programmes by start time
-    for (const progs of map.values()) {
-      progs.sort((a, b) => a.start - b.start);
-    }
-
     return map;
   }
 
   /**
    * Search programmes by title with optional filters.
+   * Returns results pre-grouped by channel with a has_more pagination flag.
    */
   static async searchProgrammes(
     query: string,
@@ -272,7 +263,7 @@ export class EpgService {
       limit?: number;
       offset?: number;
     }
-  ): Promise<{ programmes: EpgProgramme[]; totalCount: number }> {
+  ): Promise<GroupedProgrammesResult> {
     const db = await getRustDatabase();
     return db.searchProgrammes(query, options);
   }

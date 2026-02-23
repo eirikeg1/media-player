@@ -2,7 +2,6 @@ import { AnimatedModal } from '@/components/ui/containers/modal/animated-modal';
 import { ModalHeader } from '@/components/ui/containers/modal/modal-header';
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
-import { ThemedView } from '@/components/ui/display/themed-view';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { ScrollView, StyleSheet, Switch, TouchableOpacity, View } from 'react-native';
 
@@ -29,10 +28,9 @@ export function EpgFilterModal({
 
   return (
     <AnimatedModal visible={visible} onClose={onClose}>
-      <ThemedView style={styles.container}>
-        <ModalHeader title="Filters" onClose={onClose} />
+      <ModalHeader title="Filters" onClose={onClose} />
 
-        <ScrollView style={styles.scrollContent}>
+      <ScrollView style={styles.scrollContent}>
           {/* Hide empty channels toggle */}
           <View style={styles.switchRow}>
             <View style={styles.labelContainer}>
@@ -84,19 +82,14 @@ export function EpgFilterModal({
               ))}
             </View>
           )}
-        </ScrollView>
-      </ThemedView>
+      </ScrollView>
     </AnimatedModal>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    borderRadius: 16,
-    overflow: 'hidden',
-    maxHeight: '80%',
-  },
   scrollContent: {
+    flexGrow: 0,
     padding: 16,
   },
   switchRow: {

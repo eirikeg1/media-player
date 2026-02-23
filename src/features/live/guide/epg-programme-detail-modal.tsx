@@ -2,11 +2,10 @@ import { AnimatedModal } from '@/components/ui/containers/modal/animated-modal';
 import { ModalHeader } from '@/components/ui/containers/modal/modal-header';
 import { Button } from '@/components/ui/controls/button';
 import { ThemedText } from '@/components/ui/display/themed-text';
-import { ThemedView } from '@/components/ui/display/themed-view';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import type { EpgProgramme } from 'expo-m3u-parser';
 import { Image } from 'expo-image';
-import { StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 
 interface EpgProgrammeDetailModalProps {
   visible: boolean;
@@ -44,9 +43,9 @@ export function EpgProgrammeDetailModal({
 
   return (
     <AnimatedModal visible={visible} onClose={onClose}>
-      <ThemedView style={styles.container}>
-        <ModalHeader title="Programme Info" onClose={onClose} />
+      <ModalHeader title="Programme Info" onClose={onClose} />
 
+      <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.content}>
           {/* Programme icon */}
           {programme.icon ? (
@@ -111,16 +110,14 @@ export function EpgProgrammeDetailModal({
             </View>
           ) : null}
         </View>
-      </ThemedView>
+      </ScrollView>
     </AnimatedModal>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    borderRadius: 16,
-    overflow: 'hidden',
-    maxHeight: '80%',
+  scrollContent: {
+    flexGrow: 0,
   },
   content: {
     padding: 16,

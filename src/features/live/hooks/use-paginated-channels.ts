@@ -16,6 +16,8 @@ interface UsePaginatedChannelsOptions {
   excludeAdult?: boolean;
   sortBy?: 'title' | 'group' | 'tvgName';
   sortOrder?: 'asc' | 'desc';
+  /** When true, use cached data without triggering a network fetch. */
+  deferNetworkFetch?: boolean;
 }
 
 interface UsePaginatedChannelsReturn {
@@ -43,6 +45,7 @@ export function usePaginatedChannels({
   excludeAdult,
   sortBy,
   sortOrder,
+  deferNetworkFetch,
 }: UsePaginatedChannelsOptions): UsePaginatedChannelsReturn {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -194,11 +197,16 @@ export function usePaginatedChannels({
           setHasMore(cached.items.length < cached.totalCount);
           setLoadedPlaylistId(playlistId);
           offsetRef.current = cached.items.length;
+          // Skip network fetch when deferred (tab not yet active)
+          if (deferNetworkFetch) return;
           // Background revalidation (no loading spinner)
           fetchPage(0, true, false);
           return;
         }
       }
+
+      // When deferring and no cache, don't fetch — skeleton will show
+      if (deferNetworkFetch) return;
 
       setChannels([]);
       setHasMore(true);
@@ -217,7 +225,7 @@ export function usePaginatedChannels({
         clearTimeout(debounceTimerRef.current);
       }
     };
-  }, [playlistId, stableGroups, search, contentType, excludeAdult, sortBy, sortOrder, fetchPage]);
+  }, [playlistId, stableGroups, search, contentType, excludeAdult, sortBy, sortOrder, deferNetworkFetch, fetchPage]);
 
   // Load more channels (next page)
   const loadMore = useCallback(() => {

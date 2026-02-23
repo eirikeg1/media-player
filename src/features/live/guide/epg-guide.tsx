@@ -2,6 +2,7 @@ import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { useEpgSearch } from '@/features/live/hooks/use-epg-search';
 import { useGuideProgrammes } from '@/features/live/hooks/use-guide-programmes';
 import { usePaginatedChannels } from '@/features/live/hooks/use-paginated-channels';
 import { useProgrammeCategories } from '@/features/live/hooks/use-programme-categories';
@@ -10,7 +11,7 @@ import { FAVORITES_GROUP_SENTINEL, getEffectiveFavoriteGroups } from '@/lib/grou
 import type { Channel } from '@/types/playlist.types';
 import type { EpgProgramme } from 'expo-m3u-parser';
 import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useSharedValue } from 'react-native-reanimated';
 import { ROW_HEIGHT } from './epg-constants';
 import { EpgChannelColumn } from './epg-channel-column';
@@ -19,6 +20,7 @@ import { EpgFilterModal } from './epg-filter-modal';
 import { EpgGuideTopBar } from './epg-guide-top-bar';
 import { EpgProgrammeDetailModal } from './epg-programme-detail-modal';
 import { EpgProgrammeGrid } from './epg-programme-grid';
+import { EpgSkeleton } from './epg-skeleton';
 import { EpgTimeHeader } from './epg-time-header';
 
 interface EpgGuideProps {
@@ -54,7 +56,6 @@ export function EpgGuide({
   const scrollX = useSharedValue(0);
   const scrollY = useSharedValue(0);
 
-  const tintColor = useThemeColor({}, 'tint');
   const iconColor = useThemeColor({}, 'icon');
 
   // Fetch groups for the guide's own group selector
@@ -67,14 +68,20 @@ export function EpgGuide({
       ? [selectedGroupName]
       : undefined;
 
-  // Own channel fetching
-  const { channels: guideChannels } = usePaginatedChannels({
+  // Own channel fetching with pagination
+  const {
+    channels: guideChannels,
+    isLoading: isLoadingChannels,
+    hasMore: hasMoreChannels,
+    loadMore: loadMoreChannels,
+    isLoadingMore: isLoadingMoreChannels,
+  } = usePaginatedChannels({
     playlistId,
     groups: channelGroups,
     contentType: 'live',
     favoriteChannelIds: favoriteChannels,
     excludeAdult,
-    pageSize: 500,
+    pageSize: 300,
   });
 
   // Sort channels: favorites first, then the rest
@@ -136,6 +143,20 @@ export function EpgGuide({
     });
   }, [sortedChannels, programmesByChannel, filteredProgrammesByChannel, hideEmptyChannels, searchText, selectedCategory]);
 
+  // Backend search for text filtering across ALL channels
+  const isSearchActive = searchText.trim().length > 0;
+  const { searchProgrammesByChannel, searchChannels, isSearching } = useEpgSearch(
+    searchText,
+    selectedDate,
+    selectedCategory,
+    sortedChannels
+  );
+
+  // Choose effective data source based on search state
+  const effectiveChannels = isSearchActive ? searchChannels : displayChannels;
+  const effectiveProgrammes = isSearchActive ? searchProgrammesByChannel : filteredProgrammesByChannel;
+  const effectiveLoading = isSearchActive ? isSearching : (isLoadingChannels || isLoading);
+
   // Compute day boundaries
   const dayStartSeconds = useMemo(() => {
     const d = new Date(selectedDate);
@@ -144,7 +165,7 @@ export function EpgGuide({
   }, [selectedDate]);
 
   const nowSeconds = Math.floor(Date.now() / 1000);
-  const gridHeight = displayChannels.length * ROW_HEIGHT;
+  const gridHeight = effectiveChannels.length * ROW_HEIGHT;
 
   // Active filter count for badge (only non-default states count)
   const activeFilterCount = (!hideEmptyChannels ? 1 : 0) + (selectedCategory ? 1 : 0);
@@ -161,10 +182,10 @@ export function EpgGuide({
   // Find channel for the selected programme (for "Watch Channel" action)
   const selectedProgrammeChannel = useMemo(() => {
     if (!selectedProgramme) return null;
-    return displayChannels.find(
+    return effectiveChannels.find(
       (ch) => ch.tvg?.id === selectedProgramme.channelId
     ) ?? null;
-  }, [selectedProgramme, displayChannels]);
+  }, [selectedProgramme, effectiveChannels]);
 
   const handleWatchChannel = useCallback(() => {
     if (selectedProgrammeChannel) {
@@ -201,29 +222,25 @@ export function EpgGuide({
         activeFilterCount={activeFilterCount}
       />
 
-      {/* Loading state */}
-      {isLoading && (
-        <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="small" color={tintColor} />
-        </View>
-      )}
+      {/* Loading state — only show skeleton on initial load, not when loading more */}
+      {effectiveLoading && programmesByChannel.size === 0 && <EpgSkeleton />}
 
       {/* Empty state */}
-      {!isLoading && displayChannels.length === 0 && sortedChannels.length === 0 && (
+      {!effectiveLoading && effectiveChannels.length === 0 && sortedChannels.length === 0 && (
         <ThemedView style={styles.emptyContainer}>
           <IconSymbol name="tv" size={48} color={iconColor} />
           <ThemedText style={styles.emptyText}>No channels available</ThemedText>
         </ThemedView>
       )}
 
-      {!isLoading && sortedChannels.length > 0 && programmesByChannel.size === 0 && (
+      {!effectiveLoading && !isSearchActive && sortedChannels.length > 0 && programmesByChannel.size === 0 && (
         <ThemedView style={styles.emptyContainer}>
           <IconSymbol name="calendar" size={48} color={iconColor} />
           <ThemedText style={styles.emptyText}>No EPG data available for this day</ThemedText>
         </ThemedView>
       )}
 
-      {!isLoading && displayChannels.length === 0 && sortedChannels.length > 0 && programmesByChannel.size > 0 && (
+      {!effectiveLoading && effectiveChannels.length === 0 && (isSearchActive || (sortedChannels.length > 0 && programmesByChannel.size > 0)) && (
         <ThemedView style={styles.emptyContainer}>
           <IconSymbol name="magnifyingglass" size={48} color={iconColor} />
           <ThemedText style={styles.emptyText}>No matching channels found</ThemedText>
@@ -231,7 +248,7 @@ export function EpgGuide({
       )}
 
       {/* EPG Grid */}
-      {displayChannels.length > 0 && programmesByChannel.size > 0 && (
+      {effectiveChannels.length > 0 && effectiveProgrammes.size > 0 && (
         <View style={styles.gridContainer}>
           {/* Time Header */}
           <EpgTimeHeader scrollX={scrollX} />
@@ -239,7 +256,7 @@ export function EpgGuide({
           {/* Channel Column + Programme Grid */}
           <View style={styles.bodyRow}>
             <EpgChannelColumn
-              channels={displayChannels}
+              channels={effectiveChannels}
               favoriteChannels={favoriteChannels}
               scrollY={scrollY}
               onChannelPress={onChannelPress}
@@ -252,13 +269,16 @@ export function EpgGuide({
                 height={gridHeight}
               />
               <EpgProgrammeGrid
-                channels={displayChannels}
-                programmesByChannel={filteredProgrammesByChannel}
+                channels={effectiveChannels}
+                programmesByChannel={effectiveProgrammes}
                 dayStartSeconds={dayStartSeconds}
                 nowSeconds={nowSeconds}
                 scrollX={scrollX}
                 scrollY={scrollY}
                 onProgrammePress={handleProgrammePress}
+                onLoadMore={isSearchActive ? undefined : loadMoreChannels}
+                hasMore={isSearchActive ? false : hasMoreChannels}
+                isLoadingMore={isSearchActive ? false : isLoadingMoreChannels}
               />
             </View>
           </View>
@@ -291,10 +311,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     minHeight: 400,
-  },
-  loadingOverlay: {
-    padding: 24,
-    alignItems: 'center',
   },
   emptyContainer: {
     flex: 1,
