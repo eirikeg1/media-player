@@ -1,5 +1,6 @@
+import { useNowSeconds } from '@/hooks/use-now-seconds';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { type SharedValue, useAnimatedStyle } from 'react-native-reanimated';
 import { HOUR_WIDTH } from './epg-constants';
@@ -15,15 +16,7 @@ function EpgCurrentTimeIndicatorInner({
   scrollX,
   height,
 }: EpgCurrentTimeIndicatorProps) {
-  const [nowSeconds, setNowSeconds] = useState(() => Math.floor(Date.now() / 1000));
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setNowSeconds(Math.floor(Date.now() / 1000));
-    }, 60_000);
-    return () => clearInterval(interval);
-  }, []);
-
+  const nowSeconds = useNowSeconds();
   const indicatorColor = useThemeColor({ light: '#e53e3e', dark: '#fc5c5c' }, 'tint');
 
   const dayEndSeconds = dayStartSeconds + 86400;

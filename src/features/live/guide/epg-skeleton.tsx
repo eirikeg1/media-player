@@ -6,23 +6,9 @@ import Animated, {
   withRepeat,
   withTiming,
 } from 'react-native-reanimated';
-import { CHANNEL_COL_WIDTH, ROW_HEIGHT, TIME_HEADER_HEIGHT } from './epg-constants';
+import { CHANNEL_COL_WIDTH, ROW_HEIGHT, SKELETON_ROW_PATTERNS, TIME_HEADER_HEIGHT } from './epg-constants';
 
 const SKELETON_ROWS = 10;
-
-/** Deterministic block widths per row to mimic real programme blocks */
-const ROW_PATTERNS: number[][] = [
-  [120, 200, 80, 160],
-  [80, 160, 120, 200],
-  [200, 120, 160, 80],
-  [160, 80, 200, 120],
-  [120, 160, 200, 80],
-  [80, 200, 120, 160],
-  [200, 80, 160, 120],
-  [160, 120, 80, 200],
-  [120, 200, 160, 80],
-  [80, 120, 200, 160],
-];
 
 export function EpgSkeleton() {
   const colorScheme = useColorScheme();
@@ -76,7 +62,7 @@ export function EpgSkeleton() {
           />
           {/* Programme blocks */}
           <View style={styles.programmeRow}>
-            {ROW_PATTERNS[rowIdx % ROW_PATTERNS.length].map((width, blockIdx) => (
+            {SKELETON_ROW_PATTERNS[rowIdx % SKELETON_ROW_PATTERNS.length].map((width, blockIdx) => (
               <Animated.View
                 key={blockIdx}
                 style={[

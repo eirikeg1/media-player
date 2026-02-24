@@ -15,3 +15,17 @@ export const DAY_WIDTH = HOUR_WIDTH * 24;
 
 /** Minimum width for a programme block so short programmes remain tappable */
 export const MIN_PROGRAMME_WIDTH = 30;
+
+/** Deterministic block widths per row to mimic real programme blocks in skeletons */
+export const SKELETON_ROW_PATTERNS: number[][] = [
+  [120, 200, 80, 160],
+  [80, 160, 120, 200],
+  [200, 120, 160, 80],
+  [160, 80, 200, 120],
+  [120, 160, 200, 80],
+  [80, 200, 120, 160],
+  [200, 80, 160, 120],
+  [160, 120, 80, 200],
+  [120, 200, 160, 80],
+  [80, 120, 200, 160],
+];

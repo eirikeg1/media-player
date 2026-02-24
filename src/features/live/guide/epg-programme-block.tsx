@@ -1,30 +1,34 @@
 import { ThemedText } from '@/components/ui/display/themed-text';
+import { useIsCurrentlyAiring } from '@/hooks/use-now-seconds';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import type { EpgProgramme } from 'expo-m3u-parser';
 import React from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
-import { HOUR_WIDTH, MIN_PROGRAMME_WIDTH } from './epg-constants';
+import { DAY_WIDTH, HOUR_WIDTH, MIN_PROGRAMME_WIDTH } from './epg-constants';
 
 interface EpgProgrammeBlockProps {
   programme: EpgProgramme;
   dayStartSeconds: number;
-  isCurrentlyAiring: boolean;
   onPress: (programme: EpgProgramme) => void;
 }
 
 function EpgProgrammeBlockInner({
   programme,
   dayStartSeconds,
-  isCurrentlyAiring,
   onPress,
 }: EpgProgrammeBlockProps) {
   const tintColor = useThemeColor({}, 'tint');
   const borderColor = useThemeColor({ light: '#d0d0d0', dark: '#444' }, 'icon');
+  const isCurrentlyAiring = useIsCurrentlyAiring(programme.start, programme.stop);
 
-  const left = ((programme.start - dayStartSeconds) / 3600) * HOUR_WIDTH;
-  const width = Math.max(
-    ((programme.stop - programme.start) / 3600) * HOUR_WIDTH,
-    MIN_PROGRAMME_WIDTH
+  // Clamp to day boundaries for cross-midnight programmes
+  const dayEndSeconds = dayStartSeconds + 86400;
+  const clampedStart = Math.max(programme.start, dayStartSeconds);
+  const clampedStop = Math.min(programme.stop, dayEndSeconds);
+  const left = ((clampedStart - dayStartSeconds) / 3600) * HOUR_WIDTH;
+  const width = Math.min(
+    Math.max(((clampedStop - clampedStart) / 3600) * HOUR_WIDTH, MIN_PROGRAMME_WIDTH),
+    DAY_WIDTH - left
   );
 
   return (

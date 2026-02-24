@@ -34,10 +34,6 @@ export function useEpgSearch(
   const loadedChannelsRef = useRef(loadedChannels);
   loadedChannelsRef.current = loadedChannels;
 
-  // Stabilize category ref to avoid re-triggering on identity changes
-  const categoryRef = useRef(selectedCategory);
-  categoryRef.current = selectedCategory;
-
   // Stabilize date to just the day
   const dateKey = `${selectedDate.getFullYear()}-${selectedDate.getMonth()}-${selectedDate.getDate()}`;
 
@@ -71,7 +67,7 @@ export function useEpgSearch(
         const result = await EpgService.searchProgrammes(trimmed, {
           from,
           to,
-          category: categoryRef.current ?? undefined,
+          category: selectedCategory ?? undefined,
           limit: 200,
         });
 
@@ -127,7 +123,7 @@ export function useEpgSearch(
         clearTimeout(debounceTimerRef.current);
       }
     };
-  }, [searchText, dateKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [searchText, dateKey, selectedCategory]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return { searchProgrammesByChannel: programmesByChannel, searchChannels, isSearching };
 }

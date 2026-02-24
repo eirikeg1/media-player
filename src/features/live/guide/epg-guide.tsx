@@ -81,7 +81,7 @@ export function EpgGuide({
     contentType: 'live',
     favoriteChannelIds: favoriteChannels,
     excludeAdult,
-    pageSize: 300,
+    pageSize: 50,
   });
 
   // Sort channels: favorites first, then the rest
@@ -164,7 +164,6 @@ export function EpgGuide({
     return Math.floor(d.getTime() / 1000);
   }, [selectedDate]);
 
-  const nowSeconds = Math.floor(Date.now() / 1000);
   const gridHeight = effectiveChannels.length * ROW_HEIGHT;
 
   // Active filter count for badge (only non-default states count)
@@ -272,7 +271,6 @@ export function EpgGuide({
                 channels={effectiveChannels}
                 programmesByChannel={effectiveProgrammes}
                 dayStartSeconds={dayStartSeconds}
-                nowSeconds={nowSeconds}
                 scrollX={scrollX}
                 scrollY={scrollY}
                 onProgrammePress={handleProgrammePress}

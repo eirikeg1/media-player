@@ -11,14 +11,13 @@ import Animated, {
   withRepeat,
   withTiming,
 } from 'react-native-reanimated';
-import { DAY_WIDTH, ROW_HEIGHT } from './epg-constants';
+import { DAY_WIDTH, ROW_HEIGHT, SKELETON_ROW_PATTERNS } from './epg-constants';
 import { EpgProgrammeBlock } from './epg-programme-block';
 
 interface EpgProgrammeGridProps {
   channels: Channel[];
   programmesByChannel: Map<string, EpgProgramme[]>;
   dayStartSeconds: number;
-  nowSeconds: number;
   scrollX: SharedValue<number>;
   scrollY: SharedValue<number>;
   onProgrammePress: (programme: EpgProgramme) => void;
@@ -30,18 +29,6 @@ interface EpgProgrammeGridProps {
 const AnimatedFlatList = Animated.FlatList as unknown as typeof Animated.FlatList<Channel>;
 
 const SKELETON_ROWS = 25;
-const ROW_PATTERNS: number[][] = [
-  [120, 200, 80, 160],
-  [80, 160, 120, 200],
-  [200, 120, 160, 80],
-  [160, 80, 200, 120],
-  [120, 160, 200, 80],
-  [80, 200, 120, 160],
-  [200, 80, 160, 120],
-  [160, 120, 80, 200],
-  [120, 200, 160, 80],
-  [80, 120, 200, 160],
-];
 
 function LoadingMoreSkeleton() {
   const colorScheme = useColorScheme();
@@ -60,7 +47,7 @@ function LoadingMoreSkeleton() {
     <View style={{ width: DAY_WIDTH }}>
       {Array.from({ length: SKELETON_ROWS }, (_, rowIdx) => (
         <View key={rowIdx} style={[styles.skeletonRow, { height: ROW_HEIGHT }]}>
-          {ROW_PATTERNS[rowIdx % ROW_PATTERNS.length].map((width, blockIdx) => (
+          {SKELETON_ROW_PATTERNS[rowIdx % SKELETON_ROW_PATTERNS.length].map((width, blockIdx) => (
             <Animated.View
               key={blockIdx}
               style={[
@@ -80,7 +67,6 @@ function EpgProgrammeGridInner({
   channels,
   programmesByChannel,
   dayStartSeconds,
-  nowSeconds,
   scrollX,
   scrollY,
   onProgrammePress,
@@ -113,23 +99,18 @@ function EpgProgrammeGridInner({
         <View
           style={[styles.channelRow, { height: ROW_HEIGHT, borderBottomColor: borderColor }]}
         >
-          {programmes.map((programme, pIdx) => {
-            const isAiring =
-              programme.start <= nowSeconds && programme.stop > nowSeconds;
-            return (
+          {programmes.map((programme, pIdx) => (
               <EpgProgrammeBlock
                 key={`${programme.channelId}-${programme.start}-${pIdx}`}
                 programme={programme}
                 dayStartSeconds={dayStartSeconds}
-                isCurrentlyAiring={isAiring}
                 onPress={onProgrammePress}
               />
-            );
-          })}
+          ))}
         </View>
       );
     },
-    [programmesByChannel, dayStartSeconds, nowSeconds, onProgrammePress, borderColor]
+    [programmesByChannel, dayStartSeconds, onProgrammePress, borderColor]
   );
 
   const getItemLayout = useCallback(
