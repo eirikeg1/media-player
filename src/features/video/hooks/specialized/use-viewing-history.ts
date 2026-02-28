@@ -33,13 +33,19 @@ export function useViewingHistory({
   const accumulatedWatchTimeRef = useRef(0);
   const lastCurrentTimeRef = useRef(0);
   const isPlayingRef = useRef(false);
+  const durationRef = useRef(0);
+  const nextEpisodeResolvedRef = useRef(false);
 
-  const { startViewingSession, updateSessionProgress, endViewingSession } = useUserStore.getState();
+  const { startViewingSession, updateSessionProgress, endViewingSession, resolveAndStoreNextEpisode } = useUserStore.getState();
 
-  // Keep isPlaying ref in sync
+  // Keep refs in sync
   useEffect(() => {
     isPlayingRef.current = isPlaying;
   }, [isPlaying]);
+
+  useEffect(() => {
+    durationRef.current = duration;
+  }, [duration]);
 
   // Start session on mount (skip if private mode is enabled)
   useEffect(() => {
@@ -71,10 +77,14 @@ export function useViewingHistory({
 
       const finalPosition = lastCurrentTimeRef.current;
       const watchedTime = accumulatedWatchTimeRef.current;
-      const totalDur = duration;
+      const totalDur = durationRef.current;
       const completed = totalDur > 0 && finalPosition / totalDur >= 0.9;
 
-      endViewingSession(sid, finalPosition, watchedTime, completed);
+      endViewingSession(sid, finalPosition, watchedTime, completed).then(() => {
+        if (completed && contentType === 'series' && userId) {
+          resolveAndStoreNextEpisode(userId, playlistId, channel);
+        }
+      });
       sessionIdRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -103,5 +113,17 @@ export function useViewingHistory({
         duration > 0 ? duration : undefined,
       );
     }
-  }, [currentTime, duration, isPlaying, updateSessionProgress]);
+
+    // Eagerly resolve next episode at 90% to survive force-close
+    if (
+      !nextEpisodeResolvedRef.current &&
+      contentType === 'series' &&
+      userId &&
+      duration > 0 &&
+      currentTime / duration >= 0.9
+    ) {
+      nextEpisodeResolvedRef.current = true;
+      resolveAndStoreNextEpisode(userId, playlistId, channel);
+    }
+  }, [currentTime, duration, isPlaying, updateSessionProgress, contentType, userId, playlistId, channel, resolveAndStoreNextEpisode]);
 }

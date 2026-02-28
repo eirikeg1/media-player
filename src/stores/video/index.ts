@@ -13,3 +13,4 @@ export { useVideoErrorStore } from './error-store';
 export { useVideoUIStore } from './ui-store';
 export { useVideoNetworkStore } from './network-store';
 export { useCastMiniPlayerStore } from './cast-mini-player-store';
+export { useGestureStore } from './gesture-store';

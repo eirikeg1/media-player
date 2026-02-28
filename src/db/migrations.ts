@@ -482,6 +482,16 @@ const migrations: Migration[] = [
       console.log('[Migration] Added epgUrl column to playlists');
     },
   },
+  {
+    version: 13,
+    name: 'add_next_episode_columns',
+    up: async (db) => {
+      await db.execAsync(`ALTER TABLE channel_watch_stats ADD COLUMN nextEpisodeChannelId TEXT;`);
+      await db.execAsync(`ALTER TABLE channel_watch_stats ADD COLUMN nextEpisodeChannelName TEXT;`);
+
+      console.log('[Migration] Added next-episode columns to channel_watch_stats');
+    },
+  },
 ];
 
 /**

@@ -161,6 +161,8 @@ export interface RecentlyWatchedItem {
   lastWatchedAt: string;
   lastPosition?: number;
   totalDuration?: number;
+  nextEpisodeChannelId?: string;
+  nextEpisodeChannelName?: string;
   seriesName?: string;
   seriesPoster?: string;
 }

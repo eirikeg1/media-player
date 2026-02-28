@@ -56,11 +56,5 @@
 * Recommendations fetched from backend, displayed to the user
 * Watch history sync between app and backend
 
-
-
-
 ## Bugs
 * When a video fails to load you get an error up, then an infinite loading spinner
-* When finishing watching a movie series and exit, the home page "Continue watching" does not add the next episode to the start of the list, but the one you just finished
-* Continue watching not updating until refresh
-* Investigate updating channel EPG live based on time

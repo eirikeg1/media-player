@@ -20,7 +20,7 @@ import type { Channel } from '@/types/playlist.types';
 import type { RecentlyWatchedItem } from '@/types/user.types';
 import { Image } from 'expo-image';
 import type { SeriesInfo } from 'expo-m3u-parser';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -63,6 +63,18 @@ export default function HomeScreen() {
     }, 10_000);
     return () => clearTimeout(timeout);
   }, []);
+
+  // Auto-refresh recently watched when tab gains focus
+  const isInitialMount = useRef(true);
+  useFocusEffect(
+    useCallback(() => {
+      if (isInitialMount.current) {
+        isInitialMount.current = false;
+        return;
+      }
+      refreshRecentlyWatched();
+    }, [refreshRecentlyWatched])
+  );
 
   // Pull-to-refresh
   const [isRefreshing, setIsRefreshing] = useState(false);

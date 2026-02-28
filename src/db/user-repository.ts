@@ -75,6 +75,7 @@ export interface IUserRepository {
   getViewingHistory(userId: string, limit?: number): Promise<ViewingSession[]>;
   clearViewingHistory(userId: string): Promise<void>;
   clearViewingHistoryForPlaylist(userId: string, playlistId: string): Promise<void>;
+  setNextEpisode(userId: string, playlistId: string, channelId: string, nextChannelId: string, nextChannelName: string): Promise<void>;
   getSavedPosition(userId: string, playlistId: string, channelId: string): Promise<{ lastPosition: number; totalDuration?: number } | null>;
 
   // Migration helper
@@ -191,6 +192,8 @@ interface RecentlyWatchedRow {
   lastWatchedAt: string;
   lastPosition: number;
   totalDuration: number | null;
+  nextEpisodeChannelId: string | null;
+  nextEpisodeChannelName: string | null;
 }
 
 /**
@@ -643,7 +646,9 @@ class SQLiteUserRepository implements IUserRepository {
          totalDuration = COALESCE(excluded.totalDuration, totalDuration),
          completionCount = completionCount + excluded.completionCount,
          avgSessionDuration = (totalTimeWatched + excluded.totalTimeWatched) / (watchCount + 1),
-         longestSessionDuration = MAX(longestSessionDuration, excluded.longestSessionDuration)`,
+         longestSessionDuration = MAX(longestSessionDuration, excluded.longestSessionDuration),
+         nextEpisodeChannelId = NULL,
+         nextEpisodeChannelName = NULL`,
       [
         session.userId,
         session.playlistId,
@@ -774,7 +779,7 @@ class SQLiteUserRepository implements IUserRepository {
 
   async getRecentlyWatched(userId: string, playlistId: string, limit: number = 20): Promise<RecentlyWatchedItem[]> {
     const rows = await executeQuery<RecentlyWatchedRow>(
-      `SELECT channelId, channelName, groupTitle, contentType, tvgLogo, watchCount, lastWatchedAt, lastPosition, totalDuration
+      `SELECT channelId, channelName, groupTitle, contentType, tvgLogo, watchCount, lastWatchedAt, lastPosition, totalDuration, nextEpisodeChannelId, nextEpisodeChannelName
        FROM channel_watch_stats
        WHERE userId = ? AND playlistId = ?
        ORDER BY lastWatchedAt DESC
@@ -792,6 +797,8 @@ class SQLiteUserRepository implements IUserRepository {
       lastWatchedAt: row.lastWatchedAt,
       lastPosition: row.lastPosition || undefined,
       totalDuration: row.totalDuration ?? undefined,
+      nextEpisodeChannelId: row.nextEpisodeChannelId ?? undefined,
+      nextEpisodeChannelName: row.nextEpisodeChannelName ?? undefined,
     }));
   }
 
@@ -861,6 +868,21 @@ class SQLiteUserRepository implements IUserRepository {
       await db.runAsync('DELETE FROM channel_watch_stats WHERE userId = ? AND playlistId = ?', [userId, playlistId]);
       await db.runAsync('DELETE FROM group_watch_stats WHERE userId = ? AND playlistId = ?', [userId, playlistId]);
     });
+  }
+
+  async setNextEpisode(
+    userId: string,
+    playlistId: string,
+    channelId: string,
+    nextChannelId: string,
+    nextChannelName: string,
+  ): Promise<void> {
+    await executeStatement(
+      `UPDATE channel_watch_stats
+       SET nextEpisodeChannelId = ?, nextEpisodeChannelName = ?
+       WHERE userId = ? AND playlistId = ? AND channelId = ?`,
+      [nextChannelId, nextChannelName, userId, playlistId, channelId]
+    );
   }
 
   async getSavedPosition(userId: string, playlistId: string, channelId: string): Promise<{ lastPosition: number; totalDuration?: number } | null> {

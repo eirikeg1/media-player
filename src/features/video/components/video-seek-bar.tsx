@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { LayoutChangeEvent, Text, TextInput, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
+  type SharedValue,
   runOnJS,
   useAnimatedProps,
   useAnimatedStyle,
@@ -20,6 +21,8 @@ interface VideoSeekBarProps {
   onSeekStart: () => void;
   onSeekEnd: (time: number) => void;
   onSeek?: (time: number) => void;
+  isGestureSeeking?: SharedValue<boolean>;
+  seekTargetDisplay?: SharedValue<number>;
 }
 
 function formatTime(seconds: number): string {
@@ -35,12 +38,19 @@ function formatTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+function clampProgress(value: number): number {
+  'worklet';
+  return Math.min(Math.max(value, 0), 1);
+}
+
 export function VideoSeekBar({
   currentTime,
   duration,
   onSeekStart,
   onSeekEnd,
   onSeek,
+  isGestureSeeking,
+  seekTargetDisplay,
 }: VideoSeekBarProps) {
   const [trackWidth, setTrackWidth] = useState(0);
   const isDragging = useSharedValue(false);
@@ -52,7 +62,11 @@ export function VideoSeekBar({
   const progress = duration > 0 ? currentTime / duration : 0;
 
   const displayTime = useDerivedValue(() => {
-    const p = (isDragging.value || isSeeking.value) ? dragProgress.value : progress;
+    const p = isGestureSeeking?.value
+      ? clampProgress(seekTargetDisplay!.value / duration)
+      : (isDragging.value || isSeeking.value)
+        ? dragProgress.value
+        : progress;
     return formatTime(p * duration);
   });
 
@@ -63,11 +77,6 @@ export function VideoSeekBar({
   const onLayout = useCallback((e: LayoutChangeEvent) => {
     setTrackWidth(e.nativeEvent.layout.width);
   }, []);
-
-  const clampProgress = (value: number) => {
-    'worklet';
-    return Math.min(Math.max(value, 0), 1);
-  };
 
   const seekToProgress = useCallback(
     (p: number) => {
@@ -119,12 +128,20 @@ export function VideoSeekBar({
   const composedGesture = Gesture.Race(panGesture, tapGesture);
 
   const fillStyle = useAnimatedStyle(() => {
-    const p = (isDragging.value || isSeeking.value) ? dragProgress.value : progress;
+    const p = isGestureSeeking?.value
+      ? clampProgress(seekTargetDisplay!.value / duration)
+      : (isDragging.value || isSeeking.value)
+        ? dragProgress.value
+        : progress;
     return { width: `${p * 100}%` };
   });
 
   const thumbStyle = useAnimatedStyle(() => {
-    const p = (isDragging.value || isSeeking.value) ? dragProgress.value : progress;
+    const p = isGestureSeeking?.value
+      ? clampProgress(seekTargetDisplay!.value / duration)
+      : (isDragging.value || isSeeking.value)
+        ? dragProgress.value
+        : progress;
     return {
       left: `${p * 100}%`,
       transform: [

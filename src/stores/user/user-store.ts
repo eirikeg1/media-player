@@ -1,4 +1,7 @@
 import { userRepository } from '@/db/user-repository';
+import { getChannelId } from '@/lib/channel-utils';
+import { parseEpisodeInfo, stripEpisodeInfo } from '@/lib/series-utils';
+import { RustChannelService } from '@/services/rust-channel-service';
 import type {
   ContentType,
   ContinueWatchingItem,
@@ -10,6 +13,7 @@ import type {
   UserSettings,
   ViewingSession,
 } from '@/types/user.types';
+import type { Channel } from '@/types/playlist.types';
 import { create } from 'zustand';
 
 interface UserState {
@@ -19,6 +23,7 @@ interface UserState {
   isLoading: boolean;
   error: string | null;
   favoriteChannels: string[];
+  recentlyWatchedVersion: number;
 
   // User management actions
   loadUsers: () => Promise<void>;
@@ -63,6 +68,7 @@ interface UserState {
   clearViewingHistory: (userId: string) => Promise<void>;
   closeOrphanedSessions: () => Promise<void>;
   getSavedPosition: (userId: string, playlistId: string, channelId: string) => Promise<{ lastPosition: number; totalDuration?: number } | null>;
+  resolveAndStoreNextEpisode: (userId: string, playlistId: string, channel: Channel) => Promise<void>;
 
   // Utility actions
   clearError: () => void;
@@ -84,6 +90,7 @@ export const useUserStore = create<UserState>((set, get) => ({
   error: null,
   favoriteChannels: [],
   activeSessionId: null,
+  recentlyWatchedVersion: 0,
 
   // Load all users from database
   loadUsers: async () => {
@@ -424,6 +431,41 @@ export const useUserStore = create<UserState>((set, get) => ({
   // Get saved position for resume prompt
   getSavedPosition: async (userId, playlistId, channelId) => {
     return await userRepository.getSavedPosition(userId, playlistId, channelId);
+  },
+
+  // Resolve and persist the next episode for a completed series episode
+  resolveAndStoreNextEpisode: async (userId: string, playlistId: string, channel: Channel) => {
+    try {
+      const seriesName = stripEpisodeInfo(channel.name);
+      const groupTitle = channel.group?.title;
+      if (!groupTitle) return;
+
+      const episodes = await RustChannelService.getSeriesEpisodes(playlistId, seriesName, groupTitle);
+      if (episodes.length === 0) return;
+
+      // Sort by season/episode
+      const sorted = [...episodes].sort((a, b) => {
+        const pa = parseEpisodeInfo(a);
+        const pb = parseEpisodeInfo(b);
+        return pa.season !== pb.season ? pa.season - pb.season : pa.episode - pb.episode;
+      });
+
+      const currentChannelId = getChannelId(channel);
+      const currentIndex = sorted.findIndex((ep) => getChannelId(ep) === currentChannelId);
+      if (currentIndex === -1 || currentIndex >= sorted.length - 1) return;
+
+      const nextEpisode = sorted[currentIndex + 1];
+      await userRepository.setNextEpisode(
+        userId,
+        playlistId,
+        currentChannelId,
+        getChannelId(nextEpisode),
+        nextEpisode.name,
+      );
+      set((s) => ({ recentlyWatchedVersion: s.recentlyWatchedVersion + 1 }));
+    } catch (error) {
+      console.error('[UserStore] Error resolving next episode:', error);
+    }
   },
 
   // Clear error

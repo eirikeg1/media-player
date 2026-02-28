@@ -12,6 +12,7 @@ export function useRecentlyWatched(limit = 20) {
   const excludeAdult = useUserStore(
     (s) => s.currentUser?.settings?.parentalControlEnabled ?? false
   );
+  const recentlyWatchedVersion = useUserStore((s) => s.recentlyWatchedVersion);
 
   const [items, setItems] = useState<RecentlyWatchedItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -73,6 +74,22 @@ export function useRecentlyWatched(limit = 20) {
         }
       }
 
+      // Swap in next-episode data for completed series items
+      for (let i = 0; i < deduped.length; i++) {
+        const item = deduped[i];
+        if (item.nextEpisodeChannelId && item.nextEpisodeChannelName) {
+          deduped[i] = {
+            ...item,
+            channelId: item.nextEpisodeChannelId,
+            channelName: item.nextEpisodeChannelName,
+            lastPosition: undefined,
+            totalDuration: undefined,
+            nextEpisodeChannelId: undefined,
+            nextEpisodeChannelName: undefined,
+          };
+        }
+      }
+
       // Phase 2: Look up series posters for unique series names
       const uniqueSeriesNames = [...seenSeries];
       const posterLookups = await Promise.all(
@@ -120,7 +137,7 @@ export function useRecentlyWatched(limit = 20) {
 
   useEffect(() => {
     fetch();
-  }, [fetch]);
+  }, [fetch, recentlyWatchedVersion]);
 
   return { items, isLoading, refresh: fetch };
 }
