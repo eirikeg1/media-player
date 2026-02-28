@@ -492,6 +492,15 @@ const migrations: Migration[] = [
       console.log('[Migration] Added next-episode columns to channel_watch_stats');
     },
   },
+  {
+    version: 14,
+    name: 'add_playlist_sync_interval',
+    up: async (db) => {
+      await db.execAsync(`ALTER TABLE playlists ADD COLUMN syncInterval INTEGER;`);
+
+      console.log('[Migration] Added syncInterval column to playlists');
+    },
+  },
 ];
 
 /**

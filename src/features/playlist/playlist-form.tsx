@@ -1,3 +1,4 @@
+import { Dropdown, type DropdownOption } from '@/components/ui/controls/inputs/dropdown';
 import { Input } from '@/components/ui/controls/inputs/input';
 import { Textarea } from '@/components/ui/controls/inputs/textarea';
 import { ThemedText } from '@/components/ui/display/themed-text';
@@ -10,6 +11,19 @@ import type { Playlist } from '@/types/playlist.types';
 import { memo, useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Switch, TouchableOpacity, View } from 'react-native';
 import { ImportProgressBar } from './import-progress-bar';
+
+const SYNC_INTERVAL_OPTIONS: DropdownOption<number>[] = [
+  { label: 'Every day', value: 1440 },
+  { label: 'Every 1 hour', value: 60 },
+  { label: 'Every 2 hours', value: 120 },
+  { label: 'Every 4 hours', value: 240 },
+  { label: 'Every 6 hours', value: 360 },
+  { label: 'Every 8 hours', value: 480 },
+  { label: 'Every 12 hours', value: 720 },
+  { label: 'Every 2 days', value: 2880 },
+  { label: 'Every 4 days', value: 5760 },
+  { label: 'Every week', value: 10080 },
+];
 
 interface PlaylistFormProps {
   onSuccess?: () => void;
@@ -31,6 +45,7 @@ export const PlaylistForm = memo(function PlaylistForm({ onSuccess, onCancel, pl
   const [username, setUsername] = useState(playlist?.credentials?.username || '');
   const [password, setPassword] = useState(playlist?.credentials?.password || '');
   const [epgUrl, setEpgUrl] = useState(playlist?.epgUrl || '');
+  const [syncInterval, setSyncInterval] = useState<number>(playlist?.syncInterval || 1440);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -43,6 +58,7 @@ export const PlaylistForm = memo(function PlaylistForm({ onSuccess, onCancel, pl
       setName(playlist.name);
       setUrl(playlist.url);
       setEpgUrl(playlist.epgUrl || '');
+      setSyncInterval(playlist.syncInterval || 1440);
       setUseCredentials(!!playlist.credentials);
       setUsername(playlist.credentials?.username || '');
       setPassword(playlist.credentials?.password || '');
@@ -89,6 +105,7 @@ export const PlaylistForm = memo(function PlaylistForm({ onSuccess, onCancel, pl
           name: name.trim(),
           url: url.trim(),
           epgUrl: trimmedEpgUrl,
+          syncInterval,
           credentials: useCredentials
             ? { username: username.trim(), password: password.trim() }
             : undefined,
@@ -127,7 +144,7 @@ export const PlaylistForm = memo(function PlaylistForm({ onSuccess, onCancel, pl
       setIsSubmitting(false);
       console.log('[PlaylistForm] Submit completed');
     }
-  }, [name, url, epgUrl, useCredentials, username, password, addPlaylist, updatePlaylist, onSuccess, isEditing, playlist]);
+  }, [name, url, epgUrl, syncInterval, useCredentials, username, password, addPlaylist, updatePlaylist, onSuccess, isEditing, playlist]);
 
   return (
     <ThemedView style={styles.container}>
@@ -208,6 +225,22 @@ export const PlaylistForm = memo(function PlaylistForm({ onSuccess, onCancel, pl
           Optional. Auto-detected for Xtream providers.
         </ThemedText>
       </View>
+
+      {isEditing && (
+        <View style={styles.formGroup}>
+          <Dropdown<number>
+            label="Auto Sync"
+            options={SYNC_INTERVAL_OPTIONS}
+            value={syncInterval}
+            onSelect={setSyncInterval}
+            disabled={isSubmitting}
+            accessibilityLabel="Playlist auto sync interval"
+          />
+          <ThemedText style={styles.helpText}>
+            Automatically refresh playlist data at the selected interval.
+          </ThemedText>
+        </View>
+      )}
 
       <View style={styles.switchContainer}>
         <View style={styles.switchLabelContainer}>

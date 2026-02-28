@@ -24,7 +24,7 @@ interface PlaylistState {
   addPlaylist: (input: CreatePlaylistInput) => Promise<void>;
   removePlaylist: (id: string) => Promise<void>;
   setActivePlaylist: (id: string | null) => Promise<void>;
-  refreshPlaylist: (id: string) => Promise<void>;
+  refreshPlaylist: (id: string, options?: { silent?: boolean }) => Promise<void>;
   updatePlaylist: (id: string, updates: UpdatePlaylistInput) => Promise<void>;
   loadPlaylists: () => Promise<void>;
 
@@ -220,8 +220,11 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
     }
   },
 
-  refreshPlaylist: async (id: string) => {
-    set({ error: null });
+  refreshPlaylist: async (id: string, options?: { silent?: boolean }) => {
+    const silent = options?.silent ?? false;
+    if (!silent) {
+      set({ error: null });
+    }
 
     try {
       const playlist = get().getPlaylistById(id);
@@ -275,7 +278,9 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Failed to refresh playlist';
-      set({ error: errorMessage });
+      if (!silent) {
+        set({ error: errorMessage });
+      }
       throw error;
     }
   },
@@ -341,11 +346,17 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
         });
       }
 
+      // Destructure syncInterval to handle null → undefined mapping separately
+      const { syncInterval: rawSyncInterval, ...restUpdates } = updates;
+
       const updateData: Partial<Playlist> = {
-        ...updates,
+        ...restUpdates,
         ...(updates.name && { name: sanitizePlaylistName(updates.name) }),
         ...(channelCount !== undefined && { channelCount }),
         ...(lastFetchedAt && { lastFetchedAt }),
+        ...(rawSyncInterval !== undefined && {
+          syncInterval: rawSyncInterval ?? undefined,
+        }),
       };
 
       const updated = await playlistRepository.update(id, updateData);

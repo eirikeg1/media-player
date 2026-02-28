@@ -40,6 +40,7 @@ export interface Playlist {
   parsedData?: ParsedPlaylist;
   channelCount?: number;
   createdByUserId?: string;
+  syncInterval?: number;
   createdAt: Date;
   updatedAt: Date;
   lastFetchedAt?: Date;
@@ -58,6 +59,7 @@ export interface UpdatePlaylistInput {
   name?: string;
   url?: string;
   epgUrl?: string;
+  syncInterval?: number | null;
   credentials?: PlaylistCredentials;
 }
 

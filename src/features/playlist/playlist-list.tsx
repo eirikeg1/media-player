@@ -12,6 +12,12 @@ import { Alert, FlatList, StyleSheet, TouchableOpacity, View } from 'react-nativ
 import { ImportProgressBar } from './import-progress-bar';
 import { PlaylistModal } from './playlist-modal';
 
+function formatSyncInterval(minutes: number): string {
+  if (minutes >= 10080) return `${minutes / 10080}w`;
+  if (minutes >= 1440) return `${minutes / 1440}d`;
+  return `${minutes / 60}h`;
+}
+
 interface PlaylistCardProps {
   item: Playlist;
   isActive: boolean;
@@ -80,6 +86,15 @@ const PlaylistCard = memo(function PlaylistCard({
               <ThemedText style={styles.metaText}>
                 {item.channelCount || 0}
               </ThemedText>
+              {!!item.syncInterval && item.syncInterval > 0 && (
+                <>
+                  <ThemedText style={styles.separator}>•</ThemedText>
+                  <IconSymbol name="arrow.triangle.2.circlepath" size={12} color={isDark ? '#7c869e' : '#5c6477'} />
+                  <ThemedText style={styles.metaText}>
+                    {formatSyncInterval(item.syncInterval)}
+                  </ThemedText>
+                </>
+              )}
               <ThemedText style={styles.separator}>•</ThemedText>
               <ThemedText style={[styles.metaText, styles.urlText]} numberOfLines={1} ellipsizeMode="tail">
                 {extractCleanUrl(item.url)}

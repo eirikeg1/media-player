@@ -31,6 +31,7 @@ interface PlaylistRow {
   username: string | null;
   password: string | null;
   channelCount: number | null;
+  syncInterval: number | null;
   createdByUserId: string | null;
   createdAt: string;
   updatedAt: string;
@@ -67,6 +68,7 @@ class SQLitePlaylistRepository implements IPlaylistRepository {
       url: row.url,
       epgUrl: row.epgUrl || undefined,
       channelCount: row.channelCount || undefined,
+      syncInterval: row.syncInterval ?? undefined,
       createdByUserId: row.createdByUserId || undefined,
       createdAt: new Date(row.createdAt),
       updatedAt: new Date(row.updatedAt),
@@ -179,8 +181,8 @@ class SQLitePlaylistRepository implements IPlaylistRepository {
 
     // Only store playlist metadata - channels are stored in Rust database
     await executeStatement(
-      `INSERT INTO playlists (id, name, url, epgUrl, username, password, channelCount, createdByUserId, createdAt, updatedAt, lastFetchedAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO playlists (id, name, url, epgUrl, username, password, channelCount, syncInterval, createdByUserId, createdAt, updatedAt, lastFetchedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         playlist.id,
         playlist.name,
@@ -189,6 +191,7 @@ class SQLitePlaylistRepository implements IPlaylistRepository {
         playlist.credentials?.username || null,
         playlist.credentials?.password || null,
         playlist.channelCount || null,
+        playlist.syncInterval ?? null,
         playlist.createdByUserId || null,
         playlist.createdAt.toISOString(),
         playlist.updatedAt.toISOString(),
@@ -218,7 +221,7 @@ class SQLitePlaylistRepository implements IPlaylistRepository {
     // Only update playlist metadata - channels are managed by Rust
     await executeStatement(
       `UPDATE playlists
-       SET name = ?, url = ?, epgUrl = ?, username = ?, password = ?, channelCount = ?, updatedAt = ?, lastFetchedAt = ?
+       SET name = ?, url = ?, epgUrl = ?, username = ?, password = ?, channelCount = ?, syncInterval = ?, updatedAt = ?, lastFetchedAt = ?
        WHERE id = ?`,
       [
         updated.name,
@@ -227,6 +230,7 @@ class SQLitePlaylistRepository implements IPlaylistRepository {
         updated.credentials?.username || null,
         updated.credentials?.password || null,
         updated.channelCount || null,
+        updated.syncInterval ?? null,
         updated.updatedAt.toISOString(),
         updated.lastFetchedAt?.toISOString() || null,
         id,
