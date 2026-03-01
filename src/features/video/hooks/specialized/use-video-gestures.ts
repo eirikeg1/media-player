@@ -88,6 +88,7 @@ export function useVideoGestures({
   const cachedVolume = useRef(1);
   const resetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const gestureSeekPending = useRef(false);
+  const hasSystemBrightnessPermission = useRef(false);
 
   // Shared values for worklet fast-path (UI thread updates)
   const gestureActivatedSV = useSharedValue(false);
@@ -133,8 +134,13 @@ export function useVideoGestures({
   useEffect(() => {
     const init = async () => {
       if (Platform.OS === 'android') {
-        await Brightness.requestPermissionsAsync();
-        cachedBrightness.current = await Brightness.getSystemBrightnessAsync();
+        const { status } = await Brightness.requestPermissionsAsync();
+        hasSystemBrightnessPermission.current = status === 'granted';
+        if (hasSystemBrightnessPermission.current) {
+          cachedBrightness.current = await Brightness.getSystemBrightnessAsync();
+        } else {
+          cachedBrightness.current = await Brightness.getBrightnessAsync();
+        }
       } else {
         cachedBrightness.current = await Brightness.getBrightnessAsync();
       }
@@ -201,10 +207,8 @@ export function useVideoGestures({
 
   const applyBrightness = useCallback((b: number) => {
     cachedBrightness.current = b;
-    if (Platform.OS === 'android') {
-      Brightness.setSystemBrightnessAsync(b).catch(() => {
-        Brightness.setBrightnessAsync(b); // fallback if permission denied
-      });
+    if (Platform.OS === 'android' && hasSystemBrightnessPermission.current) {
+      Brightness.setSystemBrightnessAsync(b);
     } else {
       Brightness.setBrightnessAsync(b);
     }
@@ -266,7 +270,7 @@ export function useVideoGestures({
         startBrightnessSV.value = cachedBrightness.current;
         setBrightness(cachedBrightness.current);
         brightnessDisplay.value = cachedBrightness.current;
-        const refine = Platform.OS === 'android'
+        const refine = Platform.OS === 'android' && hasSystemBrightnessPermission.current
           ? Brightness.getSystemBrightnessAsync()
           : Brightness.getBrightnessAsync();
         refine.then((b) => {
