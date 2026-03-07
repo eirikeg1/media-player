@@ -58,3 +58,4 @@
 
 ## Bugs
 * When a video fails to load you get an error up, then an infinite loading spinner
+* Brightness changes lags behind slider in GUI. So the brightness slowly fades into the correct value after adjusting it.

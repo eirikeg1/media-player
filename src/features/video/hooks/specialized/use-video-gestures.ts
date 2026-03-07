@@ -89,6 +89,8 @@ export function useVideoGestures({
   const resetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const gestureSeekPending = useRef(false);
   const hasSystemBrightnessPermission = useRef(false);
+  const pendingBrightnessValue = useRef<number | null>(null);
+  const brightnessInFlight = useRef(false);
 
   // Shared values for worklet fast-path (UI thread updates)
   const gestureActivatedSV = useSharedValue(false);
@@ -121,7 +123,7 @@ export function useVideoGestures({
   const { setActiveGesture, setSeekDelta, setVolume, setBrightness, reset } =
     useGestureStore();
 
-  // Cleanup resetTimeoutRef on unmount
+  // Cleanup timers on unmount
   useEffect(() => {
     return () => {
       if (resetTimeoutRef.current !== null) {
@@ -207,12 +209,35 @@ export function useVideoGestures({
 
   const applyBrightness = useCallback((b: number) => {
     cachedBrightness.current = b;
-    if (Platform.OS === 'android' && hasSystemBrightnessPermission.current) {
-      Brightness.setSystemBrightnessAsync(b);
-    } else {
-      Brightness.setBrightnessAsync(b);
+    const setBrightnessFn =
+      Platform.OS === 'android' && hasSystemBrightnessPermission.current
+        ? Brightness.setSystemBrightnessAsync
+        : Brightness.setBrightnessAsync;
+
+    if (brightnessInFlight.current) {
+      pendingBrightnessValue.current = b;
+      return;
     }
+
+    brightnessInFlight.current = true;
+    setBrightnessFn(b).then(() => {
+      brightnessInFlight.current = false;
+      const pending = pendingBrightnessValue.current;
+      if (pending !== null) {
+        pendingBrightnessValue.current = null;
+        applyBrightness(pending);
+      }
+    });
   }, []);
+
+  const flushBrightness = useCallback(() => {
+    if (brightnessInFlight.current) return;
+    const pending = pendingBrightnessValue.current;
+    if (pending !== null) {
+      pendingBrightnessValue.current = null;
+      applyBrightness(pending);
+    }
+  }, [applyBrightness]);
 
   // --- JS handlers called from worklets via runOnJS ---
 
@@ -350,6 +375,7 @@ export function useVideoGestures({
         setVolume(vol);
       } else if (zone === 'left' && wasActivated) {
         setBrightness(bright);
+        flushBrightness();
       }
 
       // Only schedule reset if gesture was activated
@@ -360,7 +386,7 @@ export function useVideoGestures({
         }, VIDEO_CONSTANTS.GESTURE_INDICATOR_LINGER_MS);
       }
     },
-    [seekTo, onSeekEnd, setSeekDelta, setVolume, setBrightness, reset, isGestureSeeking],
+    [seekTo, onSeekEnd, setSeekDelta, setVolume, setBrightness, flushBrightness, reset, isGestureSeeking],
   );
 
   const handleTap = useCallback(() => {
