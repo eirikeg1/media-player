@@ -17,8 +17,25 @@ const AnimatedTextInput = Animated.createAnimatedComponent(TextInput);
 
 function formatDelta(seconds: number): string {
   'worklet';
-  const sign = seconds >= 0 ? '+' : '';
-  return `${sign}${Math.round(seconds)}s`;
+  const rounded = Math.round(seconds);
+  if (rounded === 0) return '0s';
+
+  const sign = rounded >= 0 ? '+' : '-';
+  const abs = Math.abs(rounded);
+  const h = Math.floor(abs / 3600);
+  const m = Math.floor((abs % 3600) / 60);
+  const s = abs % 60;
+
+  if (h > 0) {
+    const mStr = m < 10 ? `0${m}` : `${m}`;
+    const sStr = s < 10 ? `0${s}` : `${s}`;
+    return `${sign}${h}:${mStr}:${sStr}`;
+  }
+  if (m > 0) {
+    const sStr = s < 10 ? `0${s}` : `${s}`;
+    return `${sign}${m}:${sStr}`;
+  }
+  return `${sign}${s}s`;
 }
 
 function formatTime(seconds: number): string {
@@ -54,7 +71,7 @@ function SeekIndicator({
   );
 
   return (
-    <View className="absolute inset-0 items-center justify-center" pointerEvents="none">
+    <View className="absolute inset-0 items-center justify-end pb-28" pointerEvents="none">
       <View
         className="items-center rounded-xl px-5 py-3"
         style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}
