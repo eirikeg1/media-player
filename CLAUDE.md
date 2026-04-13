@@ -30,7 +30,7 @@ After implementing ANY change:
 ## Project-Specific Guidelines (MANDATORY)
 
 ### Component Architecture
-- **Use React Native Reusables**: Always prefer existing UI components (`src/components/ui/`) over creating new ones. Utilize https://reactnativereusables.com/docs/components/
+- **Use React Native Reusables**: Always prefer existing UI components (`src/components/ui/`) over creating new ones. Utilize https://reactnativereusables.com/docs/
 - **Domain-Driven Structure**: Follow the established pattern: `src/components/domain/{feature}/`
 - **Themed Components**: Use existing themed components (ThemedText, ThemedView) for consistency
 
