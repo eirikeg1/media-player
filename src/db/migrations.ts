@@ -510,6 +510,16 @@ const migrations: Migration[] = [
       console.log('[Migration] Added showSportsTab column to user_settings');
     },
   },
+  {
+    version: 16,
+    name: 'add_playlist_epg_sync',
+    up: async (db) => {
+      await db.execAsync(`ALTER TABLE playlists ADD COLUMN epgSyncInterval INTEGER;`);
+      await db.execAsync(`ALTER TABLE playlists ADD COLUMN lastEpgFetchedAt TEXT;`);
+
+      console.log('[Migration] Added epgSyncInterval and lastEpgFetchedAt columns to playlists');
+    },
+  },
 ];
 
 /**

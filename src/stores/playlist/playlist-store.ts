@@ -126,6 +126,7 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
         createdAt: now,
         updatedAt: now,
         lastFetchedAt: now,
+        lastEpgFetchedAt: now,
       };
 
       console.log('[PlaylistStore] Creating playlist in repository:', {
@@ -261,8 +262,16 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
         throw new Error('No channels found in playlist. Please verify the M3U format.');
       }
 
-      // Fire-and-forget: detect and fetch EPG data
-      EpgService.detectAndFetchEpgSources(id, playlist.epgUrl).catch((err) => {
+      // Fire-and-forget: detect and fetch EPG data, update lastEpgFetchedAt on success
+      EpgService.detectAndFetchEpgSources(id, playlist.epgUrl).then(() => {
+        const epgNow = new Date();
+        playlistRepository.update(id, { lastEpgFetchedAt: epgNow }).catch(() => {});
+        set((state) => ({
+          playlists: state.playlists.map((p) =>
+            p.id === id ? { ...p, lastEpgFetchedAt: epgNow } : p
+          ),
+        }));
+      }).catch((err) => {
         console.warn('[PlaylistStore] EPG auto-import failed:', err);
       });
 
@@ -341,13 +350,21 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
 
       // Fire-and-forget: detect and fetch EPG data if URL/credentials changed or epgUrl was updated
       if (updates.url || updates.credentials || updates.epgUrl !== undefined) {
-        EpgService.detectAndFetchEpgSources(id, effectiveEpgUrl || undefined).catch((err) => {
+        EpgService.detectAndFetchEpgSources(id, effectiveEpgUrl || undefined).then(() => {
+          const epgNow = new Date();
+          playlistRepository.update(id, { lastEpgFetchedAt: epgNow }).catch(() => {});
+          set((state) => ({
+            playlists: state.playlists.map((p) =>
+              p.id === id ? { ...p, lastEpgFetchedAt: epgNow } : p
+            ),
+          }));
+        }).catch((err) => {
           console.warn('[PlaylistStore] EPG auto-import failed:', err);
         });
       }
 
-      // Destructure syncInterval to handle null → undefined mapping separately
-      const { syncInterval: rawSyncInterval, ...restUpdates } = updates;
+      // Destructure sync intervals to handle null → undefined mapping separately
+      const { syncInterval: rawSyncInterval, epgSyncInterval: rawEpgSyncInterval, ...restUpdates } = updates;
 
       const updateData: Partial<Playlist> = {
         ...restUpdates,
@@ -356,6 +373,9 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
         ...(lastFetchedAt && { lastFetchedAt }),
         ...(rawSyncInterval !== undefined && {
           syncInterval: rawSyncInterval ?? undefined,
+        }),
+        ...(rawEpgSyncInterval !== undefined && {
+          epgSyncInterval: rawEpgSyncInterval ?? undefined,
         }),
       };
 

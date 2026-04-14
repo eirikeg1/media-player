@@ -12,6 +12,7 @@ import '../global.css';
 import { useEffect } from 'react';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useEpgSync } from '@/hooks/use-epg-sync';
 import { usePlaylistInit } from '@/hooks/use-playlist-init';
 import { usePlaylistSync } from '@/hooks/use-playlist-sync';
 import { NAV_THEME } from '@/lib/theme';
@@ -27,6 +28,9 @@ export default function RootLayout() {
 
   // Start periodic playlist sync scheduler
   usePlaylistSync();
+
+  // Start periodic EPG sync scheduler
+  useEpgSync();
 
   // Safety timeout: hide splash after 10s no matter what
   useEffect(() => {
