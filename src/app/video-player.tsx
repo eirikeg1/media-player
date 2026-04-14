@@ -12,6 +12,8 @@ import { getChannelId } from '@/lib/channel-utils';
 import { RustChannelService } from '@/services/rust-channel-service';
 import { useCastMiniPlayerStore } from '@/stores/video/cast-mini-player-store';
 import { useUserStore } from '@/stores/user/user-store';
+import { useGestureStore } from '@/stores/video/gesture-store';
+import { useVideoNetworkStore } from '@/stores/video/network-store';
 import { useVideoPlayerStore } from '@/stores/video/player-store';
 import type { Channel } from '@/types/playlist.types';
 import type { ContentType } from '@/types/user.types';
@@ -43,6 +45,12 @@ export default function VideoPlayerScreen() {
   // Dismiss mini-player when this screen mounts (expanding from bar or new channel)
   useEffect(() => {
     useCastMiniPlayerStore.getState().dismiss();
+  }, []);
+
+  // Reset stores not covered by the orchestrator's unmount cleanup.
+  useEffect(() => {
+    useVideoNetworkStore.getState().reset();
+    useGestureStore.getState().reset();
   }, []);
 
   useEffect(() => {

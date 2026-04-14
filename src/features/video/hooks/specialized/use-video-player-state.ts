@@ -1,7 +1,7 @@
 import { useVideoPlayerStore } from '@/stores/video/player-store';
 import type { Channel } from '@/types/playlist.types';
 import { useVideoPlayer } from 'expo-video';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 
 interface UseVideoPlayerStateProps {
   channel: Channel;
@@ -26,6 +26,22 @@ export function useVideoPlayerState({ channel }: UseVideoPlayerStateProps) {
     player.timeUpdateEventInterval = 0.5;
     setPlayer(player);
   });
+
+  useEffect(() => {
+    return () => {
+      if (videoPlayer) {
+        void videoPlayer.replaceAsync(null).catch((error) => {
+          console.warn('Error unloading video source during cleanup:', error);
+        });
+      }
+
+      setPlayer(null);
+      setIsPlaying(false);
+      setIsLoading(true);
+      setLoadingStage('connecting');
+      setLoadingProgress(undefined);
+    };
+  }, [videoPlayer, setIsLoading, setIsPlaying, setLoadingProgress, setLoadingStage, setPlayer]);
 
   const togglePlayPause = useCallback(() => {
     console.log('togglePlayPause called, current isPlaying:', isPlaying);

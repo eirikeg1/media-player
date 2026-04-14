@@ -192,6 +192,13 @@ export function useCastPlayback({ channel }: UseCastPlaybackProps) {
       didUnloadForCastRef.current = true;
     } else if (connected) {
       didUnloadForCastRef.current = true;
+      // Unload local player — handles screen remount while already casting,
+      // where useVideoPlayer(url) creates a fresh player that would compete
+      // for the server stream slot.
+      const localPlayer = useVideoPlayerStore.getState().player;
+      if (localPlayer) {
+        localPlayer.replaceAsync(null);
+      }
     } else if (didUnloadForCastRef.current) {
       // Cast ended or connection failed — restore local player
       castChannelUrlRef.current = null;

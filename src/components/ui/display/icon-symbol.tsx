@@ -192,6 +192,7 @@ const MAPPING = {
   'flag': 'flag',
   'flag.fill': 'flag',
   'arrow.up.arrow.down': 'swap-vert',
+  'sportscourt.fill': 'sports-soccer',
 } as IconMapping;
 
 /**

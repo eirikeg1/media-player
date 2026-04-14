@@ -1,5 +1,7 @@
 import { useUserStore } from '@/stores/user/user-store';
+import { useVideoErrorStore } from '@/stores/video/error-store';
 import { useVideoPlayerStore } from '@/stores/video/player-store';
+import { useVideoUIStore } from '@/stores/video/ui-store';
 import type { Channel } from '@/types/playlist.types';
 import type { ContentType } from '@/types/user.types';
 import { useFocusEffect } from '@react-navigation/native';
@@ -62,6 +64,20 @@ export function useVideoOrchestrator({
       playerState.player.currentTime = time;
     }
   }, [playerState.player]);
+
+  useEffect(() => {
+    hasAppliedStartPositionRef.current = false;
+    setCurrentTime(0);
+    setDuration(0);
+    setIsLive(false);
+    playerState.actions.setIsLoading(true);
+    playerState.actions.setLoadingStage('connecting');
+    playerState.actions.setLoadingProgress(undefined);
+    playerState.actions.setIsPlaying(false);
+    errorHandling.actions.clearError();
+    useVideoErrorStore.getState().resetRetryState();
+    useVideoUIStore.getState().reset();
+  }, [channel.url, errorHandling.actions, playerState.actions]);
 
   // Enhanced stop function that coordinates all state
   const stopVideo = useCallback(() => {
@@ -242,6 +258,9 @@ export function useVideoOrchestrator({
         clearTimeout(retryTimeoutRef.current);
         retryTimeoutRef.current = null;
       }
+      useVideoErrorStore.getState().reset();
+      useVideoUIStore.getState().reset();
+      useVideoPlayerStore.getState().reset();
     };
   }, [clearHideControlsTimeout]);
 

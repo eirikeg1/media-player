@@ -11,6 +11,7 @@ export const AppPreferences = memo(function AppPreferences() {
   const showHomeTab = currentUser?.settings?.showHomeTab ?? true;
   const showLiveTab = currentUser?.settings?.showLiveTab ?? true;
   const showVideosTab = currentUser?.settings?.showVideosTab ?? true;
+  const showSportsTab = currentUser?.settings?.showSportsTab ?? true;
 
   const handleToggleHomeTab = useCallback(
     (value: boolean) => {
@@ -32,6 +33,14 @@ export const AppPreferences = memo(function AppPreferences() {
     (value: boolean) => {
       if (!currentUser) return;
       updateSettings(currentUser.id, { showVideosTab: value });
+    },
+    [currentUser, updateSettings],
+  );
+
+  const handleToggleSportsTab = useCallback(
+    (value: boolean) => {
+      if (!currentUser) return;
+      updateSettings(currentUser.id, { showSportsTab: value });
     },
     [currentUser, updateSettings],
   );
@@ -80,6 +89,18 @@ export const AppPreferences = memo(function AppPreferences() {
             onValueChange={handleToggleVideosTab}
             trackColor={{ false: '#767577', true: '#007AFF' }}
             accessibilityLabel="Show Videos tab"
+          />
+        </View>
+
+        <View style={styles.preferenceRow}>
+          <View style={styles.labelContainer}>
+            <ThemedText style={styles.label}>Sports</ThemedText>
+          </View>
+          <Switch
+            value={showSportsTab}
+            onValueChange={handleToggleSportsTab}
+            trackColor={{ false: '#767577', true: '#007AFF' }}
+            accessibilityLabel="Show Sports tab"
           />
         </View>
       </View>

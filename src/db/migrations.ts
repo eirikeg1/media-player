@@ -501,6 +501,15 @@ const migrations: Migration[] = [
       console.log('[Migration] Added syncInterval column to playlists');
     },
   },
+  {
+    version: 15,
+    name: 'add_show_sports_tab',
+    up: async (db) => {
+      await db.execAsync(`ALTER TABLE user_settings ADD COLUMN showSportsTab INTEGER NOT NULL DEFAULT 1;`);
+
+      console.log('[Migration] Added showSportsTab column to user_settings');
+    },
+  },
 ];
 
 /**
