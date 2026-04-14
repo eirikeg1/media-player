@@ -15,6 +15,7 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { getChannelId } from '@/lib/channel-utils';
 import { FAVORITES_GROUP_SENTINEL, getEffectiveFavoriteGroups } from '@/lib/group-utils';
 import { useFirstPageCacheStore } from '@/stores/cache';
+import { usePlaybackQueueStore } from '@/stores/video/queue-store';
 import { useUserStore } from '@/stores/user/user-store';
 import { MOVIE_SORT_OPTIONS, SERIES_SORT_OPTIONS } from '@/types/sort.types';
 import type { Channel } from '@/types/playlist.types';
@@ -219,6 +220,7 @@ export default function VideosScreen() {
 
   const handleMoviePlay = useCallback((channel: Channel) => {
     setMovieModalVisible(false);
+    usePlaybackQueueStore.getState().reset();
     handleChannelPress(channel);
   }, [handleChannelPress]);
 

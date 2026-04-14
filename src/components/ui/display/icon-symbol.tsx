@@ -63,6 +63,8 @@ const MAPPING = {
   'forward': 'skip-next',
   'backward.fill': 'skip-previous',
   'forward.fill': 'skip-next',
+  'backward.end.fill': 'skip-previous',
+  'forward.end.fill': 'skip-next',
   'gobackward': 'replay',
   'goforward': 'forward',
   'speaker.wave.2': 'volume-up',

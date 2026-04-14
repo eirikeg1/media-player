@@ -15,6 +15,7 @@ import { getChannelId } from '@/lib/channel-utils';
 import { FAVORITES_GROUP_SENTINEL, getEffectiveFavoriteGroups } from '@/lib/group-utils';
 import { EpgService } from '@/services/epg-service';
 import { useFirstPageCacheStore } from '@/stores/cache';
+import { usePlaybackQueueStore } from '@/stores/video/queue-store';
 import { useUserStore } from '@/stores/user/user-store';
 import { LIVE_SORT_OPTIONS } from '@/types/sort.types';
 import type { Channel } from '@/types/playlist.types';
@@ -67,16 +68,12 @@ export default function LiveScreen() {
     setSortOrder('asc');
   }
 
-  // Derive selectedGroupName: user selection takes priority, otherwise default to favorites
-  const selectedGroupName = userGroupSelection !== null
-    ? userGroupSelection
-    : (!isLoadingFavoriteGroups && favoriteGroups.length > 0)
-      ? FAVORITES_GROUP_SENTINEL
-      : '';
+  // Derive selectedGroupName: user selection takes priority, otherwise default to all channels
+  const selectedGroupName = userGroupSelection ?? '';
 
-  // Defer fetching until favorites + groups are resolved to prevent flash of unfiltered content
-  const shouldDeferFetch = !hasLoadedFavorites || isLoadingFavoriteGroups
-    || (selectedGroupName === FAVORITES_GROUP_SENTINEL && groups.length === 0);
+  // Defer fetching until favorites are resolved; also wait for favorite groups when that filter is active
+  const shouldDeferFetch = !hasLoadedFavorites
+    || (selectedGroupName === FAVORITES_GROUP_SENTINEL && (isLoadingFavoriteGroups || groups.length === 0));
 
   // Translate FAVORITES_GROUP_SENTINEL for the paginated channels query
   const channelGroups = selectedGroupName === FAVORITES_GROUP_SENTINEL
@@ -175,6 +172,20 @@ export default function LiveScreen() {
   // Play from modal
   const handlePlayPress = useCallback((channel: Channel) => {
     setChannelModalVisible(false);
+
+    // Populate playback queue with currently loaded channels
+    const queueItems = channels.map(ch => ({
+      channelId: getChannelId(ch),
+      channel: ch,
+    }));
+    const currentIndex = queueItems.findIndex(
+      item => item.channelId === getChannelId(channel)
+    );
+    usePlaybackQueueStore.getState().setQueue(
+      queueItems,
+      currentIndex >= 0 ? currentIndex : 0
+    );
+
     router.push({
       pathname: '/video-player',
       params: {
@@ -183,7 +194,7 @@ export default function LiveScreen() {
         contentType: 'live',
       },
     });
-  }, [router, activePlaylist?.id]);
+  }, [router, activePlaylist?.id, channels]);
 
   const handleModalClose = useCallback(() => {
     setChannelModalVisible(false);

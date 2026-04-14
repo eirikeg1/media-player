@@ -26,6 +26,9 @@ interface VideoControlsProps {
   onSeek?: (time: number) => void;
   isGestureSeeking?: SharedValue<boolean>;
   seekTargetDisplay?: SharedValue<number>;
+  onNext?: () => void;
+  onPrevious?: () => void;
+  hasNavigation?: boolean;
 }
 
 export function VideoControls({
@@ -44,6 +47,9 @@ export function VideoControls({
   onSeek,
   isGestureSeeking,
   seekTargetDisplay,
+  onNext,
+  onPrevious,
+  hasNavigation = false,
 }: VideoControlsProps) {
   const iconColor = useThemeColor({}, 'icon');
   const overlayColor = useThemeColor({ light: 'rgba(0, 0, 0, 0.3)', dark: 'rgba(0, 0, 0, 0.3)' }, 'background');
@@ -94,27 +100,77 @@ export function VideoControls({
 
         <View className="flex-1 justify-center items-center" pointerEvents="box-none">
           {!isLoading && (
-            <TouchableOpacity
-              className="justify-center items-center"
-              style={{
-                width: VIDEO_CONSTANTS.PLAY_BUTTON_SIZE,
-                height: VIDEO_CONSTANTS.PLAY_BUTTON_SIZE,
-                borderRadius: VIDEO_CONSTANTS.PLAY_BUTTON_RADIUS,
-                backgroundColor: buttonBackground,
-              }}
-              onPress={() => {
-                onClearTimeout();
-                onTogglePlayPause();
-              }}
-              accessibilityRole="button"
-              accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
-            >
-              <IconSymbol
-                name={isPlaying ? 'pause.fill' : 'play.fill'}
-                size={VIDEO_CONSTANTS.PLAY_ICON_SIZE}
-                color={iconColor}
-              />
-            </TouchableOpacity>
+            <View className="flex-row items-center" style={{ gap: VIDEO_CONSTANTS.NAV_BUTTON_GAP }}>
+              {hasNavigation && (
+                <TouchableOpacity
+                  className="justify-center items-center"
+                  style={{
+                    width: VIDEO_CONSTANTS.NAV_BUTTON_SIZE,
+                    height: VIDEO_CONSTANTS.NAV_BUTTON_SIZE,
+                    borderRadius: VIDEO_CONSTANTS.NAV_BUTTON_RADIUS,
+                    backgroundColor: buttonBackground,
+                  }}
+                  onPress={() => {
+                    onClearTimeout();
+                    onPrevious?.();
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Previous"
+                >
+                  <IconSymbol
+                    name="backward.end.fill"
+                    size={VIDEO_CONSTANTS.NAV_ICON_SIZE}
+                    color={iconColor}
+                  />
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity
+                className="justify-center items-center"
+                style={{
+                  width: VIDEO_CONSTANTS.PLAY_BUTTON_SIZE,
+                  height: VIDEO_CONSTANTS.PLAY_BUTTON_SIZE,
+                  borderRadius: VIDEO_CONSTANTS.PLAY_BUTTON_RADIUS,
+                  backgroundColor: buttonBackground,
+                }}
+                onPress={() => {
+                  onClearTimeout();
+                  onTogglePlayPause();
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
+              >
+                <IconSymbol
+                  name={isPlaying ? 'pause.fill' : 'play.fill'}
+                  size={VIDEO_CONSTANTS.PLAY_ICON_SIZE}
+                  color={iconColor}
+                />
+              </TouchableOpacity>
+
+              {hasNavigation && (
+                <TouchableOpacity
+                  className="justify-center items-center"
+                  style={{
+                    width: VIDEO_CONSTANTS.NAV_BUTTON_SIZE,
+                    height: VIDEO_CONSTANTS.NAV_BUTTON_SIZE,
+                    borderRadius: VIDEO_CONSTANTS.NAV_BUTTON_RADIUS,
+                    backgroundColor: buttonBackground,
+                  }}
+                  onPress={() => {
+                    onClearTimeout();
+                    onNext?.();
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Next"
+                >
+                  <IconSymbol
+                    name="forward.end.fill"
+                    size={VIDEO_CONSTANTS.NAV_ICON_SIZE}
+                    color={iconColor}
+                  />
+                </TouchableOpacity>
+              )}
+            </View>
           )}
         </View>
 
