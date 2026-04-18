@@ -13,7 +13,7 @@ export function useTeamFixtures(teams: Team[]) {
   const teamsRef = useRef(teams);
   teamsRef.current = teams;
 
-  const refresh = useCallback(async () => {
+  const fetchFixtures = useCallback(async (maxAgeSecs: number) => {
     const currentTeams = teamsRef.current;
     if (currentTeams.length === 0) {
       setFixtures([]);
@@ -27,18 +27,18 @@ export function useTeamFixtures(teams: Team[]) {
     try {
       const db = await getSportsDatabase();
       const now = new Date();
-      const from = now.toISOString().split('T')[0];
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const from = startOfDay.toISOString().split('T')[0];
       const toDate = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
       const to = toDate.toISOString().split('T')[0];
-      const fromTs = Math.floor(now.getTime() / 1000);
+      const fromTs = Math.floor(startOfDay.getTime() / 1000);
       const toTs = Math.floor(toDate.getTime() / 1000);
 
-      // Fetch sequentially to avoid rate limits (most calls hit SQLite cache)
       const allFixtures: Fixture[][] = [];
       for (const team of currentTeams) {
         if (fetchId !== fetchRef.current) return;
         try {
-          const batch = await db.getTeamFixtures(team.providerId, from, to, fromTs, toTs, 21600);
+          const batch = await db.getTeamFixtures(team.providerId, from, to, fromTs, toTs, maxAgeSecs);
           allFixtures.push(batch);
         } catch (err) {
           console.error(`[useTeamFixtures] Error fetching fixtures for ${team.name}:`, err);
@@ -75,9 +75,13 @@ export function useTeamFixtures(teams: Team[]) {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- teamsKey stabilizes the dependency
   }, [teamsKey]);
 
+  // Initial load uses cache
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    fetchFixtures(21600);
+  }, [fetchFixtures]);
+
+  // Pull-to-refresh always fetches fresh
+  const refresh = useCallback(() => fetchFixtures(0), [fetchFixtures]);
 
   return { fixtures, isLoading, error, refresh };
 }

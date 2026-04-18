@@ -4,10 +4,11 @@ import { GlassColors } from '@/lib/theme';
 import { Image } from 'expo-image';
 import type { Fixture } from 'expo-m3u-parser';
 import { memo } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, TouchableOpacity, View } from 'react-native';
 
 interface FixtureItemProps {
   fixture: Fixture;
+  onPress?: (fixture: Fixture) => void;
 }
 
 function formatKickoffTime(ts: number): string {
@@ -32,7 +33,7 @@ function getStatusLabel(status: string, kickoffTime: number): { text: string; co
   }
 }
 
-export const FixtureItem = memo(function FixtureItem({ fixture }: FixtureItemProps) {
+export const FixtureItem = memo(function FixtureItem({ fixture, onPress }: FixtureItemProps) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const status = getStatusLabel(fixture.status, fixture.kickoffTime);
@@ -44,7 +45,7 @@ export const FixtureItem = memo(function FixtureItem({ fixture }: FixtureItemPro
     : formatKickoffTime(fixture.kickoffTime);
 
   return (
-    <View
+    <TouchableOpacity
       style={[
         styles.container,
         {
@@ -52,6 +53,8 @@ export const FixtureItem = memo(function FixtureItem({ fixture }: FixtureItemPro
           borderColor: isDark ? GlassColors.dark.border : GlassColors.light.border,
         },
       ]}
+      onPress={() => onPress?.(fixture)}
+      activeOpacity={0.7}
     >
       <ThemedText style={styles.competition} numberOfLines={1}>
         {fixture.competitionName}
@@ -86,7 +89,7 @@ export const FixtureItem = memo(function FixtureItem({ fixture }: FixtureItemPro
           </ThemedText>
         </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 });
 

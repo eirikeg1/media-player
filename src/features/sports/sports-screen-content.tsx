@@ -27,6 +27,7 @@ interface SportsScreenContentProps {
   fixtures: Fixture[];
   isLoadingFixtures: boolean;
   fixturesError: string | null;
+  onFixturePress?: (fixture: Fixture) => void;
 
   // Standings
   standings: Standing[];
@@ -58,6 +59,7 @@ export const SportsScreenContent = memo(function SportsScreenContent({
   fixtures,
   isLoadingFixtures,
   fixturesError,
+  onFixturePress,
   standings,
   isLoadingStandings,
   standingsError,
@@ -99,7 +101,7 @@ export const SportsScreenContent = memo(function SportsScreenContent({
           <SportsTopBar selected={selectedSection} onSelect={onSectionSelect} />
 
           {selectedSection === 'fixtures' && (
-            <FixtureList fixtures={fixtures} isLoading={isLoadingFixtures} error={fixturesError} />
+            <FixtureList fixtures={fixtures} isLoading={isLoadingFixtures} error={fixturesError} onFixturePress={onFixturePress} />
           )}
 
           {selectedSection === 'standings' && (

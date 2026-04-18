@@ -112,6 +112,7 @@ interface UserSettingsRow {
   playlistSharingEnabled: number;
   privateModeExpiresAt: string | null;
   shareUploadedBackgrounds: number;
+  sportsCountry: string | null;
 }
 
 interface UserFavoriteChannelRow {
@@ -238,6 +239,7 @@ class SQLiteUserRepository implements IUserRepository {
       playlistSharingEnabled: row.playlistSharingEnabled === 1,
       privateModeExpiresAt: row.privateModeExpiresAt || undefined,
       shareUploadedBackgrounds: row.shareUploadedBackgrounds === 1,
+      sportsCountry: row.sportsCountry || undefined,
     };
   }
 
@@ -299,8 +301,8 @@ class SQLiteUserRepository implements IUserRepository {
 
       // Insert default settings
       await tx.runAsync(
-        `INSERT INTO user_settings (userId, theme, language, defaultQuality, defaultSubtitles, activePlaylistId, channelSortBy, parentalControlEnabled, parentalControlPin, showHomeTab, showLiveTab, showVideosTab, showSportsTab, playlistSharingEnabled, privateModeExpiresAt, shareUploadedBackgrounds)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO user_settings (userId, theme, language, defaultQuality, defaultSubtitles, activePlaylistId, channelSortBy, parentalControlEnabled, parentalControlPin, showHomeTab, showLiveTab, showVideosTab, showSportsTab, playlistSharingEnabled, privateModeExpiresAt, shareUploadedBackgrounds, sportsCountry)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           userId,
           DEFAULT_USER_SETTINGS.theme,
@@ -318,6 +320,7 @@ class SQLiteUserRepository implements IUserRepository {
           DEFAULT_USER_SETTINGS.playlistSharingEnabled ? 1 : 0,
           null,
           DEFAULT_USER_SETTINGS.shareUploadedBackgrounds ? 1 : 0,
+          null,
         ]
       );
     });
@@ -402,7 +405,7 @@ class SQLiteUserRepository implements IUserRepository {
        SET theme = ?, language = ?, defaultQuality = ?, defaultSubtitles = ?, activePlaylistId = ?,
            channelSortBy = ?, parentalControlEnabled = ?, parentalControlPin = ?,
            showHomeTab = ?, showLiveTab = ?, showVideosTab = ?, showSportsTab = ?, playlistSharingEnabled = ?,
-           privateModeExpiresAt = ?, shareUploadedBackgrounds = ?
+           privateModeExpiresAt = ?, shareUploadedBackgrounds = ?, sportsCountry = ?
        WHERE userId = ?`,
       [
         updated.theme,
@@ -420,6 +423,7 @@ class SQLiteUserRepository implements IUserRepository {
         updated.playlistSharingEnabled ? 1 : 0,
         updated.privateModeExpiresAt || null,
         updated.shareUploadedBackgrounds ? 1 : 0,
+        updated.sportsCountry || null,
         userId,
       ]
     );

@@ -520,6 +520,15 @@ const migrations: Migration[] = [
       console.log('[Migration] Added epgSyncInterval and lastEpgFetchedAt columns to playlists');
     },
   },
+  {
+    version: 17,
+    name: 'add_sports_country',
+    up: async (db) => {
+      await db.execAsync(`ALTER TABLE user_settings ADD COLUMN sportsCountry TEXT;`);
+
+      console.log('[Migration] Added sportsCountry column to user_settings');
+    },
+  },
 ];
 
 /**

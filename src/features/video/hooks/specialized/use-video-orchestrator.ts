@@ -201,6 +201,15 @@ export function useVideoOrchestrator({
       }
     });
 
+    // Reconcile: if the player already reached readyToPlay before listeners were attached,
+    // clear the loading state now to avoid a stuck "Connecting" overlay.
+    if (playerState.player.status === 'readyToPlay' || playerState.player.playing) {
+      playerState.actions.setIsLoading(false);
+      if (playerState.player.playing) {
+        playerState.actions.setIsPlaying(true);
+      }
+    }
+
     return () => {
       console.log('Cleaning up video player status listener');
       statusSubscription?.remove();

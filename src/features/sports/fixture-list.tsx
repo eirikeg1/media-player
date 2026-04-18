@@ -11,6 +11,7 @@ interface FixtureListProps {
   fixtures: Fixture[];
   isLoading: boolean;
   error: string | null;
+  onFixturePress?: (fixture: Fixture) => void;
 }
 
 interface DateGroup {
@@ -60,7 +61,7 @@ function groupByDate(fixtures: Fixture[]): DateGroup[] {
   return result;
 }
 
-export const FixtureList = memo(function FixtureList({ fixtures, isLoading, error }: FixtureListProps) {
+export const FixtureList = memo(function FixtureList({ fixtures, isLoading, error, onFixturePress }: FixtureListProps) {
   const colorScheme = useColorScheme();
   const destructiveColor = THEME[colorScheme ?? 'light'].destructive;
   const dateGroups = useMemo(() => groupByDate(fixtures), [fixtures]);
@@ -99,6 +100,7 @@ export const FixtureList = memo(function FixtureList({ fixtures, isLoading, erro
               <FixtureItem
                 key={fixture.providerId}
                 fixture={fixture}
+                onPress={onFixturePress}
               />
             ))}
           </View>

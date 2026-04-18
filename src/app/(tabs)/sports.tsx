@@ -6,10 +6,17 @@ import { useStandings } from '@/features/sports/hooks/use-standings';
 import { useTeamFixtures } from '@/features/sports/hooks/use-team-fixtures';
 import { SportsScreenContent } from '@/features/sports/sports-screen-content';
 import type { SportsSection } from '@/features/sports/sports-top-bar';
+import { FixtureDetailModal } from '@/features/sports/fixture-detail-modal';
 import { ManageFavoritesModal } from '@/features/sports/team-search-modal';
 import { teamKey } from '@/features/sports/utils';
-import type { Team } from 'expo-m3u-parser';
-import { useCallback, useMemo, useState } from 'react';
+import { getEffectiveSportsCountry } from '@/lib/country-utils';
+import { getSportsDatabase } from '@/services/sports-service';
+import { usePlaylistStore } from '@/stores/playlist/playlist-store';
+import { useUserStore } from '@/stores/user/user-store';
+import { usePlaybackQueueStore } from '@/stores/video/queue-store';
+import { useRouter } from 'expo-router';
+import type { Fixture, Team } from 'expo-m3u-parser';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 export default function SportsScreen() {
   return <SportsScreenInner />;
@@ -27,6 +34,8 @@ function SportsScreenInner() {
 
   // Modal state
   const [searchModalVisible, setSearchModalVisible] = useState(false);
+  const [selectedFixture, setSelectedFixture] = useState<Fixture | null>(null);
+  const [fixtureModalVisible, setFixtureModalVisible] = useState(false);
 
   // Selected team state
   const [selectedTeamKey, setSelectedTeamKey] = useState<string | null>(null);
@@ -58,6 +67,15 @@ function SportsScreenInner() {
     setSearchModalVisible(false);
   }, []);
 
+  const handleFixturePress = useCallback((fixture: Fixture) => {
+    setSelectedFixture(fixture);
+    setFixtureModalVisible(true);
+  }, []);
+
+  const handleCloseFixtureModal = useCallback(() => {
+    setFixtureModalVisible(false);
+  }, []);
+
   const handleToggleFavorite = useCallback(
     async (team: Team, isFavorite: boolean) => {
       if (isFavorite) {
@@ -75,6 +93,70 @@ function SportsScreenInner() {
       setSelectedTeamKey((prev) => (prev === key ? null : key));
     },
     []
+  );
+
+  // Router + playlist for playback
+  const router = useRouter();
+  const activePlaylistId = usePlaylistStore((s) => s.activePlaylistId);
+  const sportsCountry = useUserStore((s) => s.currentUser?.settings?.sportsCountry);
+  const country = getEffectiveSportsCountry(sportsCountry);
+
+  // Pre-fetch SofaScore broadcast data for upcoming fixtures
+  const prefetchedRef = useRef(new Set<number>());
+  useEffect(() => {
+    if (fixtures.length === 0) return;
+
+    const now = Math.floor(Date.now() / 1000);
+    // Next 1 upcoming fixture per team, max 5 total
+    const seen = new Set<number>();
+    const toPrefetch: number[] = [];
+    for (const team of teams) {
+      const next = fixtures.find(
+        (f) =>
+          f.kickoffTime > now &&
+          (f.homeTeamId === team.providerId || f.awayTeamId === team.providerId) &&
+          !seen.has(f.providerId) &&
+          !prefetchedRef.current.has(f.providerId)
+      );
+      if (next) {
+        seen.add(next.providerId);
+        toPrefetch.push(next.providerId);
+      }
+      if (toPrefetch.length >= 5) break;
+    }
+
+    if (toPrefetch.length === 0) return;
+
+    (async () => {
+      try {
+        const sportsDb = await getSportsDatabase();
+        await sportsDb.fetchAndStoreTvChannels(country).catch(() => {});
+        for (const fixtureId of toPrefetch) {
+          await sportsDb.fetchAndStoreFixtureBroadcasts(fixtureId).catch(() => {});
+          prefetchedRef.current.add(fixtureId);
+        }
+      } catch {
+        // Pre-fetch is best-effort
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fixtures.length, teams.length, country]);
+
+  // Channel playback handler
+  const handlePlayChannel = useCallback(
+    (channelId: string) => {
+      setFixtureModalVisible(false);
+      usePlaybackQueueStore.getState().reset();
+      router.push({
+        pathname: '/video-player',
+        params: {
+          channelId,
+          playlistId: activePlaylistId ?? '',
+          contentType: 'live',
+        },
+      });
+    },
+    [router, activePlaylistId]
   );
 
   // Filter fixtures by selected team
@@ -120,6 +202,7 @@ function SportsScreenInner() {
         fixtures={filteredFixtures}
         isLoadingFixtures={isLoadingFixtures}
         fixturesError={fixturesError}
+        onFixturePress={handleFixturePress}
         standings={standings}
         isLoadingStandings={isLoadingStandings}
         standingsError={standingsError}
@@ -141,6 +224,13 @@ function SportsScreenInner() {
           onToggleFavorite={handleToggleFavorite}
         />
       )}
+
+      <FixtureDetailModal
+        visible={fixtureModalVisible}
+        fixture={selectedFixture}
+        onClose={handleCloseFixtureModal}
+        onPlayChannel={handlePlayChannel}
+      />
     </>
   );
 }

@@ -32,6 +32,7 @@ export interface UserSettings {
   playlistSharingEnabled: boolean;
   privateModeExpiresAt?: string;
   shareUploadedBackgrounds: boolean;
+  sportsCountry?: string;
 }
 
 /**
