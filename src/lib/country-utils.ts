@@ -1,7 +1,11 @@
 import type { DropdownOption } from '@/components/ui/controls/inputs/dropdown';
 import { Platform } from 'react-native';
 
+/** Sentinel value for "no country filter" — must match `sports_types::ALL_COUNTRIES` in Rust. */
+export const ALL_COUNTRIES_VALUE = 'ALL';
+
 export const COUNTRY_OPTIONS: DropdownOption<string>[] = [
+  { label: 'All', value: ALL_COUNTRIES_VALUE },
   { label: 'Auto (device)', value: '' },
   { label: 'Norway', value: 'NO' },
   { label: 'United Kingdom', value: 'GB' },
@@ -46,5 +50,6 @@ export function getDeviceCountry(): string {
 }
 
 export function getEffectiveSportsCountry(sportsCountry?: string): string {
+  if (sportsCountry === ALL_COUNTRIES_VALUE) return ALL_COUNTRIES_VALUE;
   return sportsCountry || getDeviceCountry();
 }

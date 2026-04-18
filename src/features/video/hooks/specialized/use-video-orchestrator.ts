@@ -70,27 +70,24 @@ export function useVideoOrchestrator({
     setCurrentTime(0);
     setDuration(0);
     setIsLive(false);
-    playerState.actions.setIsLoading(true);
-    playerState.actions.setLoadingStage('connecting');
-    playerState.actions.setLoadingProgress(undefined);
-    playerState.actions.setIsPlaying(false);
+    playerState.setters.reset();
     errorHandling.actions.clearError();
     useVideoErrorStore.getState().resetRetryState();
     useVideoUIStore.getState().reset();
-  }, [channel.url, errorHandling.actions, playerState.actions]);
+  }, [channel.url, playerState.setters, errorHandling.actions]);
 
   // Enhanced stop function that coordinates all state
   const stopVideo = useCallback(() => {
-    playerState.actions.stopVideo();
+    playerState.controls.stopVideo();
     controls.actions.clearHideControlsTimeout();
     onStopVideo?.();
-  }, [playerState.actions, controls.actions, onStopVideo]);
+  }, [playerState.controls, controls.actions, onStopVideo]);
 
   // Enhanced toggle with controls coordination
   const togglePlayPause = useCallback(() => {
-    playerState.actions.togglePlayPause();
+    playerState.controls.togglePlayPause();
     controls.actions.scheduleHideControls();
-  }, [playerState.actions, controls.actions]);
+  }, [playerState.controls, controls.actions]);
 
   // Network-aware retry logic
   const retryPlayback = useCallback(async () => {
@@ -113,23 +110,24 @@ export function useVideoOrchestrator({
       if (!isUnmountedRef.current) {
         // Reset states for retry
         errorHandling.actions.clearError();
-        playerState.actions.setIsLoading(true);
-        playerState.actions.setLoadingStage('connecting');
+        playerState.setters.setIsLoading(true);
+        playerState.setters.setLoadingStage('connecting');
         controls.actions.hideControls();
-        playerState.actions.setIsPlaying(false);
+        playerState.setters.setIsPlaying(false);
 
         // Complete retry state update
         errorHandling.actions.completeRetry();
 
         // Trigger replay
-        playerState.actions.replayVideo();
+        playerState.controls.replayVideo();
       }
     }, delay);
   }, [
     errorHandling.canRetry,
     errorHandling.actions,
     network.actions,
-    playerState.actions,
+    playerState.setters,
+    playerState.controls,
     controls.actions,
   ]);
 
@@ -143,14 +141,14 @@ export function useVideoOrchestrator({
     console.log('Setting up video player status listener');
     const statusSubscription = playerState.player.addListener('statusChange', ({ status, error }) => {
       console.log('Video status change:', status, error);
-      
+
       if (status === 'loading') {
         console.log('Video loading - setting buffering stage');
-        playerState.actions.setLoadingStage('buffering');
-        playerState.actions.setLoadingProgress(undefined);
+        playerState.setters.setLoadingStage('buffering');
+        playerState.setters.setLoadingProgress(undefined);
       } else if (status === 'readyToPlay') {
         console.log('Video ready to play - auto starting');
-        playerState.actions.setIsLoading(false);
+        playerState.setters.setIsLoading(false);
         errorHandling.actions.onRetrySuccess();
 
         // Detect live stream vs finite content
@@ -169,7 +167,7 @@ export function useVideoOrchestrator({
 
         const { isCasting } = useVideoPlayerStore.getState();
         if (!isCasting) {
-          playerState.actions.playVideo();
+          playerState.controls.playVideo();
         }
 
         // Use a shorter timeout initially, then switch to temporary showing
@@ -180,7 +178,7 @@ export function useVideoOrchestrator({
         }, 500);
       } else if (status === 'error' || error) {
         console.log('Video error:', error);
-        playerState.actions.setIsLoading(false);
+        playerState.setters.setIsLoading(false);
         errorHandling.actions.handleError(error);
       } else {
         console.log('Other video status:', status);
@@ -189,7 +187,7 @@ export function useVideoOrchestrator({
 
     const playingSubscription = playerState.player.addListener('playingChange', ({ isPlaying }) => {
       console.log('Video playing state changed:', isPlaying);
-      playerState.actions.setIsPlaying(isPlaying);
+      playerState.setters.setIsPlaying(isPlaying);
     });
 
     const timeUpdateSubscription = playerState.player.addListener('timeUpdate', ({ currentTime: time }) => {
@@ -201,23 +199,13 @@ export function useVideoOrchestrator({
       }
     });
 
-    // Reconcile: if the player already reached readyToPlay before listeners were attached,
-    // clear the loading state now to avoid a stuck "Connecting" overlay.
-    if (playerState.player.status === 'readyToPlay' || playerState.player.playing) {
-      playerState.actions.setIsLoading(false);
-      if (playerState.player.playing) {
-        playerState.actions.setIsPlaying(true);
-      }
-    }
-
     return () => {
       console.log('Cleaning up video player status listener');
       statusSubscription?.remove();
       playingSubscription?.remove();
       timeUpdateSubscription?.remove();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playerState.player]); // Only depend on the player itself, not the actions
+  }, [playerState.player, playerState.setters, playerState.controls, errorHandling.actions, controls.actions, startPosition]);
 
   // Network state monitoring for error recovery
   useEffect(() => {
@@ -247,15 +235,14 @@ export function useVideoOrchestrator({
         console.log('Focus effect cleanup - pausing video');
         try {
           if (!isUnmountedRef.current && playerState.player) {
-            playerState.actions.pauseVideo();
+            playerState.controls.pauseVideo();
           }
         } catch (error) {
           console.warn('Error pausing video on focus loss:', error);
         }
         onStopVideo?.();
       };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [playerState.player, onStopVideo]) // Removed playerState.actions from deps
+    }, [playerState.player, playerState.controls, onStopVideo])
   );
 
   // Cleanup
@@ -307,8 +294,8 @@ export function useVideoOrchestrator({
     // Actions
     togglePlayPause,
     stopVideo,
-    playVideo: playerState.actions.playVideo,
-    pauseVideo: playerState.actions.pauseVideo,
+    playVideo: playerState.controls.playVideo,
+    pauseVideo: playerState.controls.pauseVideo,
     seekTo,
     retryPlayback,
     showControlsTemporarily: controls.actions.showControlsTemporarily,
