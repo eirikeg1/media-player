@@ -1,7 +1,9 @@
+import { Dropdown } from '@/components/ui/controls/inputs/dropdown';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
+import { COUNTRY_OPTIONS, getDeviceCountry } from '@/lib/country-utils';
 import { useUserStore } from '@/stores/user/user-store';
-import { memo, useCallback } from 'react';
+import { memo, useCallback, useMemo } from 'react';
 import { StyleSheet, Switch, View } from 'react-native';
 
 export const AppPreferences = memo(function AppPreferences() {
@@ -11,6 +13,17 @@ export const AppPreferences = memo(function AppPreferences() {
   const showHomeTab = currentUser?.settings?.showHomeTab ?? true;
   const showLiveTab = currentUser?.settings?.showLiveTab ?? true;
   const showVideosTab = currentUser?.settings?.showVideosTab ?? true;
+  const showSportsTab = currentUser?.settings?.showSportsTab ?? true;
+  const sportsCountry = currentUser?.settings?.sportsCountry ?? '';
+
+  const sportsCountryLabel = useMemo(() => {
+    if (!sportsCountry) {
+      const detected = getDeviceCountry();
+      const match = COUNTRY_OPTIONS.find((o) => o.value === detected);
+      return `Auto (${match?.label ?? detected})`;
+    }
+    return COUNTRY_OPTIONS.find((o) => o.value === sportsCountry)?.label ?? sportsCountry;
+  }, [sportsCountry]);
 
   const handleToggleHomeTab = useCallback(
     (value: boolean) => {
@@ -32,6 +45,22 @@ export const AppPreferences = memo(function AppPreferences() {
     (value: boolean) => {
       if (!currentUser) return;
       updateSettings(currentUser.id, { showVideosTab: value });
+    },
+    [currentUser, updateSettings],
+  );
+
+  const handleToggleSportsTab = useCallback(
+    (value: boolean) => {
+      if (!currentUser) return;
+      updateSettings(currentUser.id, { showSportsTab: value });
+    },
+    [currentUser, updateSettings],
+  );
+
+  const handleSportsCountryChange = useCallback(
+    (value: string) => {
+      if (!currentUser) return;
+      updateSettings(currentUser.id, { sportsCountry: value || undefined });
     },
     [currentUser, updateSettings],
   );
@@ -82,6 +111,36 @@ export const AppPreferences = memo(function AppPreferences() {
             accessibilityLabel="Show Videos tab"
           />
         </View>
+
+        <View style={styles.preferenceRow}>
+          <View style={styles.labelContainer}>
+            <ThemedText style={styles.label}>Sports</ThemedText>
+          </View>
+          <Switch
+            value={showSportsTab}
+            onValueChange={handleToggleSportsTab}
+            trackColor={{ false: '#767577', true: '#007AFF' }}
+            accessibilityLabel="Show Sports tab"
+          />
+        </View>
+
+        <ThemedText type="subtitle" style={[styles.header, styles.sectionSpacer]}>
+          Sports
+        </ThemedText>
+
+        <View style={styles.preferenceRow}>
+          <Dropdown<string>
+            label="TV Channel Country"
+            options={COUNTRY_OPTIONS}
+            value={sportsCountry}
+            onSelect={handleSportsCountryChange}
+            accessibilityLabel="Sports TV channel country"
+          />
+        </View>
+        <ThemedText style={styles.helpText}>
+          Country used for TV channel recommendations on matches.
+          {!sportsCountry && ` Currently: ${sportsCountryLabel}`}
+        </ThemedText>
       </View>
     </ThemedView>
   );
@@ -113,5 +172,14 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 16,
     fontWeight: '500',
+  },
+  sectionSpacer: {
+    marginTop: 16,
+  },
+  helpText: {
+    fontSize: 12,
+    opacity: 0.6,
+    paddingHorizontal: 16,
+    marginBottom: 8,
   },
 });

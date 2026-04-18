@@ -23,12 +23,15 @@ interface VideoPlayerProps {
   onBack?: () => void;
   onStopVideo?: () => void;
   onRegisterStopFunction?: (stopFn: () => void) => void;
+  onNext?: () => void;
+  onPrevious?: () => void;
+  hasNavigation?: boolean;
 }
 
 /**
  * Video player component with clean, modular state management architecture
  */
-export function VideoPlayer({ channel, playlistId, contentType, startPosition, onBack, onStopVideo, onRegisterStopFunction }: VideoPlayerProps) {
+export function VideoPlayer({ channel, playlistId, contentType, startPosition, onBack, onStopVideo, onRegisterStopFunction, onNext, onPrevious, hasNavigation }: VideoPlayerProps) {
   const {
     player,
     isLoading,
@@ -173,6 +176,9 @@ export function VideoPlayer({ channel, playlistId, contentType, startPosition, o
             onSeek={handleSeek}
             isGestureSeeking={isGestureSeeking}
             seekTargetDisplay={seekTargetDisplay}
+            onNext={onNext}
+            onPrevious={onPrevious}
+            hasNavigation={hasNavigation}
           />
         )}
 

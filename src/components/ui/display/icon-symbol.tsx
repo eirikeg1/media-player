@@ -63,6 +63,8 @@ const MAPPING = {
   'forward': 'skip-next',
   'backward.fill': 'skip-previous',
   'forward.fill': 'skip-next',
+  'backward.end.fill': 'skip-previous',
+  'forward.end.fill': 'skip-next',
   'gobackward': 'replay',
   'goforward': 'forward',
   'speaker.wave.2': 'volume-up',
@@ -192,6 +194,7 @@ const MAPPING = {
   'flag': 'flag',
   'flag.fill': 'flag',
   'arrow.up.arrow.down': 'swap-vert',
+  'sportscourt.fill': 'sports-soccer',
 } as IconMapping;
 
 /**

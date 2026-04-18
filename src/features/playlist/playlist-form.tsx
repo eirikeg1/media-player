@@ -46,6 +46,7 @@ export const PlaylistForm = memo(function PlaylistForm({ onSuccess, onCancel, pl
   const [password, setPassword] = useState(playlist?.credentials?.password || '');
   const [epgUrl, setEpgUrl] = useState(playlist?.epgUrl || '');
   const [syncInterval, setSyncInterval] = useState<number>(playlist?.syncInterval || 1440);
+  const [epgSyncInterval, setEpgSyncInterval] = useState<number>(playlist?.epgSyncInterval || 1440);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -59,6 +60,7 @@ export const PlaylistForm = memo(function PlaylistForm({ onSuccess, onCancel, pl
       setUrl(playlist.url);
       setEpgUrl(playlist.epgUrl || '');
       setSyncInterval(playlist.syncInterval || 1440);
+      setEpgSyncInterval(playlist.epgSyncInterval || 1440);
       setUseCredentials(!!playlist.credentials);
       setUsername(playlist.credentials?.username || '');
       setPassword(playlist.credentials?.password || '');
@@ -106,6 +108,7 @@ export const PlaylistForm = memo(function PlaylistForm({ onSuccess, onCancel, pl
           url: url.trim(),
           epgUrl: trimmedEpgUrl,
           syncInterval,
+          epgSyncInterval,
           credentials: useCredentials
             ? { username: username.trim(), password: password.trim() }
             : undefined,
@@ -144,7 +147,7 @@ export const PlaylistForm = memo(function PlaylistForm({ onSuccess, onCancel, pl
       setIsSubmitting(false);
       console.log('[PlaylistForm] Submit completed');
     }
-  }, [name, url, epgUrl, syncInterval, useCredentials, username, password, addPlaylist, updatePlaylist, onSuccess, isEditing, playlist]);
+  }, [name, url, epgUrl, syncInterval, epgSyncInterval, useCredentials, username, password, addPlaylist, updatePlaylist, onSuccess, isEditing, playlist]);
 
   return (
     <ThemedView style={styles.container}>
@@ -227,19 +230,35 @@ export const PlaylistForm = memo(function PlaylistForm({ onSuccess, onCancel, pl
       </View>
 
       {isEditing && (
-        <View style={styles.formGroup}>
-          <Dropdown<number>
-            label="Auto Sync"
-            options={SYNC_INTERVAL_OPTIONS}
-            value={syncInterval}
-            onSelect={setSyncInterval}
-            disabled={isSubmitting}
-            accessibilityLabel="Playlist auto sync interval"
-          />
-          <ThemedText style={styles.helpText}>
-            Automatically refresh playlist data at the selected interval.
-          </ThemedText>
-        </View>
+        <>
+          <View style={styles.formGroup}>
+            <Dropdown<number>
+              label="Auto Sync"
+              options={SYNC_INTERVAL_OPTIONS}
+              value={syncInterval}
+              onSelect={setSyncInterval}
+              disabled={isSubmitting}
+              accessibilityLabel="Playlist auto sync interval"
+            />
+            <ThemedText style={styles.helpText}>
+              Automatically refresh playlist data at the selected interval.
+            </ThemedText>
+          </View>
+
+          <View style={styles.formGroup}>
+            <Dropdown<number>
+              label="EPG Auto Sync"
+              options={SYNC_INTERVAL_OPTIONS}
+              value={epgSyncInterval}
+              onSelect={setEpgSyncInterval}
+              disabled={isSubmitting}
+              accessibilityLabel="EPG auto sync interval"
+            />
+            <ThemedText style={styles.helpText}>
+              Automatically refresh EPG programme data at the selected interval.
+            </ThemedText>
+          </View>
+        </>
       )}
 
       <View style={styles.switchContainer}>

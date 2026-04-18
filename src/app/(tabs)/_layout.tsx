@@ -70,6 +70,14 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="sports"
+        options={{
+          title: 'Sports',
+          href: settings?.showSportsTab === false ? null : undefined,
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="sportscourt.fill" color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="settings"
         options={{
           title: 'Settings',

@@ -41,9 +41,11 @@ export interface Playlist {
   channelCount?: number;
   createdByUserId?: string;
   syncInterval?: number;
+  epgSyncInterval?: number;
   createdAt: Date;
   updatedAt: Date;
   lastFetchedAt?: Date;
+  lastEpgFetchedAt?: Date;
 }
 
 /** Input data for creating a new playlist. */
@@ -60,6 +62,7 @@ export interface UpdatePlaylistInput {
   url?: string;
   epgUrl?: string;
   syncInterval?: number | null;
+  epgSyncInterval?: number | null;
   credentials?: PlaylistCredentials;
 }
 

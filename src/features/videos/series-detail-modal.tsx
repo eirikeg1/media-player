@@ -10,11 +10,12 @@ import { useSeriesContinueEpisode } from '@/features/videos/hooks/use-series-con
 import { useSeriesEpisodes } from '@/features/videos/hooks/use-series-episodes';
 import { useSeriesMetadata } from '@/features/videos/hooks/use-series-metadata';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { getSeriesId } from '@/lib/channel-utils';
+import { getChannelId, getSeriesId } from '@/lib/channel-utils';
 import { groupEpisodesBySeason } from '@/lib/series-utils';
+import { usePlaybackQueueStore } from '@/stores/video/queue-store';
 import type { Channel } from '@/types/playlist.types';
 import type { SeriesInfo } from 'expo-m3u-parser';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -82,6 +83,33 @@ export function SeriesDetailModal({
     if (firstSeason == null) return null;
     return seasonMap.get(firstSeason)?.[0] ?? null;
   }, [sortedSeasons, seasonMap]);
+
+  // Flat episode list ordered by season then episode for playback queue
+  const flatEpisodes = useMemo(() => {
+    const result: Channel[] = [];
+    for (const seasonNum of sortedSeasons) {
+      const eps = seasonMap.get(seasonNum) ?? [];
+      for (const ep of eps) {
+        result.push(ep.channel);
+      }
+    }
+    return result;
+  }, [sortedSeasons, seasonMap]);
+
+  const handleEpisodePressWithQueue = useCallback((channel: Channel) => {
+    const queueItems = flatEpisodes.map(ch => ({
+      channelId: getChannelId(ch),
+      channel: ch,
+    }));
+    const currentIndex = queueItems.findIndex(
+      item => item.channelId === getChannelId(channel)
+    );
+    usePlaybackQueueStore.getState().setQueue(
+      queueItems,
+      currentIndex >= 0 ? currentIndex : 0
+    );
+    onEpisodePress(channel);
+  }, [flatEpisodes, onEpisodePress]);
 
   const posterUrl = series?.poster || metadata?.backdropPath;
 
@@ -172,7 +200,7 @@ export function SeriesDetailModal({
                   variant="primary"
                   size="large"
                   fullWidth
-                  onPress={() => onEpisodePress(continueEpisode.channel)}
+                  onPress={() => handleEpisodePressWithQueue(continueEpisode.channel)}
                 />
               ) : firstEpisode ? (
                 <Button
@@ -181,7 +209,7 @@ export function SeriesDetailModal({
                   variant="secondary"
                   size="large"
                   fullWidth
-                  onPress={() => onEpisodePress(firstEpisode.channel)}
+                  onPress={() => handleEpisodePressWithQueue(firstEpisode.channel)}
                 />
               ) : null}
             </View>
@@ -204,7 +232,7 @@ export function SeriesDetailModal({
                 key={seasonNum}
                 seasonNumber={seasonNum}
                 episodes={seasonMap.get(seasonNum) ?? []}
-                onEpisodePress={onEpisodePress}
+                onEpisodePress={handleEpisodePressWithQueue}
               />
             ))}
 

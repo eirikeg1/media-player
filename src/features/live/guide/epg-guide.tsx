@@ -48,10 +48,8 @@ export function EpgGuide({
   const [hideEmptyChannels, setHideEmptyChannels] = useState(true);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
 
-  // Group selection state — defaults to favorites if available
-  const [selectedGroupName, setSelectedGroupName] = useState<string>(() =>
-    favoriteGroups.length > 0 ? FAVORITES_GROUP_SENTINEL : ''
-  );
+  // Group selection state — defaults to all channels
+  const [selectedGroupName, setSelectedGroupName] = useState<string>('');
 
   const scrollX = useSharedValue(0);
   const scrollY = useSharedValue(0);

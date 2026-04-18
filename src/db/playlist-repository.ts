@@ -32,10 +32,12 @@ interface PlaylistRow {
   password: string | null;
   channelCount: number | null;
   syncInterval: number | null;
+  epgSyncInterval: number | null;
   createdByUserId: string | null;
   createdAt: string;
   updatedAt: string;
   lastFetchedAt: string | null;
+  lastEpgFetchedAt: string | null;
 }
 
 interface ChannelRow {
@@ -69,10 +71,12 @@ class SQLitePlaylistRepository implements IPlaylistRepository {
       epgUrl: row.epgUrl || undefined,
       channelCount: row.channelCount || undefined,
       syncInterval: row.syncInterval ?? undefined,
+      epgSyncInterval: row.epgSyncInterval ?? undefined,
       createdByUserId: row.createdByUserId || undefined,
       createdAt: new Date(row.createdAt),
       updatedAt: new Date(row.updatedAt),
       lastFetchedAt: row.lastFetchedAt ? new Date(row.lastFetchedAt) : undefined,
+      lastEpgFetchedAt: row.lastEpgFetchedAt ? new Date(row.lastEpgFetchedAt) : undefined,
     };
 
     if (row.username && row.password) {
@@ -181,8 +185,8 @@ class SQLitePlaylistRepository implements IPlaylistRepository {
 
     // Only store playlist metadata - channels are stored in Rust database
     await executeStatement(
-      `INSERT INTO playlists (id, name, url, epgUrl, username, password, channelCount, syncInterval, createdByUserId, createdAt, updatedAt, lastFetchedAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO playlists (id, name, url, epgUrl, username, password, channelCount, syncInterval, epgSyncInterval, createdByUserId, createdAt, updatedAt, lastFetchedAt, lastEpgFetchedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         playlist.id,
         playlist.name,
@@ -192,10 +196,12 @@ class SQLitePlaylistRepository implements IPlaylistRepository {
         playlist.credentials?.password || null,
         playlist.channelCount || null,
         playlist.syncInterval ?? null,
+        playlist.epgSyncInterval ?? null,
         playlist.createdByUserId || null,
         playlist.createdAt.toISOString(),
         playlist.updatedAt.toISOString(),
         playlist.lastFetchedAt?.toISOString() || null,
+        playlist.lastEpgFetchedAt?.toISOString() || null,
       ]
     );
 
@@ -221,7 +227,7 @@ class SQLitePlaylistRepository implements IPlaylistRepository {
     // Only update playlist metadata - channels are managed by Rust
     await executeStatement(
       `UPDATE playlists
-       SET name = ?, url = ?, epgUrl = ?, username = ?, password = ?, channelCount = ?, syncInterval = ?, updatedAt = ?, lastFetchedAt = ?
+       SET name = ?, url = ?, epgUrl = ?, username = ?, password = ?, channelCount = ?, syncInterval = ?, epgSyncInterval = ?, updatedAt = ?, lastFetchedAt = ?, lastEpgFetchedAt = ?
        WHERE id = ?`,
       [
         updated.name,
@@ -231,8 +237,10 @@ class SQLitePlaylistRepository implements IPlaylistRepository {
         updated.credentials?.password || null,
         updated.channelCount || null,
         updated.syncInterval ?? null,
+        updated.epgSyncInterval ?? null,
         updated.updatedAt.toISOString(),
         updated.lastFetchedAt?.toISOString() || null,
+        updated.lastEpgFetchedAt?.toISOString() || null,
         id,
       ]
     );

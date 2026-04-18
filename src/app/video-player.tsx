@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { BackHandler, StatusBar } from 'react-native';
 
 import { ConfirmDialog } from '@/components/ui/containers/modal/confirm-dialog';
@@ -12,7 +12,10 @@ import { getChannelId } from '@/lib/channel-utils';
 import { RustChannelService } from '@/services/rust-channel-service';
 import { useCastMiniPlayerStore } from '@/stores/video/cast-mini-player-store';
 import { useUserStore } from '@/stores/user/user-store';
+import { useGestureStore } from '@/stores/video/gesture-store';
+import { useVideoNetworkStore } from '@/stores/video/network-store';
 import { useVideoPlayerStore } from '@/stores/video/player-store';
+import { usePlaybackQueueStore, type PlaybackQueueItem } from '@/stores/video/queue-store';
 import type { Channel } from '@/types/playlist.types';
 import type { ContentType } from '@/types/user.types';
 
@@ -44,6 +47,39 @@ export default function VideoPlayerScreen() {
   useEffect(() => {
     useCastMiniPlayerStore.getState().dismiss();
   }, []);
+
+  // Reset stores not covered by the orchestrator's unmount cleanup.
+  useEffect(() => {
+    useVideoNetworkStore.getState().reset();
+    useGestureStore.getState().reset();
+    return () => {
+      usePlaybackQueueStore.getState().reset();
+    };
+  }, []);
+
+  // Playback queue navigation
+  const queueHasNavigation = usePlaybackQueueStore(s => s.items.length > 1);
+  const hasNavigation = queueHasNavigation && contentType !== 'movie';
+
+  const handleChannelSwitch = useCallback((newItem: PlaybackQueueItem | null) => {
+    if (!newItem) return;
+    stopVideoRef.current?.();
+    setStartPosition(0);
+    setIsResumeResolved(false);
+    setResumeDialogData(null);
+    setChannel(newItem.channel);
+    setIsLoadingChannel(false);
+  }, []);
+
+  const handleNext = useCallback(() => {
+    const nextItem = usePlaybackQueueStore.getState().goNext();
+    handleChannelSwitch(nextItem);
+  }, [handleChannelSwitch]);
+
+  const handlePrevious = useCallback(() => {
+    const prevItem = usePlaybackQueueStore.getState().goPrevious();
+    handleChannelSwitch(prevItem);
+  }, [handleChannelSwitch]);
 
   useEffect(() => {
     if (!params.channelId || !params.playlistId) {
@@ -179,6 +215,9 @@ export default function VideoPlayerScreen() {
         onBack={handleGoBack}
         onStopVideo={handleStopVideo}
         onRegisterStopFunction={handleRegisterStopFunction}
+        onNext={handleNext}
+        onPrevious={handlePrevious}
+        hasNavigation={hasNavigation}
       />
     </ThemedView>
   );

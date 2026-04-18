@@ -28,9 +28,11 @@ export interface UserSettings {
   showHomeTab: boolean;
   showLiveTab: boolean;
   showVideosTab: boolean;
+  showSportsTab: boolean;
   playlistSharingEnabled: boolean;
   privateModeExpiresAt?: string;
   shareUploadedBackgrounds: boolean;
+  sportsCountry?: string;
 }
 
 /**
@@ -199,6 +201,7 @@ export const DEFAULT_USER_SETTINGS: Omit<UserSettings, 'userId'> = {
   showHomeTab: true,
   showLiveTab: true,
   showVideosTab: true,
+  showSportsTab: true,
   playlistSharingEnabled: true,
   shareUploadedBackgrounds: true,
 };
