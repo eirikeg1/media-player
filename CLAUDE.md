@@ -3,6 +3,7 @@
 ## Code Quality Standards (MANDATORY)
 
 ### Core Principles
+- **Root-Cause Fixes, Not Band-Aids**: Diagnose the underlying cause and fix it there. Never patch symptoms with workarounds.
 - **Readable**: Write clear, self-documenting code
 - **DRY**: Don't Repeat Yourself - eliminate code duplication
 - **KISS**: Keep It Simple, Stupid - prefer simple solutions over complex ones
@@ -11,7 +12,7 @@
 
 ### Development Approach
 - **Incremental Changes**: Do smaller things at one time
-- **Ask Before Deviating**: Only do what is asked for. If you think it's a bad choice, ask and explain your recommendations
+- **Ask Before Deviating**: If you think a solution or request a bad choice, ask and explain your recommendations
 - **Follow Existing Patterns**: Study the codebase conventions before making changes
 
 ### Quality Assurance (MANDATORY)
