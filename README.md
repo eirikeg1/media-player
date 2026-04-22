@@ -7,6 +7,7 @@ This is a basic app to watch movies and tv streams. Currently supports m3u playl
 1. Install dependencies
 
    ```bash
+   git submodule update --init --recursive
    npm install
    ```
 

@@ -12,6 +12,7 @@ import {
 } from 'react-native-google-cast';
 
 import { resolveRedirects } from 'expo-m3u-parser';
+import { getChannelId } from '@/lib/channel-utils';
 import { useVideoPlayerStore } from '@/stores/video/player-store';
 import type { Channel } from '@/types/playlist.types';
 
@@ -88,9 +89,9 @@ export function useCastPlayback({ channel }: UseCastPlaybackProps) {
   const client = useRemoteMediaClient();
   const castState = useCastState();
   const mediaStatus = useMediaStatus();
-  const isLoadingMedia = useRef(false);
   const didUnloadForCastRef = useRef(false);
-  const castChannelUrlRef = useRef<string | null>(null);
+  const castLoadedChannelIdRef = useRef<string | null>(null);
+  const loadSeqRef = useRef(0);
 
   const isCastPlaying =
     mediaStatus?.playerState === MediaPlayerState.PLAYING ||
@@ -112,9 +113,11 @@ export function useCastPlayback({ channel }: UseCastPlaybackProps) {
   const castMedia = useCallback(
     async (ch: Channel) => {
       if (!client) return;
-      if (isLoadingMedia.current) return;
 
-      isLoadingMedia.current = true;
+      // Claim this channel optimistically so concurrent auto-load effects don't re-fire,
+      // and bump the sequence so earlier in-flight loads abandon before calling loadMedia.
+      const mySeq = ++loadSeqRef.current;
+      castLoadedChannelIdRef.current = getChannelId(ch);
 
       try {
         // 1. Try to parse as Xtream URL and query API for HLS support.
@@ -141,6 +144,9 @@ export function useCastPlayback({ channel }: UseCastPlaybackProps) {
         //    (freed by the CONNECTING effect).
         await new Promise(resolve => setTimeout(resolve, CONNECTION_RELEASE_DELAY_MS));
 
+        // Abandon if a newer castMedia call has superseded us.
+        if (mySeq !== loadSeqRef.current) return;
+
         // 4. Load media on Chromecast.
         try {
           await client.loadMedia({
@@ -160,9 +166,10 @@ export function useCastPlayback({ channel }: UseCastPlaybackProps) {
               streamType: MediaStreamType.LIVE,
             },
           });
-          castChannelUrlRef.current = castUrl;
         } catch (error) {
-          castChannelUrlRef.current = null;
+          // Only clear the identity if we're still the latest attempt — a stale failure
+          // must not wipe a newer successful load's claim.
+          if (mySeq === loadSeqRef.current) castLoadedChannelIdRef.current = null;
           console.error('[Cast] loadMedia FAILED:', error);
           Alert.alert(
             'Cast Failed',
@@ -170,8 +177,9 @@ export function useCastPlayback({ channel }: UseCastPlaybackProps) {
             [{ text: 'OK' }],
           );
         }
-      } finally {
-        isLoadingMedia.current = false;
+      } catch (error) {
+        if (mySeq === loadSeqRef.current) castLoadedChannelIdRef.current = null;
+        console.warn('[Cast] castMedia setup failed:', error);
       }
     },
     [client],
@@ -201,7 +209,7 @@ export function useCastPlayback({ channel }: UseCastPlaybackProps) {
       }
     } else if (didUnloadForCastRef.current) {
       // Cast ended or connection failed — restore local player
-      castChannelUrlRef.current = null;
+      castLoadedChannelIdRef.current = null;
       didUnloadForCastRef.current = false;
       const localPlayer = useVideoPlayerStore.getState().player;
       if (localPlayer) {
@@ -211,9 +219,15 @@ export function useCastPlayback({ channel }: UseCastPlaybackProps) {
 
   }, [castState, channel.url]);
 
-  // Auto-load channel when cast state is fully connected
+  // Auto-load channel when cast state is fully connected, or when the channel
+  // changes while already casting. Identity comparison ensures the receiver
+  // always plays what the component is currently bound to.
   useEffect(() => {
-    if (client && castState === CastState.CONNECTED && !castChannelUrlRef.current) {
+    if (
+      client &&
+      castState === CastState.CONNECTED &&
+      getChannelId(channel) !== castLoadedChannelIdRef.current
+    ) {
       castMedia(channel);
     }
   }, [client, castState, channel, castMedia]);
