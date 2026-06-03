@@ -8,23 +8,15 @@ interface UseMovieMetadataReturn {
 }
 
 /**
- * Extract Xtream stream ID from a movie URL.
- * Pattern: http://host:port/movie/user/pass/12345.ext → 12345
- * Returns null for non-Xtream URLs.
- */
-function extractStreamId(url: string): number | null {
-  const match = url.match(/\/movie\/[^/]+\/[^/]+\/(\d+)(?:\.\w+)?$/);
-  if (!match) return null;
-  return parseInt(match[1], 10);
-}
-
-/**
- * Hook to fetch rich metadata for a movie channel by its Xtream stream ID.
- * Only fetches when visible is true and a valid stream ID can be extracted.
+ * Hook to fetch rich metadata for a movie by its stable channel ID.
+ * Looking up by channelId (the same key playback uses) keeps the info modal in sync with
+ * the channel it was opened for — previously the metadata was resolved from a URL-parsed
+ * stream id, which could mismatch or miss for non-standard URLs.
+ * Only fetches when visible is true and a channelId is provided.
  */
 export function useMovieMetadata(
   playlistId: string | null | undefined,
-  movieUrl: string | null | undefined,
+  channelId: string | null | undefined,
   visible: boolean
 ): UseMovieMetadataReturn {
   const [metadata, setMetadata] = useState<ChannelMetadata | null>(null);
@@ -39,21 +31,18 @@ export function useMovieMetadata(
   }, []);
 
   useEffect(() => {
-    if (!visible || !playlistId || !movieUrl) {
-      setMetadata(null);
-      return;
-    }
+    // Clear any previous movie's metadata before resolving the new one so a stale
+    // description/poster can't show through while the next fetch is in flight.
+    setMetadata(null);
 
-    const streamId = extractStreamId(movieUrl);
-    if (streamId === null) {
-      setMetadata(null);
+    if (!visible || !playlistId || !channelId) {
       return;
     }
 
     let cancelled = false;
     setIsLoading(true);
 
-    RustChannelService.getMetadataByStreamId(playlistId, streamId)
+    RustChannelService.getMetadataByChannelId(playlistId, channelId)
       .then((result) => {
         if (!cancelled && isMountedRef.current) {
           setMetadata(result);
@@ -76,7 +65,7 @@ export function useMovieMetadata(
     return () => {
       cancelled = true;
     };
-  }, [visible, playlistId, movieUrl]);
+  }, [visible, playlistId, channelId]);
 
   return { metadata, isLoading };
 }

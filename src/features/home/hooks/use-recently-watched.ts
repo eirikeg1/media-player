@@ -126,7 +126,18 @@ export function useRecentlyWatched(limit = 20) {
         return item;
       });
 
-      setItems(enriched.slice(0, limit));
+      // Dedupe by channelId, keeping the first (most recent) occurrence. The
+      // next-episode swap above can map two different items onto the same next
+      // episode (e.g. a completed S01E03 and an already-present S01E04), which
+      // would otherwise produce duplicate React keys in the carousel.
+      const seenChannelIds = new Set<string>();
+      const unique = enriched.filter((item) => {
+        if (seenChannelIds.has(item.channelId)) return false;
+        seenChannelIds.add(item.channelId);
+        return true;
+      });
+
+      setItems(unique.slice(0, limit));
     } catch (error) {
       console.error('[useRecentlyWatched] Error:', error);
       setItems([]);

@@ -13,8 +13,13 @@ import {
 } from 'expo-m3u-parser';
 import type { Channel, PlaylistCredentials } from '@/types/playlist.types';
 
-// Singleton database instance
-let database: Database | null = null;
+// Singleton database instance.
+// We cache the in-flight open *promise*, not the resolved value, so that
+// concurrent first-callers (the many startup hooks all firing at once) share a
+// single Database.open() instead of each opening its own rusqlite connection.
+// Multiple connections to the same WAL file contend and surface as
+// "database is locked".
+let databasePromise: Promise<Database> | null = null;
 const DB_NAME = 'channels.db';
 
 /**
@@ -25,16 +30,21 @@ function getDatabasePath(): string {
 }
 
 /**
- * Get or create the Rust database instance
+ * Get or create the Rust database instance.
+ *
+ * Returns the same shared promise for every caller; only the first caller
+ * triggers the underlying open. If opening fails the cached promise is cleared
+ * so a later call can retry rather than being stuck on a rejection.
  */
 export async function getRustDatabase(): Promise<Database> {
-  if (database) {
-    return database;
+  if (!databasePromise) {
+    const dbPath = getDatabasePath();
+    databasePromise = Database.open(dbPath).catch((err) => {
+      databasePromise = null;
+      throw err;
+    });
   }
-
-  const dbPath = getDatabasePath();
-  database = await Database.open(dbPath);
-  return database;
+  return databasePromise;
 }
 
 /**
@@ -314,6 +324,18 @@ export class RustChannelService {
   ): Promise<ChannelMetadata | null> {
     const db = await getRustDatabase();
     return db.getMetadataByStreamId(playlistId, streamId);
+  }
+
+  /**
+   * Get rich movie metadata by the channel's stable ID (the key playback uses).
+   * Preferred over getMetadataByStreamId — avoids URL parsing that could mismatch.
+   */
+  static async getMetadataByChannelId(
+    playlistId: string,
+    channelId: string
+  ): Promise<ChannelMetadata | null> {
+    const db = await getRustDatabase();
+    return db.getMetadataByChannelId(playlistId, channelId);
   }
 
   /**

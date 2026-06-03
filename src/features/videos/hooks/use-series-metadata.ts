@@ -28,8 +28,11 @@ export function useSeriesMetadata(
   }, []);
 
   useEffect(() => {
+    // Clear the previous series' metadata before resolving the new one so stale
+    // details can't show through while the next fetch is in flight.
+    setMetadata(null);
+
     if (!visible || !playlistId || !seriesName) {
-      setMetadata(null);
       return;
     }
 

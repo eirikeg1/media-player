@@ -40,7 +40,7 @@ export function MovieDetailModal({
 
   const { metadata, isLoading } = useMovieMetadata(
     playlistId,
-    movie?.url,
+    movie ? getChannelId(movie) : null,
     visible
   );
 

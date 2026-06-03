@@ -31,6 +31,7 @@ jest.mock('expo-m3u-parser', () => {
     getGroupsWithCountsByPlaylist: jest.fn(),
     getAllPlaylists: jest.fn(),
     getMetadataByStreamId: jest.fn(),
+    getMetadataByChannelId: jest.fn(),
     getMetadataBySeriesName: jest.fn(),
   };
   return {
@@ -185,6 +186,16 @@ describe('method delegation', () => {
     mockDatabase.getChannelById.mockResolvedValue(null);
     const notFound = await RustChannelService.getChannelById('p1', 'missing');
     expect(notFound).toBeNull();
+  });
+
+  it('getMetadataByChannelId forwards args to db', async () => {
+    const meta = { playlistId: 'p1', channelId: 'ch-1', contentType: 'movie' as const };
+    mockDatabase.getMetadataByChannelId.mockResolvedValue(meta);
+
+    const result = await RustChannelService.getMetadataByChannelId('p1', 'ch-1');
+
+    expect(mockDatabase.getMetadataByChannelId).toHaveBeenCalledWith('p1', 'ch-1');
+    expect(result).toBe(meta);
   });
 });
 
