@@ -9,6 +9,7 @@ import { FavoriteTeamsSection } from './favorite-teams-section';
 import { FixtureList } from './fixture-list';
 import { ScorersList } from './scorers-list';
 import { SportsEmptyState } from './sports-empty-state';
+import { SportsRefreshBar } from './sports-refresh-bar';
 import { SportsTopBar, type SportsSection } from './sports-top-bar';
 import { StandingsTable } from './standings-table';
 
@@ -97,6 +98,8 @@ export const SportsScreenContent = memo(function SportsScreenContent({
             onSelectTeam={onSelectTeam}
             selectedTeamKey={selectedTeamKey}
           />
+
+          <SportsRefreshBar />
 
           <SportsTopBar selected={selectedSection} onSelect={onSectionSelect} />
 
