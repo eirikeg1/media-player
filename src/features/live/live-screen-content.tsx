@@ -87,12 +87,13 @@ export function LiveScreenContent({
     return `channel-${item.name}-${index}`;
   }, []);
 
-  const renderChannelItem = useCallback(({ item: channel }: ListRenderItemInfo<Channel>) => {
+  const renderChannelItem = useCallback(({ item: channel, index }: ListRenderItemInfo<Channel>) => {
     const isFavorite = isChannelFavorite(channel, favoriteChannels);
     const programme = currentProgrammes?.get(channel.tvg?.id ?? '') ?? null;
 
     return (
       <ChannelItem
+        testID={`channel-item-${index}`}
         channel={channel}
         isFavorite={isFavorite}
         onPress={onChannelPress}

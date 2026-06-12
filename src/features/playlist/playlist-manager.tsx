@@ -25,7 +25,10 @@ export const PlaylistManager = memo(function PlaylistManager() {
   const currentUser = useUserStore((state) => state.currentUser);
   const updateSettings = useUserStore((state) => state.updateSettings);
   const playlistSharingEnabled = currentUser?.settings?.playlistSharingEnabled ?? true;
-  const parentalControlEnabled = currentUser?.settings?.parentalControlEnabled ?? true;
+  // Default false to match DEFAULT_USER_SETTINGS and every consumer that
+  // filters content (they all use `?? false`) — the switch must never claim
+  // filtering is on while the queries run unfiltered.
+  const parentalControlEnabled = currentUser?.settings?.parentalControlEnabled ?? false;
 
   const handleCloseModal = useCallback(() => {
     setShowModal(false);
@@ -100,6 +103,7 @@ export const PlaylistManager = memo(function PlaylistManager() {
       {!isLoading && <PlaylistList />}
 
       <Pressable
+        testID="playlist-add-button"
         onPress={handleOpenModal}
         style={styles.addButton}
         accessibilityLabel="Add playlist"

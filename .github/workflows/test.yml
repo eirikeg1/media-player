@@ -1,0 +1,49 @@
+# CI: JS tests/typecheck/lint + Rust backend tests.
+#
+# Prerequisites (one-time setup):
+#   1. The native/rust-backend submodule pointer must reference a pushed
+#      commit of github.com/eirikeg1/m3u-parser.
+#   2. Because that repo is private, add a read-only deploy key for it and
+#      store the private key as the RUST_BACKEND_DEPLOY_KEY repo secret.
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  js:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ssh-key: ${{ secrets.RUST_BACKEND_DEPLOY_KEY }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test -- --ci
+
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ssh-key: ${{ secrets.RUST_BACKEND_DEPLOY_KEY }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native/rust-backend
+      # Fail fast: fmt and clippy are cheap relative to the full test run.
+      - run: cargo fmt --all --check
+        working-directory: native/rust-backend
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+        working-directory: native/rust-backend
+      - run: cargo test --workspace
+        working-directory: native/rust-backend

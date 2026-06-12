@@ -365,11 +365,36 @@ class SQLiteUserRepository implements IUserRepository {
   async deleteUser(id: string): Promise<void> {
     console.log('[UserRepository] deleteUser called:', id);
 
-    const result = await executeStatement('DELETE FROM users WHERE id = ?', [id]);
-
-    if (result.changes === 0) {
+    const existing = await executeQuerySingle<{ id: string }>(
+      'SELECT id FROM users WHERE id = ?',
+      [id]
+    );
+    if (!existing) {
       throw new Error(`User with id ${id} not found`);
     }
+
+    // The ON DELETE CASCADE clauses never fire because expo-sqlite leaves
+    // PRAGMA foreign_keys off — delete dependent rows explicitly so deleted
+    // users don't leave orphaned data behind.
+    const dependentTables = [
+      'user_settings',
+      'user_favorite_channels',
+      'user_hidden_channels',
+      'user_channel_order',
+      'user_favorite_groups',
+      'viewing_sessions',
+      'channel_watch_stats',
+      'group_watch_stats',
+      'user_uploaded_backgrounds',
+      'user_header_selections',
+    ];
+
+    await executeTransaction(async (db) => {
+      for (const table of dependentTables) {
+        await db.runAsync(`DELETE FROM ${table} WHERE userId = ?`, [id]);
+      }
+      await db.runAsync('DELETE FROM users WHERE id = ?', [id]);
+    });
 
     console.log('[UserRepository] User deleted successfully');
   }

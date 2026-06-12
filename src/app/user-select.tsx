@@ -73,6 +73,7 @@ function FirstUserScreen({ username, isCreating, onUsernameChange, onSubmit }: U
               </Text>
 
               <TextInput
+                testID="first-user-username-input"
                 className="bg-gray-100 dark:bg-gray-800 px-5 py-4 rounded-xl text-lg text-gray-900 dark:text-white mb-6 border border-gray-200 dark:border-gray-700"
                 placeholder="Enter your name"
                 placeholderTextColor={PLACEHOLDER_COLOR}
@@ -85,6 +86,7 @@ function FirstUserScreen({ username, isCreating, onUsernameChange, onSubmit }: U
               />
 
               <Pressable
+                testID="first-user-submit-button"
                 onPress={onSubmit}
                 disabled={isCreating || !username.trim()}
                 className="bg-blue-600 py-4 rounded-xl disabled:opacity-50"

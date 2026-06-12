@@ -1,0 +1,37 @@
+# Start playback from the Live channel list.
+# Derived from src/app/(tabs)/live.tsx, src/features/live/live-screen-content.tsx
+# (channel items get testID channel-item-<index>) and channel-detail-modal.tsx
+# ('Watch Now' opens /video-player). Code-derived, not yet device-verified.
+#
+# Assumptions a device run may need to adjust:
+# - Requires a profile and an imported playlist (run 00 and 03 first).
+# - First channel page can be slow right after a large import.
+# - Stream startup is not asserted (depends on the playlist); we only assert
+#   navigation away from the channel detail modal into the player route.
+appId: com.anonymous.mediaplayer.dev
+---
+- launchApp
+- extendedWaitUntil:
+    visible: 'Home'
+    timeout: 20000
+- tapOn: 'Live'
+# Wait for the first channel cell of the paginated grid
+- extendedWaitUntil:
+    visible:
+      id: 'channel-item-0'
+    timeout: 60000
+- tapOn:
+    id: 'channel-item-0'
+# Channel detail modal shows the play button (Button title 'Watch Now')
+- extendedWaitUntil:
+    visible: 'Watch Now'
+    timeout: 15000
+- tapOn: 'Watch Now'
+# Modal closes and the app navigates to the landscape video player
+- extendedWaitUntil:
+    notVisible: 'Watch Now'
+    timeout: 15000
+# Tab bar is not rendered on the /video-player route
+- assertNotVisible: 'Settings'
+# 'back' is Android-only; on iOS remove it (each flow relaunches the app anyway)
+- back

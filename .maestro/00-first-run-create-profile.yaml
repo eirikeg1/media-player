@@ -1,0 +1,26 @@
+# First-run journey: fresh install -> create the first profile -> land on tabs.
+# Derived from src/app/index.tsx (no users => redirect to /user-select) and
+# src/app/user-select.tsx (FirstUserScreen). Code-derived, not yet device-verified.
+# Assumptions a device run may need to adjust:
+# - First launch runs DB migrations + playlist init before the redirect,
+#   hence the generous timeout on 'Welcome!'.
+# - The username field autofocuses; we still tap it explicitly to be safe.
+appId: com.anonymous.mediaplayer.dev
+---
+- launchApp:
+    clearState: true
+# FirstUserScreen heading
+- extendedWaitUntil:
+    visible: 'Welcome!'
+    timeout: 30000
+- tapOn:
+    id: 'first-user-username-input'
+- inputText: 'E2E'
+# Button reads 'Continue' ('Creating Profile...' while submitting)
+- tapOn:
+    id: 'first-user-submit-button'
+# Profile creation switches user and replaces the route with /(tabs);
+# 'Home' is the first tab title (src/app/(tabs)/_layout.tsx)
+- extendedWaitUntil:
+    visible: 'Home'
+    timeout: 20000

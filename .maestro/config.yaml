@@ -1,0 +1,16 @@
+# Maestro workspace config — https://docs.maestro.dev
+# Run all flows: npm run test:e2e (requires a connected device/emulator with
+# the dev build installed: npm run android).
+# The flows build on each other: 00 creates the first profile (clears state),
+# 01-02 assume a profile exists, 03 imports a playlist, 04 plays from it.
+# executionOrder pins that sequence (flow names default to the filename).
+flows:
+  - '*.yaml'
+executionOrder:
+  continueOnFailure: false
+  flowsOrder:
+    - 00-first-run-create-profile
+    - 01-smoke-launch
+    - 02-tab-navigation
+    - 03-add-playlist
+    - 04-start-playback

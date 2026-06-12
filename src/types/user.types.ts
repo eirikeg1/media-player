@@ -197,7 +197,7 @@ export const DEFAULT_USER_SETTINGS: Omit<UserSettings, 'userId'> = {
   defaultSubtitles: 'off',
   activePlaylistId: undefined,
   channelSortBy: 'name',
-  parentalControlEnabled: true,
+  parentalControlEnabled: false,
   showHomeTab: true,
   showLiveTab: true,
   showVideosTab: true,
