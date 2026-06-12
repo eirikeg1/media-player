@@ -834,6 +834,27 @@ export class SportsDatabase {
     );
   }
 
+  /** Merge/dedup/sort happens in Rust; over seeded fixtures a filtered sort is equivalent. */
+  async getFixturesForTeams(
+    teamIds: number[],
+    _from: string,
+    _to: string,
+    fromTs: number,
+    toTs: number,
+    _maxAgeSecs: number,
+  ): Promise<Fixture[]> {
+    const ids = new Set(teamIds);
+    return this.__fixtures
+      .filter(
+        (f) =>
+          ((f.homeTeamId != null && ids.has(f.homeTeamId)) ||
+            (f.awayTeamId != null && ids.has(f.awayTeamId))) &&
+          f.kickoffTime >= fromTs &&
+          f.kickoffTime <= toTs,
+      )
+      .sort((a, b) => a.kickoffTime - b.kickoffTime);
+  }
+
   async getStandings(compId: number): Promise<Standing[]> {
     return this.__standings.filter((s) => s.competitionId === compId);
   }
@@ -848,6 +869,11 @@ export class SportsDatabase {
 
   async getAllCachedCompetitionTeams(): Promise<TeamSearchResult[]> {
     return [];
+  }
+
+  /** Returns the number of competitions fetched; nothing to fetch in the fake. */
+  async refreshAllCompetitionTeams(_maxAgeSecs = 86400): Promise<number> {
+    return 0;
   }
 
   async cleanupOldFixtures(cutoff: number): Promise<number> {
