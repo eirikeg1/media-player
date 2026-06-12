@@ -10,15 +10,10 @@ import { userRepository } from '@/db/user-repository';
 import { executeQuery, executeQuerySingle, executeStatement } from '@/db/sqlite-client';
 import type { ContentType, User } from '@/types/user.types';
 import { DEFAULT_USER_SETTINGS } from '@/types/user.types';
-import { resetTestDatabases } from '@/test/helpers';
+import { FACTORY_NOW as BASE_TIME } from '@/test/factories';
+import { resetTestDatabases, tick } from '@/test/helpers';
 
-const BASE_TIME = new Date('2026-06-12T12:00:00.000Z');
 const PLAYLIST_ID = 'playlist-1';
-
-/** Advance the fake clock so the next write gets a later timestamp. */
-function tick(ms = 1000): void {
-  jest.setSystemTime(new Date(jest.now() + ms));
-}
 
 async function createUser(username = 'Alice'): Promise<User> {
   return userRepository.createUser({ username });

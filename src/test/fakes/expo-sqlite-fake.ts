@@ -45,8 +45,9 @@ function rewrapRealmError(error: unknown): unknown {
 export class SQLiteDatabase {
   private db: BetterSqlite3.Database;
 
-  constructor() {
-    this.db = new BetterSqlite3(':memory:');
+  constructor(template?: Buffer) {
+    // A serialized template restores its full state into a new :memory: db.
+    this.db = template ? new BetterSqlite3(template) : new BetterSqlite3(':memory:');
   }
 
   /** Single funnel for better-sqlite3 calls — guarantees realm-local errors. */
@@ -92,8 +93,26 @@ export class SQLiteDatabase {
   async closeAsync(): Promise<void> {
     this.run(() => this.db.close());
   }
+
+  /** Snapshot the full database state (schema + rows) into a buffer. */
+  __serialize(): Buffer {
+    return this.run(() => this.db.serialize());
+  }
+}
+
+// Template for new connections: `resetTestDatabases` captures the database
+// once it is fully migrated, so every later open starts from a pristine
+// migrated copy instead of re-running every migration (see src/test/helpers).
+let template: Buffer | null = null;
+
+export function __captureDatabaseTemplate(db: unknown): void {
+  template = (db as SQLiteDatabase).__serialize();
+}
+
+export function __hasDatabaseTemplate(): boolean {
+  return template !== null;
 }
 
 export async function openDatabaseAsync(_name: string): Promise<SQLiteDatabase> {
-  return new SQLiteDatabase();
+  return new SQLiteDatabase(template ?? undefined);
 }

@@ -32,7 +32,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const { activePlaylist } = usePlaylistData();
   const playlistId = activePlaylist?.id;
-  const excludeAdult = useUserStore((s) => s.currentUser?.settings?.parentalControlEnabled ?? false);
+  const excludeAdult = useUserStore((s) => s.currentUser?.settings?.parentalControlEnabled ?? true);
   const isPlaylistInitialized = usePlaylistStore((s) => s.isInitialized);
   const customHeader = useHeaderBackground('home');
   const headerSource = customHeader ?? DEFAULT_HOME_HEADER;

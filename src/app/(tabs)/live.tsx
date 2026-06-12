@@ -30,7 +30,7 @@ export default function LiveScreen() {
   const backgroundColor = useThemeColor({}, 'background');
 
   // Parental control: exclude adult content when enabled
-  const excludeAdult = useUserStore((s) => s.currentUser?.settings?.parentalControlEnabled ?? false);
+  const excludeAdult = useUserStore((s) => s.currentUser?.settings?.parentalControlEnabled ?? true);
 
   // View mode: channels grid vs EPG guide
   const [viewMode, setViewMode] = useState<LiveViewMode>('channels');

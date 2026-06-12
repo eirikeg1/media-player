@@ -25,10 +25,10 @@ export const PlaylistManager = memo(function PlaylistManager() {
   const currentUser = useUserStore((state) => state.currentUser);
   const updateSettings = useUserStore((state) => state.updateSettings);
   const playlistSharingEnabled = currentUser?.settings?.playlistSharingEnabled ?? true;
-  // Default false to match DEFAULT_USER_SETTINGS and every consumer that
-  // filters content (they all use `?? false`) — the switch must never claim
-  // filtering is on while the queries run unfiltered.
-  const parentalControlEnabled = currentUser?.settings?.parentalControlEnabled ?? false;
+  // Adult filtering is on by default: keep this fallback in sync with
+  // DEFAULT_USER_SETTINGS and every consumer that filters content (`?? true`)
+  // — the switch must never claim filtering is off while the queries filter.
+  const parentalControlEnabled = currentUser?.settings?.parentalControlEnabled ?? true;
 
   const handleCloseModal = useCallback(() => {
     setShowModal(false);

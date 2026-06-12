@@ -8,7 +8,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 export function useRandomContent(limit = 50) {
   const activePlaylistId = usePlaylistStore((s) => s.activePlaylistId);
-  const excludeAdult = useUserStore((s) => s.currentUser?.settings?.parentalControlEnabled ?? false);
+  const excludeAdult = useUserStore((s) => s.currentUser?.settings?.parentalControlEnabled ?? true);
 
   const [movies, setMovies] = useState<Channel[]>([]);
   const [series, setSeries] = useState<SeriesInfo[]>([]);

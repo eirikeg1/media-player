@@ -7,15 +7,8 @@
 import { playlistRepository } from '@/db/playlist-repository';
 import { userRepository } from '@/db/user-repository';
 import { executeQuerySingle, executeStatement } from '@/db/sqlite-client';
-import { makePlaylist, makePlaylistCredentials } from '@/test/factories';
-import { resetTestDatabases } from '@/test/helpers';
-
-const BASE_TIME = new Date('2026-06-12T12:00:00.000Z');
-
-/** Advance the fake clock so the next write gets a later timestamp. */
-function tick(ms = 1000): void {
-  jest.setSystemTime(new Date(jest.now() + ms));
-}
+import { FACTORY_NOW as BASE_TIME, makePlaylist, makePlaylistCredentials } from '@/test/factories';
+import { resetTestDatabases, tick } from '@/test/helpers';
 
 interface PlaylistRawRow {
   id: string;
