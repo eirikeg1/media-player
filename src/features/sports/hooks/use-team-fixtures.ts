@@ -34,30 +34,16 @@ export function useTeamFixtures(teams: Team[]) {
       const fromTs = Math.floor(startOfDay.getTime() / 1000);
       const toTs = Math.floor(toDate.getTime() / 1000);
 
-      const allFixtures: Fixture[][] = [];
-      for (const team of currentTeams) {
-        if (fetchId !== fetchRef.current) return;
-        try {
-          const batch = await db.getTeamFixtures(team.providerId, from, to, fromTs, toTs, maxAgeSecs);
-          allFixtures.push(batch);
-        } catch (err) {
-          console.error(`[useTeamFixtures] Error fetching fixtures for ${team.name}:`, err);
-          allFixtures.push([]);
-        }
-      }
-
-      // Merge, deduplicate by providerId, sort by kickoffTime
-      const seen = new Set<number>();
-      const merged: Fixture[] = [];
-      for (const batch of allFixtures) {
-        for (const fixture of batch) {
-          if (!seen.has(fixture.providerId)) {
-            seen.add(fixture.providerId);
-            merged.push(fixture);
-          }
-        }
-      }
-      merged.sort((a, b) => a.kickoffTime - b.kickoffTime);
+      // Single native call: refresh, merge, dedup, and sort happen in Rust
+      // under the provider's rate limiting.
+      const merged = await db.getFixturesForTeams(
+        currentTeams.map((t) => t.providerId),
+        from,
+        to,
+        fromTs,
+        toTs,
+        maxAgeSecs
+      );
 
       if (fetchId === fetchRef.current) {
         setFixtures(merged);

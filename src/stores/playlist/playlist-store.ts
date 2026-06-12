@@ -287,6 +287,16 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Failed to refresh playlist';
+
+      // The native layer refuses duplicate fetches for a playlist that is
+      // already being imported (e.g. a dev reload while a refresh runs).
+      // The original import is still progressing — not an error to surface.
+      if (errorMessage.includes('Already in progress')) {
+        console.log('[PlaylistStore] Refresh already running natively, skipping duplicate');
+        useImportProgressStore.getState().reset();
+        return;
+      }
+
       if (!silent) {
         set({ error: errorMessage });
       }
