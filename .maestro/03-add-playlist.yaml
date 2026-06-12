@@ -1,0 +1,60 @@
+# Add an IPTV playlist: Settings -> Playlist Management -> Add New Playlist.
+# Derived from src/features/playlist/{playlist-manager,playlist-modal,playlist-form}.tsx.
+# Code-derived, not yet device-verified.
+#
+# PLAYLIST_URL defaults to iptv-org's Norway playlist (small, fast import).
+# Override per run — e.g. the full index as an import stress test:
+#   maestro test -e PLAYLIST_URL=https://iptv-org.github.io/iptv/index.m3u .maestro/03-add-playlist.yaml
+#
+# Assumptions a device run may need to adjust:
+# - Requires a profile (run 00 first).
+# - 'Playlist Management' is the last section of the Settings scroll view.
+# - The URL field is a multiline Textarea; hideKeyboard can be flaky on iOS —
+#   replace with a tap outside the field if needed.
+appId: com.anonymous.mediaplayer.dev
+env:
+  PLAYLIST_URL: 'https://iptv-org.github.io/iptv/countries/no.m3u'
+---
+- launchApp
+- extendedWaitUntil:
+    visible: 'Home'
+    timeout: 20000
+- tapOn: 'Settings'
+# The add button is an icon-only Pressable at the bottom of the settings page
+- scrollUntilVisible:
+    element:
+      id: 'playlist-add-button'
+    direction: DOWN
+    timeout: 30000
+- tapOn:
+    id: 'playlist-add-button'
+# Modal header (src/features/playlist/playlist-modal.tsx)
+- extendedWaitUntil:
+    visible: 'Add New Playlist'
+    timeout: 10000
+- tapOn:
+    id: 'playlist-name-input'
+- inputText: 'E2E Playlist'
+- hideKeyboard
+- tapOn:
+    id: 'playlist-url-input'
+- inputText: ${PLAYLIST_URL}
+- hideKeyboard
+# Submit button is below the fold inside the modal's scroll view
+- scrollUntilVisible:
+    element:
+      id: 'playlist-submit-button'
+    direction: DOWN
+    timeout: 30000
+- tapOn:
+    id: 'playlist-submit-button'
+# Import runs inline in the modal (phase label + progress bar); the modal
+# closes via onSuccess only after addPlaylist resolves. The default playlist
+# is small; raise this when stress-testing with the full iptv-org index.
+- extendedWaitUntil:
+    notVisible: 'Add New Playlist'
+    timeout: 120000
+# Back on Settings, the new playlist should appear in the playlist list
+- extendedWaitUntil:
+    visible: 'E2E Playlist'
+    timeout: 20000

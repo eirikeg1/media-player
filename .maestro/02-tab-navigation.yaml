@@ -1,0 +1,18 @@
+# Navigate every bottom tab. Tab titles from src/app/(tabs)/_layout.tsx:
+# Home, Live, Videos, Sports, Settings.
+# Assumptions a device run may need to adjust:
+# - All tabs visible (default user settings; Live/Videos/Sports/Home can be
+#   hidden per-user via settings.show*Tab).
+# - Tap-by-text targets the tab bar label; if a screen renders the same word
+#   elsewhere, switch to tapOn with an index or point.
+appId: com.anonymous.mediaplayer.dev
+---
+- launchApp
+- extendedWaitUntil:
+    visible: 'Home'
+    timeout: 20000
+- tapOn: 'Live'
+- tapOn: 'Videos'
+- tapOn: 'Sports'
+- tapOn: 'Settings'
+- tapOn: 'Home'

@@ -258,21 +258,22 @@ const migrations: Migration[] = [
     version: 5,
     name: 'add_activePlaylistId_if_missing',
     up: async (db) => {
-      // Check if activePlaylistId column exists, if not add it
-      try {
-        await db.execAsync(`
-          ALTER TABLE user_settings ADD COLUMN activePlaylistId TEXT;
-        `);
-        console.log('[Migration] Added activePlaylistId column to user_settings table');
-      } catch (error) {
-        // Column might already exist, check the error
-        if (error instanceof Error && error.message.includes('duplicate column name')) {
-          console.log('[Migration] activePlaylistId column already exists');
-        } else {
-          // If it's a different error, re-throw it
-          throw error;
-        }
+      // Fresh installs always reach this with the column already present
+      // (migration 4 creates it), so check the schema directly instead of
+      // pattern-matching the error message of a failed ALTER.
+      const columns = (await db.getAllAsync(
+        'PRAGMA table_info(user_settings)'
+      )) as { name: string }[];
+
+      if (columns.some((column) => column.name === 'activePlaylistId')) {
+        console.log('[Migration] activePlaylistId column already exists');
+        return;
       }
+
+      await db.execAsync(`
+        ALTER TABLE user_settings ADD COLUMN activePlaylistId TEXT;
+      `);
+      console.log('[Migration] Added activePlaylistId column to user_settings table');
     },
   },
   {
@@ -527,6 +528,54 @@ const migrations: Migration[] = [
       await db.execAsync(`ALTER TABLE user_settings ADD COLUMN sportsCountry TEXT;`);
 
       console.log('[Migration] Added sportsCountry column to user_settings');
+    },
+  },
+  {
+    version: 18,
+    name: 'drop_legacy_channel_foreign_keys',
+    up: async (db) => {
+      // Channels moved to the Rust database (channels.db); channelId values no
+      // longer reference the legacy channels table in this database. The old
+      // FOREIGN KEY constraints are inert while PRAGMA foreign_keys is off,
+      // but would break favoriting/hiding the moment enforcement is enabled.
+      // SQLite can't drop a constraint, so rebuild the three tables keeping
+      // only the users FK. Orphaned rows are purged instead of copied along:
+      // deleteUser used to rely on the inert cascades, so deleted users left
+      // their favorites/hidden/order rows behind.
+      const tables = [
+        { name: 'user_favorite_channels', extraColumn: 'addedAt TEXT NOT NULL' },
+        { name: 'user_hidden_channels', extraColumn: 'hiddenAt TEXT NOT NULL' },
+        { name: 'user_channel_order', extraColumn: 'sortOrder INTEGER NOT NULL' },
+      ];
+
+      for (const { name, extraColumn } of tables) {
+        const columnName = extraColumn.split(' ')[0];
+
+        await db.execAsync(`
+          DELETE FROM ${name} WHERE userId NOT IN (SELECT id FROM users);
+        `);
+        await db.execAsync(`
+          CREATE TABLE ${name}_new (
+            id TEXT PRIMARY KEY NOT NULL,
+            userId TEXT NOT NULL,
+            channelId TEXT NOT NULL,
+            ${extraColumn},
+            FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE,
+            UNIQUE(userId, channelId)
+          );
+        `);
+        await db.execAsync(`
+          INSERT INTO ${name}_new (id, userId, channelId, ${columnName})
+          SELECT id, userId, channelId, ${columnName} FROM ${name};
+        `);
+        await db.execAsync(`DROP TABLE ${name};`);
+        await db.execAsync(`ALTER TABLE ${name}_new RENAME TO ${name};`);
+        await db.execAsync(`
+          CREATE INDEX IF NOT EXISTS idx_${name}_userId ON ${name} (userId);
+        `);
+      }
+
+      console.log('[Migration] Dropped legacy channels-table foreign keys and purged orphaned rows');
     },
   },
 ];

@@ -1,0 +1,34 @@
+#EXTM3U url-tvg="https://epg.example.com/guide.xml"
+#EXTINF:-1 tvg-id="nrk1.no" tvg-name="NRK1" tvg-logo="https://logos.example.com/nrk1.png" tvg-country="NO" tvg-language="Norwegian" tvg-url="https://epg.example.com/guide.xml" group-title="Norway",NRK1 HD
+http://stream.example.com/live/nrk1.m3u8
+#EXTINF:-1 tvg-id="nrk2.no" tvg-name="NRK2" tvg-logo="https://logos.example.com/nrk2.png" tvg-country="NO" tvg-language="Norwegian" tvg-url="https://epg.example.com/guide.xml" group-title="Norway",NRK2 HD
+http://stream.example.com/live/nrk2.m3u8
+#EXTINF:-1 tvg-id="tv2sport1.no" tvg-name="TV2 Sport 1" tvg-logo="https://logos.example.com/tv2sport1.png" tvg-country="NO" group-title="Sports",TV2 Sport 1 HD
+http://stream.example.com/live/tv2sport1.m3u8
+#EXTINF:-1 tvg-id="tv2sport2.no" tvg-name="TV2 Sport 2" tvg-logo="https://logos.example.com/tv2sport2.png" tvg-country="NO" group-title="Sports",TV2 Sport 2 HD
+http://stream.example.com/live/tv2sport2.m3u8
+#EXTINF:-1 tvg-id="skysportsf1.uk" tvg-name="Sky Sports F1" tvg-logo="https://logos.example.com/skyf1.png" tvg-country="UK" tvg-language="English" group-title="Sports",Sky Sports F1 FHD
+http://stream.example.com/live/skysportsf1.m3u8
+#EXTINF:-1 tvg-id="bbcone.uk" tvg-name="BBC One" tvg-logo="https://logos.example.com/bbcone.png" tvg-country="UK" tvg-language="English" group-title="News",BBC One HD
+http://stream.example.com/live/bbcone.m3u8
+#EXTVLCOPT:http-user-agent=MediaPlayer/1.0
+#EXTINF:-1 tvg-id="cnn.us" tvg-name="CNN" tvg-logo="https://logos.example.com/cnn.png" tvg-country="US" tvg-language="English" group-title="News",CNN International
+http://stream.example.com/live/cnn.m3u8
+#EXTINF:-1 tvg-name="Interstellar" tvg-logo="https://posters.example.com/interstellar.jpg" group-title="Movies | Sci-Fi",Interstellar (2014)
+http://stream.example.com/movie/interstellar.mkv
+#EXTINF:-1 tvg-name="The Dark Knight" tvg-logo="https://posters.example.com/tdk.jpg" group-title="Movies | Action",The Dark Knight (2008)
+http://stream.example.com/movie/the-dark-knight.mp4
+#EXTINF:-1 tvg-name="Oppenheimer" tvg-logo="https://posters.example.com/oppenheimer.jpg" group-title="Movies | Drama",Oppenheimer (2023)
+http://stream.example.com/movie/oppenheimer.mkv
+#EXTINF:-1 tvg-name="Breaking Bad" tvg-logo="https://posters.example.com/breaking-bad.jpg" group-title="Series | Drama",Breaking Bad S01E01
+http://stream.example.com/series/breaking-bad/s01e01.mkv
+#EXTINF:-1 tvg-name="Breaking Bad" tvg-logo="https://posters.example.com/breaking-bad.jpg" group-title="Series | Drama",Breaking Bad S01E02
+http://stream.example.com/series/breaking-bad/s01e02.mkv
+#EXTINF:-1 tvg-name="Breaking Bad" tvg-logo="https://posters.example.com/breaking-bad.jpg" group-title="Series | Drama",Breaking Bad S02E01
+http://stream.example.com/series/breaking-bad/s02e01.mkv
+#EXTINF:-1 tvg-name="The Wire" tvg-logo="https://posters.example.com/the-wire.jpg" group-title="Series | Drama",The Wire S01E01
+http://stream.example.com/series/the-wire/s01e01.mkv
+#EXTINF:-1 tvg-name="The Wire" tvg-logo="https://posters.example.com/the-wire.jpg" group-title="Series | Drama",The Wire S01E02
+http://stream.example.com/series/the-wire/s01e02.mkv
+#EXTINF:-1 tvg-name="Late Night" tvg-logo="https://posters.example.com/late.jpg" group-title="Adult | XXX",Late Night Special
+http://stream.example.com/movie/late-night.mp4

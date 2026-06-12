@@ -46,3 +46,6 @@ app-example
 /android
 
 
+
+# Test coverage output
+coverage/
