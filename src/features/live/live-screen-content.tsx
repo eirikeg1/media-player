@@ -8,7 +8,7 @@ import { Image } from 'expo-image';
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
-import { isChannelFavorite } from '@/lib/channel-utils';
+import { getRawChannelId, isChannelFavorite } from '@/lib/channel-utils';
 import { useHeaderBackground } from '@/hooks/use-header-background';
 import type { GroupOption } from '@/lib/group-utils';
 import type { SortOption } from '@/types/sort.types';
@@ -87,13 +87,13 @@ export function LiveScreenContent({
     return `channel-${item.name}-${index}`;
   }, []);
 
-  const renderChannelItem = useCallback(({ item: channel, index }: ListRenderItemInfo<Channel>) => {
+  const renderChannelItem = useCallback(({ item: channel }: ListRenderItemInfo<Channel>) => {
     const isFavorite = isChannelFavorite(channel, favoriteChannels);
     const programme = currentProgrammes?.get(channel.tvg?.id ?? '') ?? null;
 
     return (
       <ChannelItem
-        testID={`channel-item-${index}`}
+        testID={`channel-item-${getRawChannelId(channel)}`}
         channel={channel}
         isFavorite={isFavorite}
         onPress={onChannelPress}

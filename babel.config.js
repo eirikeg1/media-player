@@ -1,5 +1,8 @@
 module.exports = function (api) {
-  api.cache.using(() => process.env.NODE_ENV);
+  // Calling api.env() with no arguments keys the cache on the active env
+  // (BABEL_ENV || NODE_ENV) — the same value the test-only plugin branch
+  // below switches on.
+  const env = api.env();
 
   const plugins = [
     [
@@ -13,7 +16,7 @@ module.exports = function (api) {
     ],
   ];
 
-  if (api.env('test')) {
+  if (env === 'test') {
     // Jest's default VM cannot execute native dynamic import(); rewrite it
     // to a deferred require so code paths using import() run under tests.
     plugins.push('babel-plugin-dynamic-import-node');

@@ -1,7 +1,8 @@
 # Start playback from the Live channel list.
 # Derived from src/app/(tabs)/live.tsx, src/features/live/live-screen-content.tsx
-# (channel items get testID channel-item-<index>) and channel-detail-modal.tsx
-# ('Watch Now' opens /video-player). Code-derived, not yet device-verified.
+# (channel items get testID channel-item-<channelId>; the regex below taps the
+# first visible one) and channel-detail-modal.tsx ('Watch Now' opens
+# /video-player). Code-derived, not yet device-verified.
 #
 # Assumptions a device run may need to adjust:
 # - Requires a profile and an imported playlist (run 00 and 03 first).
@@ -18,10 +19,10 @@ appId: com.anonymous.mediaplayer.dev
 # Wait for the first channel cell of the paginated grid
 - extendedWaitUntil:
     visible:
-      id: 'channel-item-0'
+      id: 'channel-item-.*'
     timeout: 60000
 - tapOn:
-    id: 'channel-item-0'
+    id: 'channel-item-.*'
 # Channel detail modal shows the play button (Button title 'Watch Now')
 - extendedWaitUntil:
     visible: 'Watch Now'
