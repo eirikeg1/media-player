@@ -1,4 +1,4 @@
-import { ALL_COUNTRIES_VALUE, getEffectiveSportsCountry } from '@/lib/country-utils';
+import { getEffectiveSportsCountry } from '@/lib/country-utils';
 import { getRustDatabase } from '@/services/rust-channel-service';
 import { getSportsDatabase } from '@/services/sports-service';
 import { usePlaylistStore } from '@/stores/playlist/playlist-store';
@@ -41,26 +41,8 @@ export function useFixtureBroadcasts(fixture: Fixture | null): FixtureBroadcasts
           getRustDatabase(),
         ]);
 
-        // Fallback: ensure SofaScore data is cached for this fixture.
-        // When "All" is selected, skip the per-country prefetch — the matcher
-        // reads whatever is already cached across countries.
-        const prefetches: Promise<unknown>[] = [
-          sportsDb.fetchAndStoreFixtureBroadcasts(currentFixture.providerId).catch((err) => {
-            console.warn('[useFixtureBroadcasts] Failed to fetch fixture broadcasts:', err);
-          }),
-        ];
-        if (country !== ALL_COUNTRIES_VALUE) {
-          prefetches.push(
-            sportsDb.fetchAndStoreTvChannels(country).catch((err) => {
-              console.warn('[useFixtureBroadcasts] Failed to fetch country channels:', err);
-            }),
-          );
-        }
-        await Promise.all(prefetches);
-
-        if (fetchId !== fetchRef.current) return;
-
-        // Call the Rust matching engine
+        // The Rust matching engine internally ensures SofaScore broadcast and
+        // country-channel data is cached before matching.
         const results = await sportsDb.findPlayableChannelsForFixture(
           currentFixture,
           playlistId,

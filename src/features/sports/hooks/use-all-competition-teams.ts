@@ -16,13 +16,9 @@ export function useAllCompetitionTeams() {
     try {
       const db = await getSportsDatabase();
 
-      // Fetch competitions (cache-or-fetch)
-      const competitions = await db.getCompetitions(CACHE_TTL);
-
-      // Fetch teams for all competitions concurrently (cache-or-fetch)
-      await Promise.allSettled(
-        competitions.map((c) => db.getCompetitionTeams(c.providerId, CACHE_TTL))
-      );
+      // Single native call: refreshes stale competitions sequentially under
+      // the provider's rate limiting (cache-or-fetch per competition).
+      await db.refreshAllCompetitionTeams(CACHE_TTL);
 
       if (fetchId !== fetchRef.current) return;
 
