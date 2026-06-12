@@ -13,6 +13,7 @@ import { SeriesDetailModal } from '@/features/videos/series-detail-modal';
 import { RustChannelService } from '@/services/rust-channel-service';
 
 import { HomeSkeletonContent } from '@/features/home/home-skeleton-content';
+import { useAppReadyStore } from '@/stores/app';
 import { usePlaylistStore } from '@/stores/playlist/playlist-store';
 import { useUserStore } from '@/stores/user/user-store';
 import { useHeaderBackground } from '@/hooks/use-header-background';
@@ -21,7 +22,6 @@ import type { RecentlyWatchedItem } from '@/types/user.types';
 import { Image } from 'expo-image';
 import type { SeriesInfo } from 'expo-m3u-parser';
 import { useFocusEffect, useRouter } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { getChannelId } from '@/lib/channel-utils';
@@ -44,22 +44,18 @@ export default function HomeScreen() {
   // Ready when playlists are initialized AND either content finished loading or there's no playlist
   const isReady = isPlaylistInitialized && (!playlistId || !isContentLoading);
 
-  // Hide splash screen once ready
-  const splashHidden = useRef(false);
+  // Reveal the UI (fade out the animated splash) once ready. markReady is
+  // idempotent, so no guard is needed.
   useEffect(() => {
-    if (isReady && !splashHidden.current) {
-      splashHidden.current = true;
-      SplashScreen.hideAsync();
+    if (isReady) {
+      useAppReadyStore.getState().markReady();
     }
   }, [isReady]);
 
-  // Safety timeout: hide splash after 10s no matter what
+  // Safety timeout: reveal the UI after 10s no matter what
   useEffect(() => {
     const timeout = setTimeout(() => {
-      if (!splashHidden.current) {
-        splashHidden.current = true;
-        SplashScreen.hideAsync();
-      }
+      useAppReadyStore.getState().markReady();
     }, 10_000);
     return () => clearTimeout(timeout);
   }, []);

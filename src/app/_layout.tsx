@@ -11,12 +11,14 @@ import '../global.css';
 
 import { useEffect } from 'react';
 
+import { AnimatedSplashLoader } from '@/components/ui/display/animated-splash-loader';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useEpgSync } from '@/hooks/use-epg-sync';
 import { usePlaylistInit } from '@/hooks/use-playlist-init';
 import { usePlaylistSync } from '@/hooks/use-playlist-sync';
 import { NAV_THEME } from '@/lib/theme';
 import { EpgService } from '@/services/epg-service';
+import { useAppReadyStore } from '@/stores/app';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -32,10 +34,10 @@ export default function RootLayout() {
   // Start periodic EPG sync scheduler
   useEpgSync();
 
-  // Safety timeout: hide splash after 10s no matter what
+  // Safety timeout: reveal the UI after 10s no matter what
   useEffect(() => {
     const timeout = setTimeout(() => {
-      SplashScreen.hideAsync();
+      useAppReadyStore.getState().markReady();
     }, 10_000);
     return () => clearTimeout(timeout);
   }, []);
@@ -67,6 +69,7 @@ export default function RootLayout() {
           </Stack>
           <StatusBar style="auto" />
           <PortalHost />
+          <AnimatedSplashLoader />
         </GestureHandlerRootView>
       </SafeAreaProvider>
     </ThemeProvider>

@@ -44,13 +44,26 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     [
       "expo-splash-screen",
       {
-        image: "./assets/icons/play_3.png",
+        // First frame of the AnimatedSplashLoader (three discs in the play
+        // triangle) so the native cold-start splash is visually identical to
+        // where the JS animation begins — it looks like the animation is on
+        // screen from the very first pixel.
+        image: "./assets/icons/splash-circles.png",
         imageWidth: 200,
         resizeMode: "contain",
+        backgroundColor: "#F3D6FF",
       },
     ],
     "expo-video",
-    "react-native-google-cast",
+    [
+      "react-native-google-cast",
+      {
+        // Pin the version so Gradle resolves the artifact directly from
+        // google() instead of scanning every repo (incl. jitpack) for the
+        // latest "+" version, which fails the build on any jitpack hiccup.
+        androidPlayServicesCastFrameworkVersion: "22.3.1",
+      },
+    ],
     [
       "expo-build-properties",
       {

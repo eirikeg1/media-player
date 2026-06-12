@@ -1,9 +1,9 @@
 import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Redirect } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
+import { useAppReadyStore } from '@/stores/app';
 import { useUserStore } from '@/stores/user/user-store';
 import { usePlaylistStore } from '@/stores/playlist/playlist-store';
 import { retryInit } from '@/hooks/use-playlist-init';
@@ -20,11 +20,11 @@ export default function Index() {
 
   const shouldRedirectToUserSelect = !isLoading && isPlaylistInitialized && users.length === 0;
 
-  // Hide splash before redirecting to user-select or showing error, since
-  // HomeScreen (which normally hides the splash) will never mount on this path.
+  // Reveal the UI before redirecting to user-select or showing error, since
+  // HomeScreen (which normally signals readiness) will never mount on this path.
   useEffect(() => {
     if (shouldRedirectToUserSelect || initError) {
-      SplashScreen.hideAsync();
+      useAppReadyStore.getState().markReady();
     }
   }, [shouldRedirectToUserSelect, initError]);
 
