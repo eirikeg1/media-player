@@ -14,9 +14,10 @@ interface ChannelItemProps {
   isFavorite: boolean;
   onPress: (channel: Channel) => void;
   currentProgramme?: EpgProgramme | null;
+  testID?: string;
 }
 
-export function ChannelItem({ channel, isFavorite, onPress, currentProgramme }: ChannelItemProps) {
+export function ChannelItem({ channel, isFavorite, onPress, currentProgramme, testID }: ChannelItemProps) {
   const [imageError, setImageError] = useState(false);
   const hasLogo = !!channel.tvg.logo && !imageError;
   const initial = channel.name.charAt(0).toUpperCase();
@@ -26,6 +27,7 @@ export function ChannelItem({ channel, isFavorite, onPress, currentProgramme }: 
   return (
     <View style={styles.container}>
       <TouchableOpacity
+        testID={testID}
         style={styles.button}
         onPress={() => onPress(channel)}
         activeOpacity={0.7}

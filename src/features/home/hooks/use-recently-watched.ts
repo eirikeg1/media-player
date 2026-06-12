@@ -10,7 +10,7 @@ export function useRecentlyWatched(limit = 20) {
   const activePlaylistId = usePlaylistStore((s) => s.activePlaylistId);
   const getRecentlyWatched = useUserStore((s) => s.getRecentlyWatched);
   const excludeAdult = useUserStore(
-    (s) => s.currentUser?.settings?.parentalControlEnabled ?? false
+    (s) => s.currentUser?.settings?.parentalControlEnabled ?? true
   );
   const recentlyWatchedVersion = useUserStore((s) => s.recentlyWatchedVersion);
 

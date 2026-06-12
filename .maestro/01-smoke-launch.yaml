@@ -1,0 +1,11 @@
+# Smoke test: the app launches with existing state and reaches the tab bar.
+# Requires a profile to exist — run 00-first-run-create-profile.yaml first
+# (config.yaml runs flows in filename order). Code-derived, not yet device-verified.
+appId: com.anonymous.mediaplayer.dev
+---
+- launchApp
+# Tab titles from src/app/(tabs)/_layout.tsx: Home, Live, Videos, Sports, Settings
+- extendedWaitUntil:
+    visible: 'Home'
+    timeout: 20000
+- assertVisible: 'Settings'

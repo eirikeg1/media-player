@@ -25,6 +25,9 @@ export const PlaylistManager = memo(function PlaylistManager() {
   const currentUser = useUserStore((state) => state.currentUser);
   const updateSettings = useUserStore((state) => state.updateSettings);
   const playlistSharingEnabled = currentUser?.settings?.playlistSharingEnabled ?? true;
+  // Adult filtering is on by default: keep this fallback in sync with
+  // DEFAULT_USER_SETTINGS and every consumer that filters content (`?? true`)
+  // — the switch must never claim filtering is off while the queries filter.
   const parentalControlEnabled = currentUser?.settings?.parentalControlEnabled ?? true;
 
   const handleCloseModal = useCallback(() => {
@@ -100,6 +103,7 @@ export const PlaylistManager = memo(function PlaylistManager() {
       {!isLoading && <PlaylistList />}
 
       <Pressable
+        testID="playlist-add-button"
         onPress={handleOpenModal}
         style={styles.addButton}
         accessibilityLabel="Add playlist"

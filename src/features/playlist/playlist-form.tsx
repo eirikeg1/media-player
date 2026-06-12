@@ -177,6 +177,7 @@ export const PlaylistForm = memo(function PlaylistForm({ onSuccess, onCancel, pl
       <View style={styles.formGroup}>
         <ThemedText style={styles.label}>Playlist Name</ThemedText>
         <Input
+          testID="playlist-name-input"
           value={name}
           onChangeText={setName}
           placeholder="e.g., My IPTV Playlist"
@@ -191,6 +192,7 @@ export const PlaylistForm = memo(function PlaylistForm({ onSuccess, onCancel, pl
       <View style={styles.formGroup}>
         <ThemedText style={styles.label}>Playlist URL</ThemedText>
         <Textarea
+          testID="playlist-url-input"
           value={url}
           onChangeText={setUrl}
           placeholder="https://example.com/playlist.m3u"
@@ -331,6 +333,7 @@ export const PlaylistForm = memo(function PlaylistForm({ onSuccess, onCancel, pl
         )}
 
         <TouchableOpacity
+          testID="playlist-submit-button"
           style={[
             styles.button,
             styles.submitButton,

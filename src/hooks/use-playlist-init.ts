@@ -32,7 +32,7 @@ async function runInit() {
     // Pre-fetch first pages for instant tab switching
     const activePlaylistId = usePlaylistStore.getState().activePlaylistId;
     const currentUser = useUserStore.getState().currentUser;
-    const excludeAdult = currentUser?.settings?.parentalControlEnabled ?? false;
+    const excludeAdult = currentUser?.settings?.parentalControlEnabled ?? true;
 
     // Load favorites before pre-fetching so cached pages have correct sort order
     if (currentUser) {

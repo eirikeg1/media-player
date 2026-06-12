@@ -31,7 +31,7 @@ export function useVideoOrchestrator({
   onRegisterStopFunction,
 }: UseVideoOrchestratorProps) {
   const isUnmountedRef = useRef(false);
-  const retryTimeoutRef = useRef<number | null>(null);
+  const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasAppliedStartPositionRef = useRef(false);
 
   const userId = useUserStore((s) => s.currentUser?.id);

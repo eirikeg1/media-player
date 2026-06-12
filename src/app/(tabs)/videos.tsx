@@ -29,7 +29,7 @@ export default function VideosScreen() {
   const backgroundColor = useThemeColor({}, 'background');
 
   // Parental control: exclude adult content when enabled
-  const excludeAdult = useUserStore((s) => s.currentUser?.settings?.parentalControlEnabled ?? false);
+  const excludeAdult = useUserStore((s) => s.currentUser?.settings?.parentalControlEnabled ?? true);
 
   // Content type toggle state
   const [contentType, setContentType] = useState<'movie' | 'series'>('movie');

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE tv SYSTEM "xmltv.dtd">
+<tv source-info-name="Test EPG">
+  <channel id="nrk1.no">
+    <display-name>NRK1</display-name>
+  </channel>
+  <channel id="tv2sport1.no">
+    <display-name>TV2 Sport 1</display-name>
+  </channel>
+  <channel id="bbcone.uk">
+    <display-name>BBC One</display-name>
+  </channel>
+  <programme start="20260612180000 +0000" stop="20260612190000 +0000" channel="nrk1.no">
+    <title>Dagsrevyen</title>
+    <desc>Norwegian evening news.</desc>
+    <category>News</category>
+  </programme>
+  <programme start="20260612190000 +0000" stop="20260612203000 +0000" channel="nrk1.no">
+    <title>Nature Documentary</title>
+    <desc>Wildlife along the Norwegian coast.</desc>
+    <category>Documentary</category>
+  </programme>
+  <programme start="20260612183000 +0000" stop="20260612203000 +0000" channel="tv2sport1.no">
+    <title>Eliteserien: Rosenborg vs Brann</title>
+    <desc>Live football from Lerkendal.</desc>
+    <category>Sports</category>
+  </programme>
+  <programme start="20260612203000 +0000" stop="20260612220000 +0000" channel="tv2sport1.no">
+    <title>Premier League Highlights</title>
+    <category>Sports</category>
+  </programme>
+  <programme start="20260612190000 +0000" stop="20260612200000 +0000" channel="bbcone.uk">
+    <title>BBC News at Seven</title>
+    <category>News</category>
+  </programme>
+</tv>
