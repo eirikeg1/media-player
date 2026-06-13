@@ -1,3 +1,4 @@
+import type { Fixture } from 'expo-m3u-parser';
 import type { VideoPlayer } from 'expo-video';
 import { TouchableOpacity, View } from 'react-native';
 import { CastButton } from 'react-native-google-cast';
@@ -5,6 +6,7 @@ import type { SharedValue } from 'react-native-reanimated';
 
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
+import { getFixtureScoreDisplay } from '@/features/sports/match-widgets';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import type { Channel } from '@/types/playlist.types';
 import { VIDEO_CONSTANTS } from '../constants';
@@ -29,6 +31,10 @@ interface VideoControlsProps {
   onNext?: () => void;
   onPrevious?: () => void;
   hasNavigation?: boolean;
+  /** Sports fixture associated with this stream, if launched from the sports tab. */
+  fixture?: Fixture | null;
+  /** Open the SofaScore match widget overlay. */
+  onShowMatchInfo?: () => void;
 }
 
 export function VideoControls({
@@ -50,7 +56,10 @@ export function VideoControls({
   onNext,
   onPrevious,
   hasNavigation = false,
+  fixture,
+  onShowMatchInfo,
 }: VideoControlsProps) {
+  const score = fixture ? getFixtureScoreDisplay(fixture) : null;
   const iconColor = useThemeColor({}, 'icon');
   const overlayColor = useThemeColor({ light: 'rgba(0, 0, 0, 0.3)', dark: 'rgba(0, 0, 0, 0.3)' }, 'background');
   const buttonBackground = useThemeColor({ light: 'rgba(0, 0, 0, 0.6)', dark: 'rgba(0, 0, 0, 0.6)' }, 'background');
@@ -175,6 +184,46 @@ export function VideoControls({
         </View>
 
         <View className="bg-transparent" pointerEvents="box-none">
+          {score && onShowMatchInfo && (
+            <View className="items-center" style={{ marginBottom: 12 }} pointerEvents="box-none">
+              <TouchableOpacity
+                className="flex-row items-center"
+                style={{
+                  gap: 10,
+                  paddingVertical: 8,
+                  paddingHorizontal: 14,
+                  backgroundColor: buttonBackground,
+                  borderRadius: 20,
+                }}
+                onPress={() => {
+                  onClearTimeout();
+                  onShowMatchInfo();
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Show match info and stats"
+              >
+                <IconSymbol name="sportscourt.fill" size={18} color={textColor} />
+                <ThemedText style={{ color: textColor, fontWeight: '600', fontSize: 14 }} numberOfLines={1}>
+                  {score.home}
+                </ThemedText>
+                <ThemedText style={{ color: score.statusColor, fontWeight: '700', fontSize: 15 }}>
+                  {score.score ?? 'vs'}
+                </ThemedText>
+                <ThemedText style={{ color: textColor, fontWeight: '600', fontSize: 14 }} numberOfLines={1}>
+                  {score.away}
+                </ThemedText>
+                <View className="flex-row items-center" style={{ gap: 4, marginLeft: 2 }}>
+                  {score.isLive && (
+                    <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: score.statusColor }} />
+                  )}
+                  <ThemedText style={{ color: score.statusColor, fontWeight: '600', fontSize: 12 }}>
+                    {score.status}
+                  </ThemedText>
+                </View>
+                <IconSymbol name="chevron.up" size={16} color={textColor} />
+              </TouchableOpacity>
+            </View>
+          )}
           {!isLive && duration > 0 && onSeekStart && onSeekEnd && (
             <VideoSeekBar
               currentTime={currentTime}

@@ -1,8 +1,11 @@
+import type { Fixture } from 'expo-m3u-parser';
 import { VideoView } from 'expo-video';
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { useSharedValue } from 'react-native-reanimated';
 
+import { MatchWidgetOverlay } from '@/features/sports/match-widget-overlay';
+import { supportsMatchWidgets } from '@/features/sports/match-widgets';
 import { useGestureStore } from '@/stores/video/gesture-store';
 import { useVideoPlayerStore } from '@/stores/video/player-store';
 import type { Channel } from '@/types/playlist.types';
@@ -26,12 +29,14 @@ interface VideoPlayerProps {
   onNext?: () => void;
   onPrevious?: () => void;
   hasNavigation?: boolean;
+  /** Sports fixture this stream broadcasts, when launched from the sports tab. */
+  fixture?: Fixture | null;
 }
 
 /**
  * Video player component with clean, modular state management architecture
  */
-export function VideoPlayer({ channel, playlistId, contentType, startPosition, onBack, onStopVideo, onRegisterStopFunction, onNext, onPrevious, hasNavigation }: VideoPlayerProps) {
+export function VideoPlayer({ channel, playlistId, contentType, startPosition, onBack, onStopVideo, onRegisterStopFunction, onNext, onPrevious, hasNavigation, fixture }: VideoPlayerProps) {
   const {
     player,
     isLoading,
@@ -100,6 +105,12 @@ export function VideoPlayer({ channel, playlistId, contentType, startPosition, o
   const seekTargetDisplay = useSharedValue(0);
   const isGestureSeeking = useSharedValue(false);
 
+  // Match widgets are only available for SofaScore-sourced fixtures.
+  const widgetFixture = supportsMatchWidgets(fixture) ? fixture : null;
+  const [matchInfoVisible, setMatchInfoVisible] = useState(false);
+  const showMatchInfo = useCallback(() => setMatchInfoVisible(true), []);
+  const hideMatchInfo = useCallback(() => setMatchInfoVisible(false), []);
+
   return (
     <View style={{ flex: 1, backgroundColor: '#000' }}>
       <View style={{ flex: 1 }}>
@@ -140,6 +151,8 @@ export function VideoPlayer({ channel, playlistId, contentType, startPosition, o
             onBack={onBack}
             onTogglePlayPause={toggleCastPlayPause}
             onClearTimeout={clearHideControlsTimeout}
+            fixture={widgetFixture}
+            onShowMatchInfo={widgetFixture ? showMatchInfo : undefined}
           />
         )}
         {!hasError && !isCasting && (
@@ -179,6 +192,8 @@ export function VideoPlayer({ channel, playlistId, contentType, startPosition, o
             onNext={onNext}
             onPrevious={onPrevious}
             hasNavigation={hasNavigation}
+            fixture={widgetFixture}
+            onShowMatchInfo={widgetFixture ? showMatchInfo : undefined}
           />
         )}
 
@@ -188,6 +203,14 @@ export function VideoPlayer({ channel, playlistId, contentType, startPosition, o
             brightnessDisplay={brightnessDisplay}
             seekDeltaDisplay={seekDeltaDisplay}
             seekTargetDisplay={seekTargetDisplay}
+          />
+        )}
+
+        {widgetFixture && (
+          <MatchWidgetOverlay
+            visible={matchInfoVisible}
+            fixture={widgetFixture}
+            onClose={hideMatchInfo}
           />
         )}
       </View>
