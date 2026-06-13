@@ -45,6 +45,8 @@ app-example
 /ios
 /android
 
+tmp
+
 
 
 # Test coverage output
