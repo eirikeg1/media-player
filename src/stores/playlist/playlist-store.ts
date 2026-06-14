@@ -45,8 +45,6 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
       name: input.name,
       hasCredentials: !!input.credentials,
     });
-    // DEBUG: Log full URL to trace potential corruption
-    console.log('[PlaylistStore] addPlaylist - FULL URL:', input.url);
 
     if (!input.name?.trim()) {
       console.error('[PlaylistStore] Validation failed: name is empty');
@@ -291,7 +289,10 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
       // The native layer refuses duplicate fetches for a playlist that is
       // already being imported (e.g. a dev reload while a refresh runs).
       // The original import is still progressing — not an error to surface.
-      if (errorMessage.includes('Already in progress')) {
+      // Match the variant loosely: depending on the uniffi binding the message
+      // may be the Display string ("Already in progress: ...") or just the
+      // reason ("import already running for ...").
+      if (/already in progress|already running|AlreadyInProgress/i.test(errorMessage)) {
         console.log('[PlaylistStore] Refresh already running natively, skipping duplicate');
         useImportProgressStore.getState().reset();
         return;
