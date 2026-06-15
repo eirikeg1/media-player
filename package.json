@@ -6,6 +6,7 @@
     "start": "EXPO_DISABLE_ONBOARDING=1 REACT_NATIVE_PACKAGER_HOSTNAME=$(hostname -I | awk '{print $1}') APP_VARIANT=development expo start",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "APP_VARIANT=development bash scripts/expo-run.sh android --device",
+    "android:cable": "CABLE=1 APP_VARIANT=development bash scripts/expo-run.sh android --device",
     "android:release": "bash scripts/expo-run.sh android --variant release --device",
     "ios": "APP_VARIANT=development bash scripts/expo-run.sh ios --device",
     "ios:release": "bash scripts/expo-run.sh ios --configuration Release --device",
