@@ -51,7 +51,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         image: "./assets/icons/splash-circles.png",
         imageWidth: 200,
         resizeMode: "contain",
-        backgroundColor: "#F3D6FF",
+        // Base colour of the animated wave (SPLASH_WAVE_BASE) so the cold-start
+        // native splash blends into the JS shader with no colour pop.
+        backgroundColor: "#13214A",
       },
     ],
     "expo-video",
