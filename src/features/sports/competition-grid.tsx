@@ -8,8 +8,7 @@ import { memo, useCallback, useMemo } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import {
-  CUP_COMPETITION_IDS,
-  EUROPEAN_COMPETITION_IDS,
+  INTERNATIONAL_COMPETITION_IDS,
   TOP_COMPETITION_IDS,
 } from './competition-groups';
 
@@ -37,7 +36,7 @@ export const CompetitionGrid = memo(function CompetitionGrid({
 
   const cardWidth = (screenWidth - HORIZONTAL_PADDING * 2 - GAP * (COLUMNS - 1)) / COLUMNS;
 
-  const { topComps, europeanComps, cupComps } = useMemo(() => {
+  const { topComps, internationalComps } = useMemo(() => {
     const orderBy = (ids: readonly number[]) =>
       [...competitions]
         .filter((c) => (ids as readonly number[]).includes(c.providerId))
@@ -45,8 +44,7 @@ export const CompetitionGrid = memo(function CompetitionGrid({
 
     return {
       topComps: orderBy(TOP_COMPETITION_IDS),
-      europeanComps: orderBy(EUROPEAN_COMPETITION_IDS),
-      cupComps: orderBy(CUP_COMPETITION_IDS),
+      internationalComps: orderBy(INTERNATIONAL_COMPETITION_IDS),
     };
   }, [competitions]);
 
@@ -123,22 +121,12 @@ export const CompetitionGrid = memo(function CompetitionGrid({
         {topComps.map(renderCard)}
       </View>
 
-      {/* European section */}
-      {europeanComps.length > 0 && (
+      {/* International section */}
+      {internationalComps.length > 0 && (
         <>
-          <ThemedText style={styles.sectionLabel}>European</ThemedText>
+          <ThemedText style={styles.sectionLabel}>International</ThemedText>
           <View style={styles.grid}>
-            {europeanComps.map(renderCard)}
-          </View>
-        </>
-      )}
-
-      {/* Cups section */}
-      {cupComps.length > 0 && (
-        <>
-          <ThemedText style={styles.sectionLabel}>Cups</ThemedText>
-          <View style={styles.grid}>
-            {cupComps.map(renderCard)}
+            {internationalComps.map(renderCard)}
           </View>
         </>
       )}

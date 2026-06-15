@@ -1,5 +1,6 @@
+import type { Fixture } from 'expo-m3u-parser';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { BackHandler, StatusBar } from 'react-native';
 
 import { ConfirmDialog } from '@/components/ui/containers/modal/confirm-dialog';
@@ -29,8 +30,20 @@ function formatPosition(seconds: number): string {
 
 export default function VideoPlayerScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ channelId: string; playlistId: string; contentType: string }>();
+  const params = useLocalSearchParams<{ channelId: string; playlistId: string; contentType: string; fixture?: string }>();
   const contentType = (params.contentType as ContentType) || 'live';
+
+  // Sports launches pass the associated fixture (serialized) so the player can
+  // surface SofaScore match widgets. Parse defensively — a bad value just means
+  // no widgets, never a crashed screen.
+  const fixture = useMemo<Fixture | null>(() => {
+    if (!params.fixture) return null;
+    try {
+      return JSON.parse(params.fixture) as Fixture;
+    } catch {
+      return null;
+    }
+  }, [params.fixture]);
   const iconColor = useThemeColor({}, 'icon');
   const stopVideoRef = useRef<(() => void) | null>(null);
 
@@ -218,6 +231,7 @@ export default function VideoPlayerScreen() {
         onNext={handleNext}
         onPrevious={handlePrevious}
         hasNavigation={hasNavigation}
+        fixture={fixture}
       />
     </ThemedView>
   );

@@ -103,10 +103,12 @@ function SportsScreenInner() {
           channelId,
           playlistId: activePlaylistId ?? '',
           contentType: 'live',
+          // Carry the fixture so the player can show SofaScore match widgets.
+          ...(selectedFixture ? { fixture: JSON.stringify(selectedFixture) } : {}),
         },
       });
     },
-    [router, activePlaylistId]
+    [router, activePlaylistId, selectedFixture]
   );
 
   // Filter fixtures by selected team
