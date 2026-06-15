@@ -38,19 +38,36 @@ export default function HomeScreen() {
   const headerSource = customHeader ?? DEFAULT_HOME_HEADER;
 
   // Data hooks
-  const { items: recentlyWatched, refresh: refreshRecentlyWatched } = useRecentlyWatched(20);
+  const { items: recentlyWatched, isLoading: isRecentlyWatchedLoading, refresh: refreshRecentlyWatched } = useRecentlyWatched(20);
   const { movies, series, isLoading: isContentLoading, refresh: refreshContent } = useRandomContent(30);
 
-  // Ready when playlists are initialized AND either content finished loading or there's no playlist
-  const isReady = isPlaylistInitialized && (!playlistId || !isContentLoading);
+  // The first load is complete once playlists are initialized AND — when there
+  // is an active playlist — BOTH the discover content and the recently-watched
+  // ("continue watching") data have finished loading. Waiting on both is what
+  // makes them appear together: recently-watched is slower (its per-item channel
+  // and per-series poster lookups run in extra round-trips), so gating only on
+  // discover let it pop in seconds after the rest of the page.
+  const isInitialLoadComplete =
+    isPlaylistInitialized && (!playlistId || (!isContentLoading && !isRecentlyWatchedLoading));
+
+  // Latch the first reveal so the animated splash fades out exactly once, when
+  // everything is ready. Later background refreshes (tab focus, recently-watched
+  // version bumps) flip the loading flags back to true, but must not re-trigger
+  // the splash or blank the page — only an explicit pull-to-refresh does that.
+  const [isRevealed, setIsRevealed] = useState(false);
+  useEffect(() => {
+    if (isInitialLoadComplete) {
+      setIsRevealed(true);
+    }
+  }, [isInitialLoadComplete]);
 
   // Reveal the UI (fade out the animated splash) once ready. markReady is
   // idempotent, so no guard is needed.
   useEffect(() => {
-    if (isReady) {
+    if (isRevealed) {
       useAppReadyStore.getState().markReady();
     }
-  }, [isReady]);
+  }, [isRevealed]);
 
   // Safety timeout: reveal the UI after 10s no matter what
   useEffect(() => {
@@ -72,16 +89,22 @@ export default function HomeScreen() {
     }, [refreshRecentlyWatched])
   );
 
-  // Pull-to-refresh
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  // Pull-to-refresh reloads both data sources. While it runs we show the loading
+  // skeleton (not just the inline spinner) until BOTH finish, so the whole page
+  // reappears at once instead of piecemeal.
+  const [isFullRefreshing, setIsFullRefreshing] = useState(false);
   const handleRefresh = useCallback(async () => {
-    setIsRefreshing(true);
+    setIsFullRefreshing(true);
     try {
       await Promise.allSettled([refreshRecentlyWatched(), refreshContent()]);
     } finally {
-      setIsRefreshing(false);
+      setIsFullRefreshing(false);
     }
   }, [refreshRecentlyWatched, refreshContent]);
+
+  // Show the loading skeleton during the initial load and during a full
+  // pull-to-refresh. Background refreshes update the carousels in place.
+  const showSkeleton = !isRevealed || isFullRefreshing;
 
   // Movie detail modal
   const [selectedMovie, setSelectedMovie] = useState<Channel | null>(null);
@@ -185,7 +208,7 @@ export default function HomeScreen() {
   );
 
   // Skeleton content behind splash screen — if splash hides before content loads, users see loading UI
-  if (!isReady) {
+  if (showSkeleton) {
     return (
       <ParallaxScrollView
         headerBackgroundColor={{ light: '#2D2D2D', dark: '#1A1A1A' }}
@@ -224,7 +247,7 @@ export default function HomeScreen() {
         headerBackgroundColor={{ light: '#2D2D2D', dark: '#1A1A1A' }}
         padding={0}
         showsVerticalScrollIndicator={false}
-        refreshing={isRefreshing}
+        refreshing={isFullRefreshing}
         onRefresh={handleRefresh}
         headerImage={
           <View style={styles.headerContainer}>
