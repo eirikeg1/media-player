@@ -59,6 +59,8 @@ function sourceLabel(source: string): string {
     case 'sofascore+epg': return 'SofaScore + EPG';
     case 'sofascore': return 'SofaScore';
     case 'epg': return 'EPG';
+    case 'title': return 'Channel name';
+    case 'time': return 'EPG (time)';
     default: return source;
   }
 }
