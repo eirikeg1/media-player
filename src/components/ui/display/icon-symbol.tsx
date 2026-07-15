@@ -42,6 +42,7 @@ const MAPPING = {
   'pencil': 'edit',
   'arrow.clockwise': 'refresh',
   'arrow.counterclockwise': 'refresh',
+  'rotate.right': 'screen-rotation',
   'square.and.arrow.up': 'share',
   'square.and.arrow.down': 'download',
   'arrow.down.circle': 'download',

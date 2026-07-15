@@ -1,31 +1,28 @@
 import type { Fixture } from 'expo-m3u-parser';
 
 /**
- * Helpers for embedding SofaScore match widgets (https://corporate.sofascore.com/widgets).
+ * Helpers for the SofaScore match overlay.
  *
- * The widgets are official, publicly embeddable pages served from
- * `widgets.sofascore.com`. They update live and are the same data shown in the
- * SofaScore app, so we surface them in a WebView overlay instead of
- * re-implementing match stats natively.
- *
- * Only fixtures sourced from SofaScore expose a usable event id, so widgets are
- * gated on the provider. `Fixture.providerId` is the SofaScore event id and the
- * team ids are SofaScore team ids — everything the embeds need.
+ * Every tab is now rendered natively from the SofaScore API (team statistics,
+ * player ratings, the lineups pitch, the incident timeline and the head-to-head
+ * preview) — there is no embedded WebView. Only fixtures sourced from SofaScore
+ * expose a usable event id, so the overlay is gated on the provider:
+ * `Fixture.providerId` is the SofaScore event id.
  */
 
-const WIDGET_BASE = 'https://widgets.sofascore.com/en/embed';
 const SOFASCORE_PROVIDER = 'sofascore';
 
-export interface MatchWidgetTab {
-  /** Stable key used for tab selection and WebView remounting. */
-  key: string;
+/** The tabs shown in the match overlay; each is rendered natively. */
+export type MatchTabKind = 'stats' | 'players' | 'timeline' | 'lineups' | 'preview';
+
+export interface MatchTab {
+  /** Stable key used for tab selection and content switching. */
+  key: MatchTabKind;
   /** Short label shown in the tab strip. */
   label: string;
-  /** Fully-qualified embed URL for this widget. */
-  url: string;
 }
 
-/** A SofaScore-sourced fixture is required for the widgets to resolve. */
+/** A SofaScore-sourced fixture is required for the overlay to resolve. */
 export function supportsMatchWidgets(
   fixture: Fixture | null | undefined
 ): fixture is Fixture {
@@ -38,57 +35,65 @@ export function supportsMatchWidgets(
 }
 
 /**
- * Whether a URL belongs to SofaScore (the widget pages, their static assets,
- * and their API all do). Used to keep the embed WebView from navigating away to
- * unrelated sites while still allowing every resource the widget needs. Non-http
- * schemes (e.g. `about:blank`, `data:`) are allowed so the WebView can bootstrap.
+ * Whether the match has kicked off — decides the default tab and ordering.
+ * Postponed/cancelled/unknown fixtures count as not started: their in-play tabs
+ * have no content, so the preview should lead just like before kickoff.
  */
-export function isSofascoreUrl({ url }: { url: string }): boolean {
-  if (!url.startsWith('http://') && !url.startsWith('https://')) return true;
-  try {
-    const host = new URL(url).hostname;
-    return host === 'sofascore.com' || host.endsWith('.sofascore.com') || host.endsWith('.sofascore.app');
-  } catch {
-    return false;
-  }
+export function matchHasStarted(fixture: Fixture): boolean {
+  const status = fixture.status.toUpperCase();
+  return isMatchLive(fixture) || status === 'FINISHED' || status === 'FULL_TIME';
 }
 
-/** Append the dark theme that matches the player's black backdrop. */
-function widgetUrl(path: string): string {
-  const separator = path.includes('?') ? '&' : '?';
-  return `${WIDGET_BASE}/${path}${separator}widgetTheme=dark`;
+/** Whether the match is currently in play — gates live polling of stats/score. */
+export function isMatchLive(fixture: Fixture): boolean {
+  switch (fixture.status.toUpperCase()) {
+    // `IN_PROGRESS`/`PAUSED` are what the backend emits (FixtureStatus::to_str);
+    // the others are accepted defensively.
+    case 'IN_PROGRESS':
+    case 'IN_PLAY':
+    case 'LIVE':
+    case 'PAUSED':
+    case 'HALFTIME':
+      return true;
+    default:
+      return false;
+  }
 }
 
 /**
- * Build the set of widget tabs for a fixture. The match-level widgets only need
- * the event id; team info widgets need the SofaScore team ids, which may be
- * absent for some fixtures, so they are added conditionally.
+ * Whether the match has reached a state it cannot go (back) live from — used to
+ * stop score polling for good. Scheduled and unknown/interrupted statuses are
+ * *not* concluded: polling must keep running to catch kickoff or a resumption.
  */
-export function buildMatchWidgetTabs(fixture: Fixture): MatchWidgetTab[] {
-  const eventId = fixture.providerId;
-
-  const tabs: MatchWidgetTab[] = [
-    { key: 'lineups', label: 'Lineups', url: widgetUrl(`lineups?id=${eventId}`) },
-    { key: 'momentum', label: 'Momentum', url: widgetUrl(`attackMomentum?id=${eventId}`) },
-  ];
-
-  if (fixture.homeTeamId) {
-    tabs.push({
-      key: 'home',
-      label: fixture.homeTeamShort || fixture.homeTeam,
-      url: widgetUrl(`team/${fixture.homeTeamId}/info`),
-    });
+export function isMatchConcluded(status: string): boolean {
+  switch (status.toUpperCase()) {
+    case 'FINISHED':
+    case 'FULL_TIME':
+    case 'POSTPONED':
+    case 'CANCELLED':
+    case 'SUSPENDED':
+    case 'ABANDONED':
+      return true;
+    default:
+      return false;
   }
+}
 
-  if (fixture.awayTeamId) {
-    tabs.push({
-      key: 'away',
-      label: fixture.awayTeamShort || fixture.awayTeam,
-      url: widgetUrl(`team/${fixture.awayTeamId}/info`),
-    });
-  }
+/**
+ * Build the overlay tabs for a fixture. Live/finished matches lead with the
+ * statistics that now exist; upcoming matches lead with the form & head-to-head
+ * preview, since the in-play tabs would only show "not available yet".
+ */
+export function buildMatchTabs(fixture: Fixture): MatchTab[] {
+  const stats: MatchTab = { key: 'stats', label: 'Stats' };
+  const players: MatchTab = { key: 'players', label: 'Players' };
+  const timeline: MatchTab = { key: 'timeline', label: 'Timeline' };
+  const preview: MatchTab = { key: 'preview', label: 'Form & H2H' };
+  const lineups: MatchTab = { key: 'lineups', label: 'Lineups' };
 
-  return tabs;
+  return matchHasStarted(fixture)
+    ? [stats, players, timeline, lineups, preview]
+    : [preview, lineups, stats, players, timeline];
 }
 
 export interface FixtureScoreDisplay {
@@ -121,6 +126,9 @@ export function getFixtureScoreDisplay(fixture: Fixture): FixtureScoreDisplay {
   const score = hasScore ? `${fixture.homeScore} - ${fixture.awayScore}` : null;
 
   switch (normalized) {
+    // `IN_PROGRESS` is what the backend actually emits (FixtureStatus::to_str);
+    // the others are accepted defensively.
+    case 'IN_PROGRESS':
     case 'IN_PLAY':
     case 'LIVE':
       return { home, away, score, status: 'LIVE', statusColor: '#FF3B30', isLive: true };

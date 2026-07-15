@@ -1,9 +1,11 @@
 import type { Fixture } from 'expo-m3u-parser';
 
 import {
-  buildMatchWidgetTabs,
+  buildMatchTabs,
   getFixtureScoreDisplay,
-  isSofascoreUrl,
+  isMatchConcluded,
+  isMatchLive,
+  matchHasStarted,
   supportsMatchWidgets,
 } from '../match-widgets';
 
@@ -19,7 +21,8 @@ function makeFixture(overrides: Partial<Fixture> = {}): Fixture {
     awayTeamId: 38,
     awayTeamShort: 'CHE',
     kickoffTime: 1_700_000_000,
-    status: 'IN_PLAY',
+    // The status vocabulary the backend actually emits (FixtureStatus::to_str).
+    status: 'in_progress',
     homeScore: 2,
     awayScore: 1,
     ...overrides,
@@ -39,40 +42,83 @@ describe('supportsMatchWidgets', () => {
   });
 });
 
-describe('buildMatchWidgetTabs', () => {
-  it('builds dark-themed lineups + momentum tabs keyed on the event id', () => {
-    const tabs = buildMatchWidgetTabs(makeFixture());
-    const lineups = tabs.find((t) => t.key === 'lineups');
-    const momentum = tabs.find((t) => t.key === 'momentum');
-
-    expect(lineups?.url).toBe(
-      'https://widgets.sofascore.com/en/embed/lineups?id=12436870&widgetTheme=dark'
-    );
-    expect(momentum?.url).toBe(
-      'https://widgets.sofascore.com/en/embed/attackMomentum?id=12436870&widgetTheme=dark'
-    );
+describe('matchHasStarted', () => {
+  it('is true once a match is live or finished', () => {
+    expect(matchHasStarted(makeFixture({ status: 'in_progress' }))).toBe(true);
+    expect(matchHasStarted(makeFixture({ status: 'paused' }))).toBe(true);
+    expect(matchHasStarted(makeFixture({ status: 'finished' }))).toBe(true);
   });
 
-  it('adds team tabs labelled with the short name when team ids exist', () => {
-    const tabs = buildMatchWidgetTabs(makeFixture());
-    const home = tabs.find((t) => t.key === 'home');
-    const away = tabs.find((t) => t.key === 'away');
-
-    expect(home).toMatchObject({
-      label: 'ARS',
-      url: 'https://widgets.sofascore.com/en/embed/team/42/info?widgetTheme=dark',
-    });
-    expect(away).toMatchObject({
-      label: 'CHE',
-      url: 'https://widgets.sofascore.com/en/embed/team/38/info?widgetTheme=dark',
-    });
+  it('is false before kickoff', () => {
+    expect(matchHasStarted(makeFixture({ status: 'scheduled' }))).toBe(false);
+    expect(matchHasStarted(makeFixture({ status: 'TIMED' }))).toBe(false);
   });
 
-  it('omits team tabs when team ids are missing', () => {
-    const tabs = buildMatchWidgetTabs(
-      makeFixture({ homeTeamId: undefined, awayTeamId: undefined })
-    );
-    expect(tabs.map((t) => t.key)).toEqual(['lineups', 'momentum']);
+  it('is false for matches that never happened', () => {
+    expect(matchHasStarted(makeFixture({ status: 'postponed' }))).toBe(false);
+    expect(matchHasStarted(makeFixture({ status: 'cancelled' }))).toBe(false);
+    expect(matchHasStarted(makeFixture({ status: 'unknown' }))).toBe(false);
+  });
+});
+
+describe('isMatchLive', () => {
+  it('is true for the in-play statuses the backend emits', () => {
+    expect(isMatchLive(makeFixture({ status: 'in_progress' }))).toBe(true);
+    expect(isMatchLive(makeFixture({ status: 'paused' }))).toBe(true);
+    expect(isMatchLive(makeFixture({ status: 'live' }))).toBe(true);
+  });
+
+  it('accepts legacy in-play spellings defensively', () => {
+    expect(isMatchLive(makeFixture({ status: 'IN_PLAY' }))).toBe(true);
+    expect(isMatchLive(makeFixture({ status: 'HALFTIME' }))).toBe(true);
+  });
+
+  it('is false when not in play', () => {
+    expect(isMatchLive(makeFixture({ status: 'scheduled' }))).toBe(false);
+    expect(isMatchLive(makeFixture({ status: 'finished' }))).toBe(false);
+    expect(isMatchLive(makeFixture({ status: 'unknown' }))).toBe(false);
+  });
+});
+
+describe('isMatchConcluded', () => {
+  it('is true once the match can no longer go live', () => {
+    expect(isMatchConcluded('finished')).toBe(true);
+    expect(isMatchConcluded('postponed')).toBe(true);
+    expect(isMatchConcluded('cancelled')).toBe(true);
+  });
+
+  it('keeps scheduled, live and interrupted matches polling', () => {
+    expect(isMatchConcluded('scheduled')).toBe(false);
+    expect(isMatchConcluded('in_progress')).toBe(false);
+    expect(isMatchConcluded('unknown')).toBe(false);
+  });
+});
+
+describe('buildMatchTabs', () => {
+  it('leads with statistics for a started match', () => {
+    const tabs = buildMatchTabs(makeFixture({ status: 'in_progress' }));
+    expect(tabs.map((t) => t.key)).toEqual(['stats', 'players', 'timeline', 'lineups', 'preview']);
+  });
+
+  it('leads with the preview before kickoff', () => {
+    const tabs = buildMatchTabs(makeFixture({ status: 'scheduled' }));
+    expect(tabs.map((t) => t.key)).toEqual(['preview', 'lineups', 'stats', 'players', 'timeline']);
+  });
+
+  it('leads with the preview for postponed matches (the in-play tabs are empty)', () => {
+    const tabs = buildMatchTabs(makeFixture({ status: 'postponed' }));
+    expect(tabs.map((t) => t.key)).toEqual(['preview', 'lineups', 'stats', 'players', 'timeline']);
+  });
+
+  it('always includes the five native tabs', () => {
+    const tabs = buildMatchTabs(makeFixture());
+    expect([...tabs.map((t) => t.key)].sort()).toEqual([
+      'lineups',
+      'players',
+      'preview',
+      'stats',
+      'timeline',
+    ]);
   });
 });
 
@@ -83,31 +129,16 @@ describe('getFixtureScoreDisplay', () => {
   });
 
   it('shows FT for finished matches', () => {
-    const display = getFixtureScoreDisplay(makeFixture({ status: 'FINISHED' }));
+    const display = getFixtureScoreDisplay(makeFixture({ status: 'finished' }));
     expect(display).toMatchObject({ score: '2 - 1', status: 'FT', isLive: false });
   });
 
   it('shows kickoff time and no score before the match', () => {
     const display = getFixtureScoreDisplay(
-      makeFixture({ status: 'SCHEDULED', homeScore: undefined, awayScore: undefined })
+      makeFixture({ status: 'scheduled', homeScore: undefined, awayScore: undefined })
     );
     expect(display.score).toBeNull();
     expect(display.isLive).toBe(false);
     expect(display.status).toMatch(/\d/); // a formatted time
-  });
-});
-
-describe('isSofascoreUrl', () => {
-  it('allows SofaScore hosts and non-http bootstrap schemes', () => {
-    expect(isSofascoreUrl({ url: 'https://widgets.sofascore.com/en/embed/lineups?id=1' })).toBe(true);
-    expect(isSofascoreUrl({ url: 'https://api.sofascore.com/api/v1/event/1' })).toBe(true);
-    expect(isSofascoreUrl({ url: 'https://img.sofascore.app/team/42' })).toBe(true);
-    expect(isSofascoreUrl({ url: 'about:blank' })).toBe(true);
-    expect(isSofascoreUrl({ url: 'data:text/html,<p>x</p>' })).toBe(true);
-  });
-
-  it('blocks unrelated and look-alike hosts', () => {
-    expect(isSofascoreUrl({ url: 'https://example.com' })).toBe(false);
-    expect(isSofascoreUrl({ url: 'https://sofascore.com.evil.com' })).toBe(false);
   });
 });

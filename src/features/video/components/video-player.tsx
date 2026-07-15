@@ -1,11 +1,12 @@
 import type { Fixture } from 'expo-m3u-parser';
 import { VideoView } from 'expo-video';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { useSharedValue } from 'react-native-reanimated';
 
+import { useLiveMatchScore } from '@/features/sports/hooks/use-match-detail';
 import { MatchWidgetOverlay } from '@/features/sports/match-widget-overlay';
-import { supportsMatchWidgets } from '@/features/sports/match-widgets';
+import { isMatchConcluded, supportsMatchWidgets } from '@/features/sports/match-widgets';
 import { useGestureStore } from '@/stores/video/gesture-store';
 import { useVideoPlayerStore } from '@/stores/video/player-store';
 import type { Channel } from '@/types/playlist.types';
@@ -107,6 +108,26 @@ export function VideoPlayer({ channel, playlistId, contentType, startPosition, o
 
   // Match widgets are only available for SofaScore-sourced fixtures.
   const widgetFixture = supportsMatchWidgets(fixture) ? fixture : null;
+  // Keep the scoreline live while watching: poll it ~once a minute and merge it
+  // over the fixture, so both the score button and the match-info overlay
+  // reflect the current score without each fetching on its own. Polling is
+  // enabled whenever the match could still go live — including pre-kickoff, so
+  // a stream opened early picks up the score once play starts — and the hook
+  // stops itself once the match concludes.
+  const liveScore = useLiveMatchScore(
+    widgetFixture?.providerId,
+    !!widgetFixture && !isMatchConcluded(widgetFixture.status)
+  );
+  const liveFixture = useMemo<Fixture | null>(() => {
+    if (!widgetFixture) return null;
+    if (!liveScore) return widgetFixture;
+    return {
+      ...widgetFixture,
+      homeScore: liveScore.homeScore ?? widgetFixture.homeScore,
+      awayScore: liveScore.awayScore ?? widgetFixture.awayScore,
+      status: liveScore.status || widgetFixture.status,
+    };
+  }, [widgetFixture, liveScore]);
   const [matchInfoVisible, setMatchInfoVisible] = useState(false);
   const showMatchInfo = useCallback(() => setMatchInfoVisible(true), []);
   const hideMatchInfo = useCallback(() => setMatchInfoVisible(false), []);
@@ -151,7 +172,7 @@ export function VideoPlayer({ channel, playlistId, contentType, startPosition, o
             onBack={onBack}
             onTogglePlayPause={toggleCastPlayPause}
             onClearTimeout={clearHideControlsTimeout}
-            fixture={widgetFixture}
+            fixture={liveFixture}
             onShowMatchInfo={widgetFixture ? showMatchInfo : undefined}
           />
         )}
@@ -192,7 +213,7 @@ export function VideoPlayer({ channel, playlistId, contentType, startPosition, o
             onNext={onNext}
             onPrevious={onPrevious}
             hasNavigation={hasNavigation}
-            fixture={widgetFixture}
+            fixture={liveFixture}
             onShowMatchInfo={widgetFixture ? showMatchInfo : undefined}
           />
         )}
@@ -206,10 +227,10 @@ export function VideoPlayer({ channel, playlistId, contentType, startPosition, o
           />
         )}
 
-        {widgetFixture && (
+        {liveFixture && (
           <MatchWidgetOverlay
             visible={matchInfoVisible}
-            fixture={widgetFixture}
+            fixture={liveFixture}
             onClose={hideMatchInfo}
           />
         )}
