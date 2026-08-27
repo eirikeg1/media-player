@@ -5,6 +5,9 @@ import { useUserStore } from '@/stores/user/user-store';
 import type { RecentlyWatchedItem } from '@/types/user.types';
 import { useCallback, useEffect, useState } from 'react';
 
+/** Substring search can return neighbours ("Office Wars" for "Office"); fetch enough rows to find the exact name. */
+const SERIES_POSTER_SEARCH_LIMIT = 50;
+
 export function useRecentlyWatched(limit = 20) {
   const currentUser = useUserStore((s) => s.currentUser);
   const activePlaylistId = usePlaylistStore((s) => s.activePlaylistId);
@@ -90,17 +93,19 @@ export function useRecentlyWatched(limit = 20) {
         }
       }
 
-      // Phase 2: Look up series posters for unique series names
+      // Phase 2: Look up series posters for unique series names. The search is a
+      // substring match, so pick the exact series rather than the first hit
+      // ("Office" must not resolve to "Office Wars").
       const uniqueSeriesNames = [...seenSeries];
       const posterLookups = await Promise.all(
         uniqueSeriesNames.map(async (name) => {
           try {
             const result = await RustChannelService.getSeriesList(activePlaylistId, {
               search: name,
-              limit: 1,
+              limit: SERIES_POSTER_SEARCH_LIMIT,
               excludeAdult,
             });
-            const poster = result.series[0]?.poster ?? null;
+            const poster = result.series.find((s) => s.seriesName === name)?.poster ?? null;
             return { name, poster };
           } catch {
             return { name, poster: null };
