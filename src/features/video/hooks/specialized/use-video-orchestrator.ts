@@ -1,9 +1,8 @@
-import { useUserStore } from '@/stores/user/user-store';
 import { useVideoErrorStore } from '@/stores/video/error-store';
+import { buildVideoSource, usePlaybackSessionStore } from '@/stores/video/playback-session-store';
 import { useVideoPlayerStore } from '@/stores/video/player-store';
 import { useVideoUIStore } from '@/stores/video/ui-store';
 import type { Channel } from '@/types/playlist.types';
-import type { ContentType } from '@/types/user.types';
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getVideoErrorInfo } from '../../types/video-error.types';
@@ -11,12 +10,9 @@ import { useVideoControls } from './use-video-controls';
 import { useVideoErrorHandling } from './use-video-error-handling';
 import { useVideoNetwork } from './use-video-network';
 import { useVideoPlayerState } from './use-video-player-state';
-import { useViewingHistory } from './use-viewing-history';
 
 interface UseVideoOrchestratorProps {
   channel: Channel;
-  playlistId: string;
-  contentType: ContentType;
   startPosition?: number;
   onStopVideo?: () => void;
   onRegisterStopFunction?: (stopFn: () => void) => void;
@@ -24,8 +20,6 @@ interface UseVideoOrchestratorProps {
 
 export function useVideoOrchestrator({
   channel,
-  playlistId,
-  contentType,
   startPosition,
   onStopVideo,
   onRegisterStopFunction,
@@ -34,10 +28,10 @@ export function useVideoOrchestrator({
   const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasAppliedStartPositionRef = useRef(false);
 
-  const userId = useUserStore((s) => s.currentUser?.id);
-
-  // Specialized hooks
-  const playerState = useVideoPlayerState({ channel });
+  // Specialized hooks. Viewing-history tracking is NOT here — it lives in
+  // PlaybackSessionHost so progress keeps recording while the session plays
+  // in the mini bar after this screen unmounts.
+  const playerState = useVideoPlayerState();
   const errorHandling = useVideoErrorHandling();
   const controls = useVideoControls();
   const network = useVideoNetwork();
@@ -46,18 +40,6 @@ export function useVideoOrchestrator({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isLive, setIsLive] = useState(false);
-
-  // Viewing history tracking
-  useViewingHistory({
-    userId,
-    playlistId,
-    channel,
-    contentType,
-    startPosition,
-    currentTime,
-    duration,
-    isPlaying: playerState.isPlaying,
-  });
 
   const seekTo = useCallback((time: number) => {
     if (playerState.player) {
@@ -130,6 +112,27 @@ export function useVideoOrchestrator({
     playerState.controls,
     controls.actions,
   ]);
+
+  // Snap a live stream back to the live edge. Reloads the source rather than
+  // seeking: live IPTV streams usually report no seekable duration, and a
+  // fresh load always reconnects at the live edge (and recovers a stalled or
+  // drifted stream). The statusChange listener drives the loading overlay off
+  // and auto-plays once the reloaded stream is ready.
+  const resyncToLive = useCallback(async () => {
+    const player = playerState.player;
+    if (!player) return;
+    playerState.setters.setIsLoading(true);
+    playerState.setters.setLoadingStage('connecting');
+    try {
+      await player.replaceAsync(buildVideoSource(channel));
+    } catch (error) {
+      console.warn('Error resyncing to live:', error);
+      playerState.setters.setIsLoading(false);
+      errorHandling.actions.handleError(
+        getVideoErrorInfo(error instanceof Error ? error : new Error(String(error)), 0)
+      );
+    }
+  }, [playerState.player, playerState.setters, errorHandling.actions, channel]);
 
   // Player status change handler
   useEffect(() => {
@@ -207,6 +210,22 @@ export function useVideoOrchestrator({
     };
   }, [playerState.player, playerState.setters, playerState.controls, errorHandling.actions, controls.actions, startPosition]);
 
+  // Adopt an already-running player (expanding from the mini bar): its
+  // statusChange event won't re-fire for a player that is already ready, so
+  // read the current state synchronously instead of waiting on the listener.
+  useEffect(() => {
+    const player = playerState.player;
+    if (!player || player.status !== 'readyToPlay') return;
+    playerState.setters.setIsLoading(false);
+    playerState.setters.setIsPlaying(player.playing);
+    setIsLive(player.isLive);
+    setCurrentTime(player.currentTime);
+    const d = player.duration;
+    if (isFinite(d) && d > 0) {
+      setDuration(d);
+    }
+  }, [playerState.player, playerState.setters]);
+
   // Network state monitoring for error recovery
   useEffect(() => {
     if (
@@ -232,6 +251,9 @@ export function useVideoOrchestrator({
     useCallback(() => {
       console.log('Focus effect setup');
       return () => {
+        // Backing out into the mini bar must keep playing — only pause when
+        // the screen loses focus with the session still in fullscreen mode.
+        if (usePlaybackSessionStore.getState().session?.mode === 'mini') return;
         console.log('Focus effect cleanup - pausing video');
         try {
           if (!isUnmountedRef.current && playerState.player) {
@@ -298,6 +320,7 @@ export function useVideoOrchestrator({
     pauseVideo: playerState.controls.pauseVideo,
     seekTo,
     retryPlayback,
+    resyncToLive,
     showControlsTemporarily: controls.actions.showControlsTemporarily,
     clearHideControlsTimeout: controls.actions.clearHideControlsTimeout,
     toggleControls: controls.actions.toggleControls,

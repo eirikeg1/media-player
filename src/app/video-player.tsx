@@ -13,8 +13,13 @@ import { getChannelId } from '@/lib/channel-utils';
 import { RustChannelService } from '@/services/rust-channel-service';
 import { useCastMiniPlayerStore } from '@/stores/video/cast-mini-player-store';
 import { useUserStore } from '@/stores/user/user-store';
+import { useVideoErrorStore } from '@/stores/video/error-store';
 import { useGestureStore } from '@/stores/video/gesture-store';
 import { useVideoNetworkStore } from '@/stores/video/network-store';
+import {
+  sessionMatches,
+  usePlaybackSessionStore,
+} from '@/stores/video/playback-session-store';
 import { useVideoPlayerStore } from '@/stores/video/player-store';
 import { usePlaybackQueueStore, type PlaybackQueueItem } from '@/stores/video/queue-store';
 import type { Channel } from '@/types/playlist.types';
@@ -47,6 +52,16 @@ export default function VideoPlayerScreen() {
   const iconColor = useThemeColor({}, 'icon');
   const stopVideoRef = useRef<(() => void) | null>(null);
 
+  // Whether the mini bar's session already plays this exact channel
+  // (expanding). Adopted launches reuse the session's channel and skip the
+  // resume prompt so playback continues seamlessly; consumed on first use so
+  // later in-screen channel switches behave normally.
+  const adoptedRef = useRef(
+    !!params.channelId &&
+      !!params.playlistId &&
+      sessionMatches(usePlaybackSessionStore.getState().session, params.channelId, params.playlistId)
+  );
+
   // Look up channel from route params
   const [channel, setChannel] = useState<Channel | null>(null);
   const [isLoadingChannel, setIsLoadingChannel] = useState(true);
@@ -56,18 +71,17 @@ export default function VideoPlayerScreen() {
   const [isResumeResolved, setIsResumeResolved] = useState(false);
   const [resumeDialogData, setResumeDialogData] = useState<{ position: number } | null>(null);
 
-  // Dismiss mini-player when this screen mounts (expanding from bar or new channel)
+  // Dismiss the cast mini bar when this screen mounts (expanding from bar or new channel)
   useEffect(() => {
     useCastMiniPlayerStore.getState().dismiss();
   }, []);
 
-  // Reset stores not covered by the orchestrator's unmount cleanup.
+  // Reset stores not covered by the orchestrator's unmount cleanup. The
+  // playback queue is NOT reset here — it belongs to the session (so
+  // next/previous survive minimize → expand) and resets in endSession.
   useEffect(() => {
     useVideoNetworkStore.getState().reset();
     useGestureStore.getState().reset();
-    return () => {
-      usePlaybackQueueStore.getState().reset();
-    };
   }, []);
 
   // Playback queue navigation
@@ -100,6 +114,14 @@ export default function VideoPlayerScreen() {
       return;
     }
 
+    // Expanding from the mini bar: the session already holds the channel.
+    const session = usePlaybackSessionStore.getState().session;
+    if (adoptedRef.current && session) {
+      setChannel(session.channel);
+      setIsLoadingChannel(false);
+      return;
+    }
+
     RustChannelService.getChannelById(params.playlistId, params.channelId)
       .then(setChannel)
       .catch((error) => {
@@ -111,6 +133,13 @@ export default function VideoPlayerScreen() {
   // Check for saved position to prompt resume
   useEffect(() => {
     if (!channel || isLoadingChannel) return;
+
+    // An adopted session is already at the right position — never re-prompt.
+    if (adoptedRef.current) {
+      adoptedRef.current = false;
+      setIsResumeResolved(true);
+      return;
+    }
 
     if (contentType === 'live') {
       setIsResumeResolved(true);
@@ -138,30 +167,62 @@ export default function VideoPlayerScreen() {
       });
   }, [channel, isLoadingChannel, contentType, params.playlistId]);
 
+  // Start (or adopt) the app-wide playback session once the channel and
+  // resume position are known. Also runs on in-screen channel switches
+  // (queue next/previous), replacing the session for the new channel.
+  useEffect(() => {
+    if (!channel || !isResumeResolved || !params.playlistId) return;
+    const store = usePlaybackSessionStore.getState();
+    if (sessionMatches(store.session, getChannelId(channel), params.playlistId)) {
+      store.expand();
+      return;
+    }
+    store.startSession({
+      channel,
+      playlistId: params.playlistId,
+      contentType,
+      fixture,
+      startPosition,
+    });
+  }, [channel, isResumeResolved, params.playlistId, contentType, fixture, startPosition]);
+
+  // The screen renders only once the session plays this channel, so the
+  // player is guaranteed to exist (and belong to this channel) below.
+  const sessionChannelKey = usePlaybackSessionStore((s) =>
+    s.session ? `${s.session.playlistId}:${getChannelId(s.session.channel)}` : null
+  );
+  const isSessionReady =
+    !!channel &&
+    !!params.playlistId &&
+    sessionChannelKey === `${params.playlistId}:${getChannelId(channel)}`;
+
+  // Leaving the screen: healthy local playback minimizes into the mini bar
+  // and keeps playing; casting hands off to the cast bar; a failed stream
+  // just stops.
+  const handleGoBack = useCallback(() => {
+    const isCasting = useVideoPlayerStore.getState().isCasting;
+    const sessionStore = usePlaybackSessionStore.getState();
+    if (isCasting && channel && params.playlistId) {
+      useCastMiniPlayerStore.getState().activate(channel, params.playlistId, contentType);
+      // The cast bar takes over — the idle local player isn't needed anymore.
+      sessionStore.endSession();
+    } else if (sessionStore.session && !useVideoErrorStore.getState().hasError) {
+      sessionStore.minimize();
+    } else {
+      stopVideoRef.current?.();
+      sessionStore.endSession();
+    }
+    router.back();
+  }, [router, channel, params.playlistId, contentType]);
+
   useLayoutEffect(() => {
     const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
-      const isCasting = useVideoPlayerStore.getState().isCasting;
-      if (isCasting && channel && params.playlistId) {
-        useCastMiniPlayerStore.getState().activate(channel, params.playlistId, contentType);
-      } else {
-        stopVideoRef.current?.();
-      }
-      router.back();
+      handleGoBack();
       return true;
     });
 
     return () => backHandler.remove();
-  }, [router, channel, params.playlistId, contentType]);
-
-  const handleGoBack = () => {
-    const isCasting = useVideoPlayerStore.getState().isCasting;
-    if (isCasting && channel && params.playlistId) {
-      useCastMiniPlayerStore.getState().activate(channel, params.playlistId, contentType);
-    } else {
-      stopVideoRef.current?.();
-    }
-    router.back();
-  };
+  }, [handleGoBack]);
 
   const handleStopVideo = () => {
     // This will be called when video stops
@@ -217,13 +278,20 @@ export default function VideoPlayerScreen() {
     );
   }
 
+  // One-frame gap while the session effect above starts/replaces the session.
+  if (!isSessionReady) {
+    return (
+      <ThemedView style={styles.container}>
+        <StatusBar hidden />
+      </ThemedView>
+    );
+  }
+
   return (
     <ThemedView style={styles.container}>
       <StatusBar hidden />
       <VideoPlayer
         channel={channel}
-        playlistId={params.playlistId}
-        contentType={contentType}
         startPosition={startPosition}
         onBack={handleGoBack}
         onStopVideo={handleStopVideo}

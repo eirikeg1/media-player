@@ -5,7 +5,7 @@ import { StyleSheet } from 'react-native';
 
 import { HapticTab } from '@/components/ui/controls/haptic-tab';
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
-import { CastMiniPlayerBar } from '@/features/video/components/cast-mini-player-bar';
+import { MiniPlayerBar } from '@/features/video/components/mini-player-bar';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors, GlassColors } from '@/lib/theme';
 import { useUserStore } from '@/stores/user/user-store';
@@ -19,7 +19,7 @@ export default function TabLayout() {
     <Tabs
       tabBar={(props) => (
         <>
-          <CastMiniPlayerBar />
+          <MiniPlayerBar />
           <BottomTabBar {...props} />
         </>
       )}

@@ -12,6 +12,7 @@ import '../global.css';
 import { useEffect } from 'react';
 
 import { AnimatedSplashLoader } from '@/components/ui/display/animated-splash-loader';
+import { PlaybackSessionHost } from '@/features/video/components/playback-session-host';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useEpgSync } from '@/hooks/use-epg-sync';
 import { usePlaylistInit } from '@/hooks/use-playlist-init';
@@ -69,6 +70,9 @@ export default function RootLayout() {
           </Stack>
           <StatusBar style="auto" />
           <PortalHost />
+          {/* Session-scoped bookkeeping (viewing history) that must survive
+              the video screen unmounting into the mini player bar. */}
+          <PlaybackSessionHost />
           <AnimatedSplashLoader />
         </GestureHandlerRootView>
       </SafeAreaProvider>

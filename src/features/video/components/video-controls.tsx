@@ -35,6 +35,8 @@ interface VideoControlsProps {
   fixture?: Fixture | null;
   /** Open the SofaScore match widget overlay. */
   onShowMatchInfo?: () => void;
+  /** Reload a live stream at the live edge (only passed for live streams). */
+  onResync?: () => void;
 }
 
 export function VideoControls({
@@ -58,6 +60,7 @@ export function VideoControls({
   hasNavigation = false,
   fixture,
   onShowMatchInfo,
+  onResync,
 }: VideoControlsProps) {
   const score = fixture ? getFixtureScoreDisplay(fixture) : null;
   const iconColor = useThemeColor({}, 'icon');
@@ -221,6 +224,36 @@ export function VideoControls({
                   </ThemedText>
                 </View>
                 <IconSymbol name="chevron.up" size={16} color={textColor} />
+              </TouchableOpacity>
+            </View>
+          )}
+          {isLive && onResync && !isLoading && (
+            // Live streams have no seek bar; offer a resync that reconnects
+            // the stream at the live edge instead.
+            <View className="items-center" style={{ marginBottom: 8 }} pointerEvents="box-none">
+              <TouchableOpacity
+                className="flex-row items-center"
+                style={{
+                  gap: 8,
+                  paddingVertical: 7,
+                  paddingHorizontal: 14,
+                  backgroundColor: buttonBackground,
+                  borderRadius: 18,
+                }}
+                onPress={() => {
+                  onClearTimeout();
+                  onResync();
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Resync to live"
+              >
+                <View
+                  style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#FF3B30' }}
+                />
+                <ThemedText style={{ color: textColor, fontWeight: '600', fontSize: 13 }}>
+                  Resync to live
+                </ThemedText>
+                <IconSymbol name="arrow.clockwise" size={15} color={textColor} />
               </TouchableOpacity>
             </View>
           )}

@@ -232,5 +232,9 @@ export function useCastPlayback({ channel }: UseCastPlaybackProps) {
     }
   }, [client, castState, channel, castMedia]);
 
-  return { castMedia, toggleCastPlayPause, isCastPlaying };
+  // Reload the current channel on the receiver, which reconnects it at the
+  // live edge (the cast counterpart of the local player's resyncToLive).
+  const resyncCastToLive = useCallback(() => castMedia(channel), [castMedia, channel]);
+
+  return { castMedia, toggleCastPlayPause, isCastPlaying, resyncCastToLive };
 }

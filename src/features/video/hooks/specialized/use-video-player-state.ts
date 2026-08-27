@@ -1,7 +1,5 @@
-import { useVideoPlayerStore } from '@/stores/video/player-store';
-import type { Channel } from '@/types/playlist.types';
-import { useVideoPlayer, type VideoSource } from 'expo-video';
-import { useCallback, useEffect, useMemo, useReducer } from 'react';
+import { usePlaybackSessionStore } from '@/stores/video/playback-session-store';
+import { useCallback, useMemo, useReducer } from 'react';
 
 type LoadingStage = 'connecting' | 'buffering' | 'preparing';
 
@@ -41,40 +39,14 @@ function reducer(state: LocalPlayerState, action: Action): LocalPlayerState {
   }
 }
 
-interface UseVideoPlayerStateProps {
-  channel: Channel;
-}
-
-export function useVideoPlayerState({ channel }: UseVideoPlayerStateProps) {
+export function useVideoPlayerState() {
   const [state, dispatch] = useReducer(reducer, initialState);
-  const setPlayer = useVideoPlayerStore((s) => s.setPlayer);
 
-  // Forward the channel's HTTP headers (User-Agent / Referer) to the native
-  // player. Many IPTV streams are header-gated and reject the default player
-  // User-Agent with an IOException when these aren't sent.
-  const videoSource = useMemo<VideoSource>(() => {
-    const headers: Record<string, string> = {};
-    if (channel.http?.userAgent) headers['User-Agent'] = channel.http.userAgent;
-    if (channel.http?.referrer) headers['Referer'] = channel.http.referrer;
-    return Object.keys(headers).length > 0 ? { uri: channel.url, headers } : { uri: channel.url };
-  }, [channel.url, channel.http?.userAgent, channel.http?.referrer]);
-
-  const videoPlayer = useVideoPlayer(videoSource, (player) => {
-    player.loop = false;
-    player.muted = false;
-    player.timeUpdateEventInterval = 0.5;
-    setPlayer(player);
-  });
-
-  useEffect(() => {
-    return () => {
-      if (videoPlayer) {
-        void videoPlayer.replaceAsync(null).catch((error) => {
-          console.warn('Error unloading video source during cleanup:', error);
-        });
-      }
-    };
-  }, [videoPlayer]);
+  // The player is owned by the app-wide playback session (started by the
+  // video screen route, released only when the session ends), so playback
+  // survives this screen unmounting into the mini player bar. The screen
+  // only presents and controls it.
+  const videoPlayer = usePlaybackSessionStore((s) => s.session?.player ?? null);
 
   // Reads videoPlayer.playing (the native source of truth) so this callback's
   // deps don't include React's mirrored `isPlaying`. That keeps `controls`
