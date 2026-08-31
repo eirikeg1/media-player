@@ -4,8 +4,8 @@ import type { Fixture } from 'expo-m3u-parser';
  * Helpers for the SofaScore match overlay.
  *
  * Every tab is now rendered natively from the SofaScore API (team statistics,
- * player ratings, the lineups pitch, the incident timeline and the head-to-head
- * preview) — there is no embedded WebView. Only fixtures sourced from SofaScore
+ * the lineups pitch with player ratings, the incident timeline and the
+ * head-to-head preview) — there is no embedded WebView. Only fixtures sourced from SofaScore
  * expose a usable event id, so the overlay is gated on the provider:
  * `Fixture.providerId` is the SofaScore event id.
  */
@@ -13,7 +13,7 @@ import type { Fixture } from 'expo-m3u-parser';
 const SOFASCORE_PROVIDER = 'sofascore';
 
 /** The tabs shown in the match overlay; each is rendered natively. */
-export type MatchTabKind = 'stats' | 'players' | 'timeline' | 'lineups' | 'preview';
+export type MatchTabKind = 'stats' | 'timeline' | 'lineups' | 'preview';
 
 export interface MatchTab {
   /** Stable key used for tab selection and content switching. */
@@ -86,14 +86,13 @@ export function isMatchConcluded(status: string): boolean {
  */
 export function buildMatchTabs(fixture: Fixture): MatchTab[] {
   const stats: MatchTab = { key: 'stats', label: 'Stats' };
-  const players: MatchTab = { key: 'players', label: 'Players' };
   const timeline: MatchTab = { key: 'timeline', label: 'Timeline' };
   const preview: MatchTab = { key: 'preview', label: 'Form & H2H' };
   const lineups: MatchTab = { key: 'lineups', label: 'Lineups' };
 
   return matchHasStarted(fixture)
-    ? [stats, players, timeline, lineups, preview]
-    : [preview, lineups, stats, players, timeline];
+    ? [stats, timeline, lineups, preview]
+    : [preview, lineups, stats, timeline];
 }
 
 export interface FixtureScoreDisplay {

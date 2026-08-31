@@ -835,6 +835,22 @@ export class SportsDatabase {
   }
 
   /** Merge/dedup/sort happens in Rust; over seeded fixtures a filtered sort is equivalent. */
+  async getFixturesForDate(
+    _date: string,
+    fromTs: number,
+    toTs: number,
+    _maxAgeSecs: number,
+  ): Promise<Fixture[]> {
+    return this.__fixtures
+      .filter((f) => f.kickoffTime >= fromTs && f.kickoffTime <= toTs)
+      .sort((a, b) => a.kickoffTime - b.kickoffTime);
+  }
+
+  /** Returns the number of live fixtures refreshed; the fake never fetches. */
+  async refreshLiveFixtures(): Promise<number> {
+    return 0;
+  }
+
   async getFixturesForTeams(
     teamIds: number[],
     _from: string,
@@ -866,6 +882,9 @@ export class SportsDatabase {
   async findBroadcastsForFixture(): Promise<never[]> {
     return [];
   }
+
+  /** The staleness marks live in the Rust cache; the fake has nothing to age. */
+  async invalidateSportsCaches(): Promise<void> {}
 
   async getAllCachedCompetitionTeams(): Promise<TeamSearchResult[]> {
     return [];

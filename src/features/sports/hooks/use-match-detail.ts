@@ -9,6 +9,7 @@ import type {
 } from 'expo-m3u-parser';
 import { useEffect, useRef, useState } from 'react';
 
+import { TTL_LIVE_SECS } from '../match-detail-cache-policy';
 import { isMatchConcluded } from '../match-widgets';
 
 export interface MatchDataState<T> {
@@ -34,6 +35,10 @@ function errorMessage(err: unknown): string {
  * Once a section loads for an event it is remembered, so flipping back to its
  * tab shows the cached result instantly instead of refetching.
  *
+ * `ttlSecs` is how stale the *native* cache may be (see
+ * `match-detail-cache-policy`), and that cache is what survives the overlay
+ * closing: the in-memory memo above only lives as long as this hook.
+ *
  * When `pollMs > 0` (live matches) the active section silently refreshes on that
  * interval — no spinner, and a failed refresh keeps the last good data — so the
  * numbers stay current without hammering the API: only the visible tab polls,
@@ -42,8 +47,9 @@ function errorMessage(err: unknown): string {
 function useLazyMatchData<T>(
   eventId: number | undefined,
   enabled: boolean,
-  fetcher: (db: SportsDatabase, id: number) => Promise<T>,
-  pollMs: number
+  fetcher: (db: SportsDatabase, id: number, ttlSecs: number) => Promise<T>,
+  pollMs: number,
+  ttlSecs: number
 ): MatchDataState<T> {
   const [state, setState] = useState<MatchDataState<T>>({ isLoading: false });
   const requestRef = useRef(0);
@@ -64,7 +70,7 @@ function useLazyMatchData<T>(
       if (!silent) setState({ isLoading: true });
       try {
         const db = await getSportsDatabase();
-        const data = await fetcher(db, eventId);
+        const data = await fetcher(db, eventId, ttlSecs);
         if (cancelled || requestId !== requestRef.current) return;
         loadedEventRef.current = eventId;
         setState({ data, isLoading: false });
@@ -89,7 +95,7 @@ function useLazyMatchData<T>(
       cancelled = true;
       clearInterval(interval);
     };
-  }, [eventId, enabled, fetcher, pollMs]);
+  }, [eventId, enabled, fetcher, pollMs, ttlSecs]);
 
   // The fetch effect only flips `isLoading` after the first commit, so an
   // enabled section that hasn't produced data or an error yet reports loading
@@ -102,23 +108,36 @@ function useLazyMatchData<T>(
 
 // Module-level fetchers keep a stable identity across renders so the effect
 // above doesn't re-run on every render.
-const fetchStatistics = (db: SportsDatabase, id: number) => db.getMatchStatistics(id);
-const fetchPlayers = (db: SportsDatabase, id: number) => db.getMatchPlayers(id);
-const fetchTimeline = (db: SportsDatabase, id: number) => db.getMatchTimeline(id);
-const fetchPreview = (db: SportsDatabase, id: number) => db.getMatchPreview(id);
+const fetchStatistics = (db: SportsDatabase, id: number, ttl: number) =>
+  db.getMatchStatistics(id, ttl);
+const fetchPlayers = (db: SportsDatabase, id: number, ttl: number) => db.getMatchPlayers(id, ttl);
+const fetchTimeline = (db: SportsDatabase, id: number, ttl: number) => db.getMatchTimeline(id, ttl);
+const fetchPreview = (db: SportsDatabase, id: number, ttl: number) => db.getMatchPreview(id, ttl);
 
-export const useMatchStatistics = (eventId: number | undefined, enabled: boolean, pollMs = 0) =>
-  useLazyMatchData<MatchStatistics>(eventId, enabled, fetchStatistics, pollMs);
+export const useMatchStatistics = (
+  eventId: number | undefined,
+  enabled: boolean,
+  pollMs: number,
+  ttlSecs: number
+) => useLazyMatchData<MatchStatistics>(eventId, enabled, fetchStatistics, pollMs, ttlSecs);
 
-export const useMatchPlayers = (eventId: number | undefined, enabled: boolean, pollMs = 0) =>
-  useLazyMatchData<MatchPlayers>(eventId, enabled, fetchPlayers, pollMs);
+export const useMatchPlayers = (
+  eventId: number | undefined,
+  enabled: boolean,
+  pollMs: number,
+  ttlSecs: number
+) => useLazyMatchData<MatchPlayers>(eventId, enabled, fetchPlayers, pollMs, ttlSecs);
 
-export const useMatchTimeline = (eventId: number | undefined, enabled: boolean, pollMs = 0) =>
-  useLazyMatchData<MatchTimeline>(eventId, enabled, fetchTimeline, pollMs);
+export const useMatchTimeline = (
+  eventId: number | undefined,
+  enabled: boolean,
+  pollMs: number,
+  ttlSecs: number
+) => useLazyMatchData<MatchTimeline>(eventId, enabled, fetchTimeline, pollMs, ttlSecs);
 
 // The pre-match preview (form + H2H) doesn't change during play, so it never polls.
-export const useMatchPreview = (eventId: number | undefined, enabled: boolean) =>
-  useLazyMatchData<MatchPreview>(eventId, enabled, fetchPreview, 0);
+export const useMatchPreview = (eventId: number | undefined, enabled: boolean, ttlSecs: number) =>
+  useLazyMatchData<MatchPreview>(eventId, enabled, fetchPreview, 0, ttlSecs);
 
 /**
  * Poll just the scoreline + status of a match. Fetches immediately and then
@@ -127,6 +146,12 @@ export const useMatchPreview = (eventId: number | undefined, enabled: boolean) =
  * stops itself for good once the match concludes. Returns `null` until the
  * first response; a failed poll keeps the previous value. Callers merge this
  * over the fixture they already hold so the displayed score stays current.
+ *
+ * Every poll reads through the native cache at {@link TTL_LIVE_SECS} rather
+ * than the fixture's own policy TTL: this hook runs precisely while the match
+ * can still change state, and catching kickoff is the whole point — a longer
+ * lifetime would leave the header showing "not started" minutes into the game.
+ * It is one cheap request, and only while an overlay or the player is open.
  */
 export function useLiveMatchScore(eventId: number | undefined, enabled: boolean): MatchScore | null {
   const [score, setScore] = useState<MatchScore | null>(null);
@@ -143,7 +168,7 @@ export function useLiveMatchScore(eventId: number | undefined, enabled: boolean)
     const fetchScore = async () => {
       try {
         const db = await getSportsDatabase();
-        const next = await db.getMatchScore(eventId);
+        const next = await db.getMatchScore(eventId, TTL_LIVE_SECS);
         if (cancelled) return;
         setScore(next);
         // The match ended while we were watching — stop polling. A merely

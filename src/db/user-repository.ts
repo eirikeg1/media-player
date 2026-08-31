@@ -5,6 +5,8 @@ import type {
     CreateUserInput,
     GroupWatchStats,
     RecentlyWatchedItem,
+    SportsBackgroundRefresh,
+    SportsRefreshMode,
     UpdateUserInput,
     User,
     UserSettings,
@@ -95,6 +97,45 @@ interface UserRow {
   lastActiveAt: string | null;
 }
 
+/** Parse the JSON array of competition ids stored in `sportsLeagueOrder`. */
+function parseLeagueOrder(raw: string | null): number[] | undefined {
+  if (!raw) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.every((id) => typeof id === 'number')) {
+      return parsed;
+    }
+  } catch {
+    // Corrupt value — fall back to the default order.
+  }
+  return undefined;
+}
+
+const REFRESH_MODES: readonly SportsRefreshMode[] = ['off', 'interval', 'daily', 'night'];
+
+/** Parse the JSON object stored in `sportsBackgroundRefresh`. */
+function parseBackgroundRefresh(raw: string | null): SportsBackgroundRefresh | undefined {
+  if (!raw) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const { mode, intervalHours, dailyTime, refreshOnOpen } = parsed as Record<string, unknown>;
+      if (
+        REFRESH_MODES.includes(mode as SportsRefreshMode) &&
+        typeof intervalHours === 'number' &&
+        Number.isFinite(intervalHours) &&
+        typeof dailyTime === 'string' &&
+        typeof refreshOnOpen === 'boolean'
+      ) {
+        return { mode: mode as SportsRefreshMode, intervalHours, dailyTime, refreshOnOpen };
+      }
+    }
+  } catch {
+    // Corrupt value — fall back to the default schedule.
+  }
+  return undefined;
+}
+
 interface UserSettingsRow {
   userId: string;
   theme: string;
@@ -113,6 +154,9 @@ interface UserSettingsRow {
   privateModeExpiresAt: string | null;
   shareUploadedBackgrounds: number;
   sportsCountry: string | null;
+  sportsLeagueOrder: string | null;
+  sportsHideOtherLeagues: number;
+  sportsBackgroundRefresh: string | null;
 }
 
 interface UserFavoriteChannelRow {
@@ -240,6 +284,9 @@ class SQLiteUserRepository implements IUserRepository {
       privateModeExpiresAt: row.privateModeExpiresAt || undefined,
       shareUploadedBackgrounds: row.shareUploadedBackgrounds === 1,
       sportsCountry: row.sportsCountry || undefined,
+      sportsLeagueOrder: parseLeagueOrder(row.sportsLeagueOrder),
+      sportsHideOtherLeagues: row.sportsHideOtherLeagues === 1,
+      sportsBackgroundRefresh: parseBackgroundRefresh(row.sportsBackgroundRefresh),
     };
   }
 
@@ -301,8 +348,8 @@ class SQLiteUserRepository implements IUserRepository {
 
       // Insert default settings
       await tx.runAsync(
-        `INSERT INTO user_settings (userId, theme, language, defaultQuality, defaultSubtitles, activePlaylistId, channelSortBy, parentalControlEnabled, parentalControlPin, showHomeTab, showLiveTab, showVideosTab, showSportsTab, playlistSharingEnabled, privateModeExpiresAt, shareUploadedBackgrounds, sportsCountry)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO user_settings (userId, theme, language, defaultQuality, defaultSubtitles, activePlaylistId, channelSortBy, parentalControlEnabled, parentalControlPin, showHomeTab, showLiveTab, showVideosTab, showSportsTab, playlistSharingEnabled, privateModeExpiresAt, shareUploadedBackgrounds, sportsCountry, sportsLeagueOrder, sportsHideOtherLeagues, sportsBackgroundRefresh)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           userId,
           DEFAULT_USER_SETTINGS.theme,
@@ -320,6 +367,9 @@ class SQLiteUserRepository implements IUserRepository {
           DEFAULT_USER_SETTINGS.playlistSharingEnabled ? 1 : 0,
           null,
           DEFAULT_USER_SETTINGS.shareUploadedBackgrounds ? 1 : 0,
+          null,
+          null,
+          DEFAULT_USER_SETTINGS.sportsHideOtherLeagues ? 1 : 0,
           null,
         ]
       );
@@ -430,7 +480,8 @@ class SQLiteUserRepository implements IUserRepository {
        SET theme = ?, language = ?, defaultQuality = ?, defaultSubtitles = ?, activePlaylistId = ?,
            channelSortBy = ?, parentalControlEnabled = ?, parentalControlPin = ?,
            showHomeTab = ?, showLiveTab = ?, showVideosTab = ?, showSportsTab = ?, playlistSharingEnabled = ?,
-           privateModeExpiresAt = ?, shareUploadedBackgrounds = ?, sportsCountry = ?
+           privateModeExpiresAt = ?, shareUploadedBackgrounds = ?, sportsCountry = ?,
+           sportsLeagueOrder = ?, sportsHideOtherLeagues = ?, sportsBackgroundRefresh = ?
        WHERE userId = ?`,
       [
         updated.theme,
@@ -449,6 +500,9 @@ class SQLiteUserRepository implements IUserRepository {
         updated.privateModeExpiresAt || null,
         updated.shareUploadedBackgrounds ? 1 : 0,
         updated.sportsCountry || null,
+        updated.sportsLeagueOrder ? JSON.stringify(updated.sportsLeagueOrder) : null,
+        updated.sportsHideOtherLeagues ? 1 : 0,
+        updated.sportsBackgroundRefresh ? JSON.stringify(updated.sportsBackgroundRefresh) : null,
         userId,
       ]
     );

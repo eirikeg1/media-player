@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import type { MatchPlayers, PlayerEntry, TeamLineup } from 'expo-m3u-parser';
 import { memo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -7,6 +8,8 @@ import {
   AWAY_COLOR,
   HOME_COLOR,
   MUTED,
+  playerImageUrl,
+  playerInitials,
   PlayerStatsSheet,
   RatingBadge,
   ratingColor,
@@ -51,6 +54,8 @@ export const MatchLineupsTab = memo(function MatchLineupsTab({
   const onSelect = (player: PlayerEntry, label: string, accent: string) =>
     setSelected({ player, label, accent });
 
+  const motm = bestPlayer(players, homeLabel, awayLabel);
+
   return (
     <View style={styles.fill}>
       <ScrollView
@@ -58,6 +63,12 @@ export const MatchLineupsTab = memo(function MatchLineupsTab({
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
+        {motm && (
+          <PlayerOfTheMatch
+            best={motm}
+            onPress={() => onSelect(motm.player, motm.teamLabel, motm.accent)}
+          />
+        )}
         <FormationHeader
           home={players.home}
           away={players.away}
@@ -91,6 +102,63 @@ export const MatchLineupsTab = memo(function MatchLineupsTab({
     </View>
   );
 });
+
+interface BestPlayer {
+  player: PlayerEntry;
+  teamLabel: string;
+  accent: string;
+}
+
+/**
+ * The highest-rated player across both sides — the payload's closest thing to a
+ * "player of the match". Null until ratings exist (i.e. before kickoff).
+ */
+function bestPlayer(
+  players: MatchPlayers,
+  homeLabel: string,
+  awayLabel: string
+): BestPlayer | null {
+  let best: BestPlayer | null = null;
+  let bestRating = -Infinity;
+  const consider = (list: PlayerEntry[], teamLabel: string, accent: string) => {
+    for (const player of list) {
+      if (player.rating == null || player.rating <= bestRating) continue;
+      best = { player, teamLabel, accent };
+      bestRating = player.rating;
+    }
+  };
+  consider(players.home.players, homeLabel, HOME_COLOR);
+  consider(players.away.players, awayLabel, AWAY_COLOR);
+  return best;
+}
+
+function PlayerOfTheMatch({ best, onPress }: { best: BestPlayer; onPress: () => void }) {
+  const { player } = best;
+  return (
+    <TouchableOpacity
+      style={styles.motmCard}
+      onPress={onPress}
+      activeOpacity={0.6}
+      accessibilityRole="button"
+      accessibilityLabel={`${player.name} stats`}
+    >
+      <Text style={styles.motmStar}>★</Text>
+      <View style={styles.motmInfo}>
+        <Text style={styles.motmCaption}>Player of the match</Text>
+        <Text style={styles.motmName} numberOfLines={1}>
+          {player.name}
+        </Text>
+        <View style={styles.motmTeamRow}>
+          <View style={[styles.teamDot, { backgroundColor: best.accent }]} />
+          <Text style={styles.motmTeam} numberOfLines={1}>
+            {best.teamLabel}
+          </Text>
+        </View>
+      </View>
+      {player.rating != null && <RatingBadge rating={player.rating} />}
+    </TouchableOpacity>
+  );
+}
 
 function FormationHeader({
   home,
@@ -191,10 +259,13 @@ function TeamHalf({
 }) {
   return (
     <View style={[styles.half, { flexDirection: horizontal ? 'row' : 'column' }]}>
+      {/* The landscape pitch is the portrait one rotated 90° CCW (top → left),
+        * so a left→right portrait line must run bottom→top — a plain column
+        * would mirror the pitch and swap every player's flank. */}
       {rows.map((line, index) => (
         <View
           key={index}
-          style={[styles.line, { flexDirection: horizontal ? 'column' : 'row' }]}
+          style={[styles.line, { flexDirection: horizontal ? 'column-reverse' : 'row' }]}
         >
           {line.map((player) => (
             <PlayerNode
@@ -219,6 +290,10 @@ function PlayerNode({
   accent: string;
   onPress: () => void;
 }) {
+  // The portrait is layered over the initials, so the accent circle shows while
+  // the photo loads and stays put if SofaScore has no headshot for the player.
+  const [imageFailed, setImageFailed] = useState(false);
+
   return (
     <TouchableOpacity
       style={styles.node}
@@ -228,7 +303,16 @@ function PlayerNode({
       accessibilityLabel={`${player.name} stats`}
     >
       <View style={[styles.jersey, { backgroundColor: accent }]}>
-        <Text style={styles.jerseyNumber}>{player.jerseyNumber ?? ''}</Text>
+        <Text style={styles.jerseyInitials}>{playerInitials(player.name)}</Text>
+        {!imageFailed && (
+          <Image
+            source={{ uri: playerImageUrl(player.id) }}
+            style={styles.portrait}
+            contentFit="cover"
+            transition={120}
+            onError={() => setImageFailed(true)}
+          />
+        )}
         {player.captain && (
           <View style={styles.captainBadge}>
             <Text style={styles.captainText}>C</Text>
@@ -240,9 +324,14 @@ function PlayerNode({
           </View>
         )}
       </View>
-      <Text style={styles.nodeName} numberOfLines={1}>
-        {displayName(player)}
-      </Text>
+      <View style={styles.nodeLabel}>
+        {player.jerseyNumber != null && (
+          <Text style={styles.nodeNumber}>{player.jerseyNumber}</Text>
+        )}
+        <Text style={styles.nodeName} numberOfLines={1}>
+          {displayName(player)}
+        </Text>
+      </View>
     </TouchableOpacity>
   );
 }
@@ -379,6 +468,45 @@ const styles = StyleSheet.create({
     gap: 16,
     paddingBottom: 28,
   },
+  motmCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: 'rgba(255, 200, 0, 0.10)',
+    borderColor: 'rgba(255, 200, 0, 0.35)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+    padding: 12,
+  },
+  motmStar: {
+    color: '#FFC800',
+    fontSize: 24,
+  },
+  motmInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  motmCaption: {
+    color: '#FFC800',
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  motmName: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  motmTeamRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  motmTeam: {
+    color: MUTED,
+    fontSize: 12,
+  },
   formationRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -447,10 +575,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.6)',
   },
-  jerseyNumber: {
+  jerseyInitials: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '800',
+  },
+  // Clipped to the circle itself: the jersey keeps its badges overhanging, so
+  // it cannot clip its own children.
+  portrait: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 17,
   },
   captainBadge: {
     position: 'absolute',
@@ -484,12 +618,29 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '800',
   },
+  nodeLabel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+    marginTop: 5,
+    maxWidth: 58,
+  },
+  nodeNumber: {
+    minWidth: 10,
+    color: MUTED,
+    fontSize: 10,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+    textAlign: 'right',
+    textShadowColor: 'rgba(0, 0, 0, 0.6)',
+    textShadowRadius: 2,
+  },
   nodeName: {
+    flexShrink: 1,
     color: '#FFFFFF',
     fontSize: 10,
     fontWeight: '600',
-    marginTop: 5,
-    maxWidth: 58,
     textAlign: 'center',
     textShadowColor: 'rgba(0, 0, 0, 0.6)',
     textShadowRadius: 2,
@@ -561,7 +712,8 @@ const styles = StyleSheet.create({
     color: MUTED,
     fontSize: 12,
     fontWeight: '600',
-    textAlign: 'center',
+    fontVariant: ['tabular-nums'],
+    textAlign: 'right',
   },
   subName: {
     flex: 1,

@@ -7,10 +7,7 @@ import type { Competition } from 'expo-m3u-parser';
 import { memo, useCallback, useMemo } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 
-import {
-  INTERNATIONAL_COMPETITION_IDS,
-  TOP_COMPETITION_IDS,
-} from './competition-groups';
+import { groupCompetitions } from './competition-groups';
 
 interface CompetitionGridProps {
   competitions: Competition[];
@@ -36,17 +33,10 @@ export const CompetitionGrid = memo(function CompetitionGrid({
 
   const cardWidth = (screenWidth - HORIZONTAL_PADDING * 2 - GAP * (COLUMNS - 1)) / COLUMNS;
 
-  const { topComps, internationalComps } = useMemo(() => {
-    const orderBy = (ids: readonly number[]) =>
-      [...competitions]
-        .filter((c) => (ids as readonly number[]).includes(c.providerId))
-        .sort((a, b) => ids.indexOf(a.providerId) - ids.indexOf(b.providerId));
-
-    return {
-      topComps: orderBy(TOP_COMPETITION_IDS),
-      internationalComps: orderBy(INTERNATIONAL_COMPETITION_IDS),
-    };
-  }, [competitions]);
+  const { top: topComps, international: internationalComps } = useMemo(
+    () => groupCompetitions(competitions),
+    [competitions]
+  );
 
   const surface = isDark ? GlassColors.dark.surface : GlassColors.light.surface;
   const border = isDark ? GlassColors.dark.border : GlassColors.light.border;
@@ -116,7 +106,7 @@ export const CompetitionGrid = memo(function CompetitionGrid({
         </ThemedText>
       </Pressable>
 
-      {/* Top 6 grid */}
+      {/* Domestic leagues */}
       <View style={styles.grid}>
         {topComps.map(renderCard)}
       </View>

@@ -41,6 +41,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   plugins: [
     "expo-router",
+    // Adds the iOS `processing` background mode and the BGTaskScheduler
+    // identifier the module schedules under — required for the sports
+    // background refresh task (see src/features/sports/background/).
+    "expo-background-task",
     [
       "expo-splash-screen",
       {

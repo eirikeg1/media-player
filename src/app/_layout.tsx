@@ -8,10 +8,16 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import 'react-native-reanimated';
 import '../global.css';
+// Side-effect import: defines the sports background-refresh task. The
+// definition has to run in global scope on every launch — including the
+// headless one the OS starts for a wake — or the OS finds no executor for the
+// registered task name.
+import '@/features/sports/background/expo-scheduler';
 
 import { useEffect } from 'react';
 
 import { AnimatedSplashLoader } from '@/components/ui/display/animated-splash-loader';
+import { useBackgroundRefresh } from '@/features/sports/background/use-background-refresh';
 import { PlaybackSessionHost } from '@/features/video/components/playback-session-host';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useEpgSync } from '@/hooks/use-epg-sync';
@@ -34,6 +40,9 @@ export default function RootLayout() {
 
   // Start periodic EPG sync scheduler
   useEpgSync();
+
+  // Keep the sports background refresh registered with the OS
+  useBackgroundRefresh();
 
   // Safety timeout: reveal the UI after 10s no matter what
   useEffect(() => {

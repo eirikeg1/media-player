@@ -4,6 +4,7 @@ import { PlaylistManager } from '@/features/playlist';
 import { AppPreferences } from '@/features/user/app-preferences';
 import { HistorySettings } from '@/features/user/history-settings';
 import { UserSettings } from '@/features/user/user-settings';
+import { SportsPreferences } from '@/features/sports/sports-preferences';
 import { ThemeSettings } from '@/features/theme/theme-settings';
 import ParallaxScrollView from '@/components/ui/containers/parallax-scroll-view';
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
@@ -38,6 +39,11 @@ export default function SettingsScreen() {
       {/* App Preferences Section */}
       <ThemedView>
         <AppPreferences />
+      </ThemedView>
+
+      {/* Sports Section */}
+      <ThemedView>
+        <SportsPreferences />
       </ThemedView>
 
       {/* Theme Customization Section */}

@@ -97,24 +97,23 @@ describe('isMatchConcluded', () => {
 describe('buildMatchTabs', () => {
   it('leads with statistics for a started match', () => {
     const tabs = buildMatchTabs(makeFixture({ status: 'in_progress' }));
-    expect(tabs.map((t) => t.key)).toEqual(['stats', 'players', 'timeline', 'lineups', 'preview']);
+    expect(tabs.map((t) => t.key)).toEqual(['stats', 'timeline', 'lineups', 'preview']);
   });
 
   it('leads with the preview before kickoff', () => {
     const tabs = buildMatchTabs(makeFixture({ status: 'scheduled' }));
-    expect(tabs.map((t) => t.key)).toEqual(['preview', 'lineups', 'stats', 'players', 'timeline']);
+    expect(tabs.map((t) => t.key)).toEqual(['preview', 'lineups', 'stats', 'timeline']);
   });
 
   it('leads with the preview for postponed matches (the in-play tabs are empty)', () => {
     const tabs = buildMatchTabs(makeFixture({ status: 'postponed' }));
-    expect(tabs.map((t) => t.key)).toEqual(['preview', 'lineups', 'stats', 'players', 'timeline']);
+    expect(tabs.map((t) => t.key)).toEqual(['preview', 'lineups', 'stats', 'timeline']);
   });
 
-  it('always includes the five native tabs', () => {
+  it('always includes the four native tabs', () => {
     const tabs = buildMatchTabs(makeFixture());
     expect([...tabs.map((t) => t.key)].sort()).toEqual([
       'lineups',
-      'players',
       'preview',
       'stats',
       'timeline',

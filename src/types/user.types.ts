@@ -13,6 +13,36 @@ export interface User {
 }
 
 /**
+ * How often sports data is refreshed without the user asking.
+ *
+ * - `off`: never refresh in the background.
+ * - `interval`: every {@link SportsBackgroundRefresh.intervalHours} hours.
+ * - `daily`: once a day at {@link SportsBackgroundRefresh.dailyTime}.
+ * - `night`: once per night, inside the quiet window.
+ */
+export type SportsRefreshMode = 'off' | 'interval' | 'daily' | 'night';
+
+/** Sports background-refresh preference. */
+export interface SportsBackgroundRefresh {
+  mode: SportsRefreshMode;
+  /** Hours between runs in 'interval' mode. */
+  intervalHours: number;
+  /** "HH:MM" local time for 'daily' mode. */
+  dailyTime: string;
+  /** Refresh in the foreground when the app becomes active and data is stale. */
+  refreshOnOpen: boolean;
+}
+
+export const DEFAULT_SPORTS_BACKGROUND_REFRESH: SportsBackgroundRefresh = {
+  // Nightly by default: the schedule rarely changes more than daily, and the
+  // 02-06 window tends to coincide with charging + idle.
+  mode: 'night',
+  intervalHours: 4,
+  dailyTime: '07:00',
+  refreshOnOpen: true,
+};
+
+/**
  * User preferences and settings
  */
 export interface UserSettings {
@@ -33,6 +63,12 @@ export interface UserSettings {
   privateModeExpiresAt?: string;
   shareUploadedBackgrounds: boolean;
   sportsCountry?: string;
+  /** SofaScore unique-tournament ids in the user's preferred display order. */
+  sportsLeagueOrder?: number[];
+  /** Hide competitions that are not in `sportsLeagueOrder` from the matches list. */
+  sportsHideOtherLeagues: boolean;
+  /** When sports data refreshes on its own. Absent = {@link DEFAULT_SPORTS_BACKGROUND_REFRESH}. */
+  sportsBackgroundRefresh?: SportsBackgroundRefresh;
 }
 
 /**
@@ -204,4 +240,5 @@ export const DEFAULT_USER_SETTINGS: Omit<UserSettings, 'userId'> = {
   showSportsTab: true,
   playlistSharingEnabled: true,
   shareUploadedBackgrounds: true,
+  sportsHideOtherLeagues: false,
 };

@@ -358,7 +358,8 @@ const gridStyles = StyleSheet.create({
   },
 });
 
-function initials(name: string): string {
+/** Two-letter fallback shown while (or instead of) a player's portrait. */
+export function playerInitials(name: string): string {
   const parts = name.trim().split(/\s+/);
   const first = parts[0]?.[0] ?? '';
   const last = parts.length > 1 ? parts[parts.length - 1][0] : '';
@@ -383,9 +384,9 @@ export function PlayerStatsSheet({
 }) {
   const [imageFailed, setImageFailed] = useState(false);
   const stats = buildPlayerStats(player);
-  const meta = [player.position, player.jerseyNumber ? `#${player.jerseyNumber}` : null]
-    .filter(Boolean)
-    .join(' · ');
+  // The shirt number leads the name (like every other player row), so the meta
+  // line carries only the position.
+  const meta = player.position ?? '';
 
   return (
     <View style={sheetStyles.overlay}>
@@ -394,7 +395,7 @@ export function PlayerStatsSheet({
         <View style={sheetStyles.headerRow}>
           {imageFailed ? (
             <View style={[sheetStyles.avatar, sheetStyles.avatarFallback, { backgroundColor: accent }]}>
-              <Text style={sheetStyles.avatarInitials}>{initials(player.name)}</Text>
+              <Text style={sheetStyles.avatarInitials}>{playerInitials(player.name)}</Text>
             </View>
           ) : (
             <Image
@@ -406,10 +407,15 @@ export function PlayerStatsSheet({
             />
           )}
           <View style={sheetStyles.headerInfo}>
-            <Text style={sheetStyles.name} numberOfLines={2}>
-              {player.name}
-              {player.captain ? <Text style={sheetStyles.captain}> (C)</Text> : null}
-            </Text>
+            <View style={sheetStyles.nameRow}>
+              {player.jerseyNumber != null && (
+                <Text style={sheetStyles.shirtNumber}>{player.jerseyNumber}</Text>
+              )}
+              <Text style={sheetStyles.name} numberOfLines={2}>
+                {player.name}
+                {player.captain ? <Text style={sheetStyles.captain}> (C)</Text> : null}
+              </Text>
+            </View>
             <View style={sheetStyles.teamRow}>
               <View style={[sheetStyles.teamDot, { backgroundColor: accent }]} />
               <Text style={sheetStyles.meta} numberOfLines={1}>
@@ -485,7 +491,21 @@ const sheetStyles = StyleSheet.create({
     flex: 1,
     gap: 4,
   },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  shirtNumber: {
+    minWidth: 20,
+    color: MUTED,
+    fontSize: 15,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+    textAlign: 'right',
+  },
   name: {
+    flexShrink: 1,
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',

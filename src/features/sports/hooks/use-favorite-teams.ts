@@ -9,10 +9,11 @@ export function useFavoriteTeams() {
   const [error, setError] = useState<string | null>(null);
   const fetchRef = useRef(0);
 
+  // `isLoading` covers the first load only: later refreshes (tab focus,
+  // pull-to-refresh) keep the current teams on screen instead of flickering.
   const refresh = useCallback(async () => {
     const fetchId = ++fetchRef.current;
     try {
-      setIsLoading(true);
       setError(null);
       const db = await getSportsDatabase();
       const result = await db.getFavoriteTeams();

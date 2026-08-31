@@ -6,7 +6,7 @@ import { runMigrations } from '@/db/migrations';
 import { executeQuery } from '@/db/sqlite-client';
 import { resetTestDatabases } from '@/test/helpers';
 
-const LATEST_VERSION = 18;
+const LATEST_VERSION = 20;
 
 const EXPECTED_TABLES = [
   'migrations',
@@ -66,7 +66,7 @@ describe('runMigrations', () => {
       Array.from({ length: LATEST_VERSION }, (_, i) => i + 1),
     );
     expect(rows[0].name).toBe('initial_schema');
-    expect(rows[LATEST_VERSION - 1].name).toBe('drop_legacy_channel_foreign_keys');
+    expect(rows[LATEST_VERSION - 1].name).toBe('add_sports_background_refresh');
 
     for (const row of rows) {
       expect(row.name).toBeTruthy();

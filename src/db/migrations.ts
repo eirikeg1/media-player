@@ -578,6 +578,27 @@ const migrations: Migration[] = [
       console.log('[Migration] Dropped legacy channels-table foreign keys and purged orphaned rows');
     },
   },
+  {
+    version: 19,
+    name: 'add_sports_league_preferences',
+    up: async (db) => {
+      await db.execAsync(`ALTER TABLE user_settings ADD COLUMN sportsLeagueOrder TEXT;`);
+      await db.execAsync(
+        `ALTER TABLE user_settings ADD COLUMN sportsHideOtherLeagues INTEGER NOT NULL DEFAULT 0;`
+      );
+
+      console.log('[Migration] Added sportsLeagueOrder and sportsHideOtherLeagues columns to user_settings');
+    },
+  },
+  {
+    version: 20,
+    name: 'add_sports_background_refresh',
+    up: async (db) => {
+      await db.execAsync(`ALTER TABLE user_settings ADD COLUMN sportsBackgroundRefresh TEXT;`);
+
+      console.log('[Migration] Added sportsBackgroundRefresh column to user_settings');
+    },
+  },
 ];
 
 /**

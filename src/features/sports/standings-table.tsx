@@ -1,4 +1,3 @@
-import { Dropdown, type DropdownOption } from '@/components/ui/controls/inputs/dropdown';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { GlassColors, THEME } from '@/lib/theme';
@@ -7,28 +6,33 @@ import type { Standing, StandingEntry } from 'expo-m3u-parser';
 import { memo, useMemo } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 
+import { SPORTS_ACCENT, withAlpha } from './sports-theme';
+
 interface StandingsTableProps {
   standings: Standing[];
   isLoading: boolean;
   error: string | null;
-  competitionOptions: DropdownOption<number>[];
-  selectedCompetitionId: number | null;
-  onSelectCompetition: (id: number) => void;
-  hideDropdown?: boolean;
+  /** Provider ids of the user's favorite teams; their rows are highlighted. */
+  favoriteTeamIds?: ReadonlySet<number>;
 }
+
+const FAVORITE_ROW_BACKGROUND = withAlpha(SPORTS_ACCENT.favorite, 0.12);
 
 const StandingRow = memo(function StandingRow({
   entry,
   isDark,
+  isFavorite,
 }: {
   entry: StandingEntry;
   isDark: boolean;
+  isFavorite: boolean;
 }) {
   return (
     <View
       style={[
         styles.row,
         { borderBottomColor: isDark ? GlassColors.dark.border : GlassColors.light.border },
+        isFavorite && { backgroundColor: FAVORITE_ROW_BACKGROUND },
       ]}
     >
       <ThemedText style={styles.colPosition}>{entry.position}</ThemedText>
@@ -36,7 +40,7 @@ const StandingRow = memo(function StandingRow({
         {entry.teamCrest ? (
           <Image source={{ uri: entry.teamCrest }} style={styles.crest} contentFit="contain" />
         ) : null}
-        <ThemedText style={styles.teamName} numberOfLines={1}>
+        <ThemedText style={[styles.teamName, isFavorite && styles.teamNameFavorite]} numberOfLines={1}>
           {entry.teamTla || entry.teamShortName || entry.teamName}
         </ThemedText>
       </View>
@@ -54,10 +58,7 @@ export const StandingsTable = memo(function StandingsTable({
   standings,
   isLoading,
   error,
-  competitionOptions,
-  selectedCompetitionId,
-  onSelectCompetition,
-  hideDropdown,
+  favoriteTeamIds,
 }: StandingsTableProps) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
@@ -68,30 +69,8 @@ export const StandingsTable = memo(function StandingsTable({
     [standings]
   );
 
-  if (competitionOptions.length === 0) {
-    return (
-      <View style={styles.emptyContainer}>
-        <ThemedText style={styles.emptyText}>
-          Add favorite teams to see standings
-        </ThemedText>
-      </View>
-    );
-  }
-
   return (
     <View style={styles.container}>
-      {!hideDropdown && (
-        <View style={styles.dropdownWrapper}>
-          <Dropdown
-            options={competitionOptions}
-            value={selectedCompetitionId ?? 0}
-            onSelect={onSelectCompetition}
-            placeholder="Select competition"
-            accessibilityLabel="Select competition for standings"
-          />
-        </View>
-      )}
-
       {isLoading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator />
@@ -121,7 +100,12 @@ export const StandingsTable = memo(function StandingsTable({
               <ThemedText style={[styles.colStat, styles.colPoints, styles.headerText]}>Pts</ThemedText>
             </View>
             {activeStanding.table.map((entry) => (
-              <StandingRow key={entry.teamId} entry={entry} isDark={isDark} />
+              <StandingRow
+                key={entry.teamId}
+                entry={entry}
+                isDark={isDark}
+                isFavorite={favoriteTeamIds?.has(entry.teamId) ?? false}
+              />
             ))}
           </View>
         </ScrollView>
@@ -138,9 +122,6 @@ const styles = StyleSheet.create({
   container: {
     gap: 12,
     paddingHorizontal: 16,
-  },
-  dropdownWrapper: {
-    paddingBottom: 4,
   },
   loadingContainer: {
     padding: 32,
@@ -193,6 +174,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     flex: 1,
+  },
+  teamNameFavorite: {
+    fontWeight: '700',
   },
   colStat: {
     width: 32,

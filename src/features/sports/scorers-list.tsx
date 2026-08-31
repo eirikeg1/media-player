@@ -1,4 +1,3 @@
-import { Dropdown, type DropdownOption } from '@/components/ui/controls/inputs/dropdown';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { GlassColors, THEME } from '@/lib/theme';
@@ -11,10 +10,6 @@ interface ScorersListProps {
   scorers: TopScorers | null;
   isLoading: boolean;
   error: string | null;
-  competitionOptions: DropdownOption<number>[];
-  selectedCompetitionId: number | null;
-  onSelectCompetition: (id: number) => void;
-  hideDropdown?: boolean;
 }
 
 const ScorerRow = memo(function ScorerRow({
@@ -63,39 +58,13 @@ export const ScorersList = memo(function ScorersList({
   scorers,
   isLoading,
   error,
-  competitionOptions,
-  selectedCompetitionId,
-  onSelectCompetition,
-  hideDropdown,
 }: ScorersListProps) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const destructiveColor = THEME[colorScheme ?? 'light'].destructive;
 
-  if (competitionOptions.length === 0) {
-    return (
-      <View style={styles.emptyContainer}>
-        <ThemedText style={styles.emptyText}>
-          Add favorite teams to see top scorers
-        </ThemedText>
-      </View>
-    );
-  }
-
   return (
     <View style={styles.container}>
-      {!hideDropdown && (
-        <View style={styles.dropdownWrapper}>
-          <Dropdown
-            options={competitionOptions}
-            value={selectedCompetitionId ?? 0}
-            onSelect={onSelectCompetition}
-            placeholder="Select competition"
-            accessibilityLabel="Select competition for scorers"
-          />
-        </View>
-      )}
-
       {isLoading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator />
@@ -123,9 +92,6 @@ const styles = StyleSheet.create({
   container: {
     gap: 12,
     paddingHorizontal: 16,
-  },
-  dropdownWrapper: {
-    paddingBottom: 4,
   },
   loadingContainer: {
     padding: 32,
