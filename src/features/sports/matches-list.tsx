@@ -4,6 +4,7 @@ import { memo, useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, RefreshControl, SectionList, StyleSheet, View, type SectionListData } from 'react-native';
 
 import { LeagueHeader } from './league-header';
+import type { LeagueTab } from './league-sheet';
 import { involvesFavorite, type MatchGroup } from './match-grouping';
 import { MatchRow } from './match-row';
 import { SPORTS_ACCENT, useSportsPalette } from './sports-theme';
@@ -16,7 +17,8 @@ interface MatchesListProps {
   isRefreshing: boolean;
   onRefresh: () => void;
   onFixturePress: (fixture: Fixture) => void;
-  onOpenLeague: (group: MatchGroup) => void;
+  /** Opens the competition sheet on `tab` (the league name asks for the table). */
+  onOpenLeague: (group: MatchGroup, tab?: LeagueTab) => void;
   /** Rendered above the sections (title, date strip, filters). */
   header: React.ReactElement;
   emptyTitle: string;

@@ -15,7 +15,7 @@ import { ScorersList } from './scorers-list';
 import { SPORTS_ACCENT, useSportsPalette } from './sports-theme';
 import { StandingsTable } from './standings-table';
 
-type LeagueTab = 'matches' | 'standings' | 'scorers';
+export type LeagueTab = 'matches' | 'standings' | 'scorers';
 
 const TABS: { key: LeagueTab; label: string }[] = [
   { key: 'matches', label: 'Matches' },
@@ -30,6 +30,8 @@ interface LeagueSheetProps {
   onClose: () => void;
   /** Opens the match sheet; the caller closes this sheet first. */
   onFixturePress: (fixture: Fixture) => void;
+  /** Tab the sheet opens on — the league name leads straight to the table. */
+  initialTab?: LeagueTab;
 }
 
 /** Competition sheet: the day's matches, the table and the top scorers. */
@@ -38,16 +40,18 @@ export const LeagueSheet = memo(function LeagueSheet({
   favoriteTeamIds,
   onClose,
   onFixturePress,
+  initialTab = 'matches',
 }: LeagueSheetProps) {
   const insets = useSafeAreaInsets();
   const palette = useSportsPalette();
-  const [tab, setTab] = useState<LeagueTab>('matches');
+  const [tab, setTab] = useState<LeagueTab>(initialTab);
   const competitionId = group?.competitionId ?? null;
 
-  // Every competition opens on its own matches.
+  // Every competition opens on the tab it was opened from, not on whichever one
+  // the previous competition was left on.
   useEffect(() => {
-    setTab('matches');
-  }, [group?.key]);
+    setTab(initialTab);
+  }, [group?.key, initialTab]);
 
   const standings = useStandings(tab === 'standings' ? competitionId : null);
   const scorers = useScorers(tab === 'scorers' ? competitionId : null);

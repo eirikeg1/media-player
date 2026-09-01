@@ -3,7 +3,7 @@ import { useDayFixtures } from '@/features/sports/hooks/use-day-fixtures';
 import { useFavoriteMatchPrefetch } from '@/features/sports/hooks/use-favorite-match-prefetch';
 import { useFavoriteTeams } from '@/features/sports/hooks/use-favorite-teams';
 import { useLeaguePreferences } from '@/features/sports/hooks/use-league-preferences';
-import { LeagueSheet } from '@/features/sports/league-sheet';
+import { LeagueSheet, type LeagueTab } from '@/features/sports/league-sheet';
 import { groupFixturesByLeague, type MatchGroup } from '@/features/sports/match-grouping';
 import { MatchSheet } from '@/features/sports/match-sheet';
 import { isMatchLive } from '@/features/sports/match-widgets';
@@ -11,6 +11,7 @@ import { MatchesList } from '@/features/sports/matches-list';
 import { SportsHeader, type MatchFilter } from '@/features/sports/sports-header';
 import { isSameLocalDay, startOfLocalDay } from '@/features/sports/date-utils';
 import { ManageFavoritesModal } from '@/features/sports/team-search-modal';
+import { TeamSheet, type TeamRef } from '@/features/sports/team-sheet';
 import { getSportsDatabase } from '@/services/sports-service';
 import { usePlaylistStore } from '@/stores/playlist/playlist-store';
 import { usePlaybackQueueStore } from '@/stores/video/queue-store';
@@ -28,7 +29,9 @@ export default function SportsScreen() {
   const [filter, setFilter] = useState<MatchFilter>('all');
   const [favoritesVisible, setFavoritesVisible] = useState(false);
   const [selectedFixture, setSelectedFixture] = useState<Fixture | null>(null);
-  const [selectedLeagueKey, setSelectedLeagueKey] = useState<string | null>(null);
+  /** The open competition sheet: which group, and the tab it was opened on. */
+  const [selectedLeague, setSelectedLeague] = useState<{ key: string; tab: LeagueTab } | null>(null);
+  const [selectedTeam, setSelectedTeam] = useState<TeamRef | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const { teams, isLoading: isLoadingTeams, addTeam, removeTeam, refresh: refreshTeams } = useFavoriteTeams();
@@ -53,9 +56,9 @@ export default function SportsScreen() {
         : allGroups,
     [allGroups, fixtures, favoriteTeamIds, order, hideOtherLeagues, filter]
   );
-  const selectedLeague = useMemo(
-    () => allGroups.find((g) => g.key === selectedLeagueKey) ?? null,
-    [allGroups, selectedLeagueKey]
+  const selectedLeagueGroup = useMemo(
+    () => allGroups.find((g) => g.key === selectedLeague?.key) ?? null,
+    [allGroups, selectedLeague]
   );
   const isToday = isSameLocalDay(selectedDate, new Date());
 
@@ -82,13 +85,29 @@ export default function SportsScreen() {
   const handleCloseFavorites = useCallback(() => setFavoritesVisible(false), []);
   const handleJumpToToday = useCallback(() => setSelectedDate(startOfLocalDay(new Date())), []);
   const handleCloseFixture = useCallback(() => setSelectedFixture(null), []);
-  const handleCloseLeague = useCallback(() => setSelectedLeagueKey(null), []);
+  const handleCloseLeague = useCallback(() => setSelectedLeague(null), []);
+  const handleCloseTeam = useCallback(() => setSelectedTeam(null), []);
 
-  const handleOpenLeague = useCallback((group: MatchGroup) => setSelectedLeagueKey(group.key), []);
+  const handleOpenLeague = useCallback(
+    (group: MatchGroup, tab: LeagueTab = 'matches') => setSelectedLeague({ key: group.key, tab }),
+    []
+  );
 
   /** From the league sheet: close it first so the match sheet isn't stacked behind it. */
   const handleLeagueFixturePress = useCallback((fixture: Fixture) => {
-    setSelectedLeagueKey(null);
+    setSelectedLeague(null);
+    setSelectedFixture(fixture);
+  }, []);
+
+  /** From the match sheet: close it first so the team sheet isn't stacked behind it. */
+  const handleOpenTeam = useCallback((team: TeamRef) => {
+    setSelectedFixture(null);
+    setSelectedTeam(team);
+  }, []);
+
+  /** From the team sheet: close it first so the match sheet isn't stacked behind it. */
+  const handleTeamFixturePress = useCallback((fixture: Fixture) => {
+    setSelectedTeam(null);
     setSelectedFixture(fixture);
   }, []);
 
@@ -169,12 +188,24 @@ export default function SportsScreen() {
         />
       )}
 
-      <MatchSheet fixture={selectedFixture} onClose={handleCloseFixture} onPlayChannel={handlePlayChannel} />
+      <MatchSheet
+        fixture={selectedFixture}
+        onClose={handleCloseFixture}
+        onPlayChannel={handlePlayChannel}
+        onOpenTeam={handleOpenTeam}
+      />
       <LeagueSheet
-        group={selectedLeague}
+        group={selectedLeagueGroup}
         favoriteTeamIds={favoriteTeamIds}
         onClose={handleCloseLeague}
         onFixturePress={handleLeagueFixturePress}
+        initialTab={selectedLeague?.tab}
+      />
+      <TeamSheet
+        team={selectedTeam}
+        favoriteTeamIds={favoriteTeamIds}
+        onClose={handleCloseTeam}
+        onFixturePress={handleTeamFixturePress}
       />
     </>
   );

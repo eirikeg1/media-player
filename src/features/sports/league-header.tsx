@@ -4,6 +4,7 @@ import { Image } from 'expo-image';
 import { memo } from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 
+import type { LeagueTab } from './league-sheet';
 import type { MatchGroup } from './match-grouping';
 import { SPORTS_ACCENT, useSportsPalette, withAlpha } from './sports-theme';
 
@@ -11,14 +12,33 @@ interface LeagueHeaderProps {
   group: MatchGroup;
   collapsed: boolean;
   onToggle: (key: string) => void;
-  /** Opens the competition sheet (standings/scorers); omitted for Favorites. */
-  onOpenLeague?: (group: MatchGroup) => void;
+  /** Opens the competition sheet on `tab`; omitted for Favorites. */
+  onOpenLeague?: (group: MatchGroup, tab?: LeagueTab) => void;
 }
 
-/** Sticky section header: logo, competition, country, live count, collapse chevron. */
+/**
+ * Sticky section header: logo, competition, country, live count, collapse
+ * chevron.
+ *
+ * Three targets in one row: the name opens the sheet on the table, the list
+ * button opens it on the matches, and the rest of the row collapses the group.
+ */
 export const LeagueHeader = memo(function LeagueHeader({ group, collapsed, onToggle, onOpenLeague }: LeagueHeaderProps) {
   const palette = useSportsPalette();
   const canOpen = !group.isFavorites && group.competitionId != null && !!onOpenLeague;
+
+  const titles = (
+    <>
+      <ThemedText style={styles.title} numberOfLines={1}>
+        {group.title}
+      </ThemedText>
+      {group.subtitle ? (
+        <ThemedText style={[styles.subtitle, { color: palette.muted }]} numberOfLines={1}>
+          {group.subtitle}
+        </ThemedText>
+      ) : null}
+    </>
+  );
 
   return (
     <View style={[styles.container, { backgroundColor: palette.background }]}>
@@ -42,16 +62,19 @@ export const LeagueHeader = memo(function LeagueHeader({ group, collapsed, onTog
           </View>
         )}
 
-        <View style={styles.titles}>
-          <ThemedText style={styles.title} numberOfLines={1}>
-            {group.title}
-          </ThemedText>
-          {group.subtitle ? (
-            <ThemedText style={[styles.subtitle, { color: palette.muted }]} numberOfLines={1}>
-              {group.subtitle}
-            </ThemedText>
-          ) : null}
-        </View>
+        {canOpen ? (
+          <TouchableOpacity
+            style={styles.titles}
+            onPress={() => onOpenLeague?.(group, 'standings')}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel={`${group.title} table`}
+          >
+            {titles}
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.titles}>{titles}</View>
+        )}
 
         {group.liveCount > 0 && (
           <View style={styles.livePill}>
@@ -62,10 +85,10 @@ export const LeagueHeader = memo(function LeagueHeader({ group, collapsed, onTog
 
         {canOpen && (
           <TouchableOpacity
-            onPress={() => onOpenLeague?.(group)}
+            onPress={() => onOpenLeague?.(group, 'matches')}
             hitSlop={8}
             accessibilityRole="button"
-            accessibilityLabel={`${group.title} table and top scorers`}
+            accessibilityLabel={`${group.title} matches, table and top scorers`}
             style={styles.tableButton}
           >
             <IconSymbol name="list.bullet" size={16} color={palette.muted} />

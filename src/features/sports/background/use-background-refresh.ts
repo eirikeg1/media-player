@@ -54,6 +54,11 @@ async function applyPreference(pref: SportsBackgroundRefresh): Promise<void> {
  * drops a registered task when the user force-stops the app, so a plain
  * "register on change" would silently stop refreshing until the setting was
  * touched again.
+ *
+ * Also drives the "refresh when opening" half of the preference: a cold launch
+ * counts as the first open, so it is governed by the same `refreshOnOpen` flag
+ * as every later foreground. Both run on the standard TTLs, which makes them a
+ * no-op while the cache is fresh.
  */
 export function useBackgroundRefresh(): void {
   const currentUser = useUserStore((s) => s.currentUser);
@@ -69,12 +74,20 @@ export function useBackgroundRefresh(): void {
 
   useEffect(() => {
     if (!refreshOnOpen) return;
-    const subscription = AppState.addEventListener('change', (nextState) => {
-      if (nextState !== 'active') return;
-      // Standard TTLs, so this is a no-op whenever the cache is still fresh.
+    // Standard TTLs, so a refresh is a no-op whenever the cache is still fresh.
+    const refresh = () => {
       runForegroundRefresh().catch((err) => {
         console.warn('[sports-refresh] Foreground refresh failed:', err);
       });
+    };
+
+    // The cold launch is the first "open" — and the only one AppState never
+    // reports, since the app is already 'active' by the time this mounts. Warm
+    // today's cache now so the sports tab has it before the user gets there.
+    refresh();
+
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') refresh();
     });
     return () => subscription.remove();
   }, [refreshOnOpen]);

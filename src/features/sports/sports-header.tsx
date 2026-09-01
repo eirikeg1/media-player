@@ -41,7 +41,7 @@ export const SportsHeader = memo(function SportsHeader({
   return (
     <View style={[styles.container, { paddingTop: topInset + 8, backgroundColor: palette.background }]}>
       <View style={styles.titleRow}>
-        <ThemedText type="title" style={styles.title}>
+        <ThemedText type="title" style={styles.title} numberOfLines={1}>
           Matches
         </ThemedText>
         <View style={styles.actions}>
@@ -58,11 +58,11 @@ export const SportsHeader = memo(function SportsHeader({
           )}
           <TouchableOpacity
             onPress={onOpenFavorites}
-            style={[styles.iconButton, { backgroundColor: palette.faint }]}
+            style={[styles.favoritesButton, { borderColor: palette.border }]}
             accessibilityRole="button"
             accessibilityLabel="Manage favorite teams"
           >
-            <IconSymbol name="star" size={18} color={SPORTS_ACCENT.favorite} />
+            <ThemedText style={styles.favoritesText}>Favorites</ThemedText>
           </TouchableOpacity>
         </View>
       </View>
@@ -126,6 +126,8 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 28,
+    // The two text buttons beside it take priority when the row runs out of room.
+    flexShrink: 1,
   },
   actions: {
     flexDirection: 'row',
@@ -146,12 +148,17 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: SPORTS_ACCENT.tint,
   },
-  iconButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
+  favoritesButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  // No color override: ThemedText's default keeps it white on the dark theme
+  // and legible on the light one, where a hardcoded white would vanish.
+  favoritesText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
   filters: {
     flexDirection: 'row',

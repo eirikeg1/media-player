@@ -42,7 +42,8 @@ function leagueKey(fixture: Fixture): string {
     : `league:name:${fixture.competitionName}`;
 }
 
-function byKickoff(a: Fixture, b: Fixture): number {
+/** Chronological fixture order, with the provider id as a stable tie-break. */
+export function byKickoff(a: Fixture, b: Fixture): number {
   return a.kickoffTime - b.kickoffTime || a.providerId - b.providerId;
 }
 

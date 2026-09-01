@@ -12,6 +12,7 @@ import { MatchOverviewTab } from './match-detail/match-overview-tab';
 import { MatchWatchTab } from './match-detail/match-watch-tab';
 import { getFixtureScoreDisplay, isMatchConcluded, matchHasStarted, supportsMatchWidgets, type MatchTabKind } from './match-widgets';
 import { SPORTS_ACCENT } from './sports-theme';
+import type { TeamRef } from './team-sheet';
 
 type SheetTabKey = 'overview' | 'watch' | MatchTabKind;
 
@@ -36,6 +37,8 @@ interface MatchSheetProps {
   fixture: Fixture | null;
   onClose: () => void;
   onPlayChannel: (channelId: string, fixture: Fixture) => void;
+  /** Opens the team sheet for a side; the caller closes this sheet first. */
+  onOpenTeam: (team: TeamRef) => void;
 }
 
 /**
@@ -43,7 +46,7 @@ interface MatchSheetProps {
  * stats, lineups, timeline, form) and a one-tap "Watch" button that
  * plays the best-ranked channel from the playlist.
  */
-export const MatchSheet = memo(function MatchSheet({ fixture, onClose, onPlayChannel }: MatchSheetProps) {
+export const MatchSheet = memo(function MatchSheet({ fixture, onClose, onPlayChannel, onOpenTeam }: MatchSheetProps) {
   const insets = useSafeAreaInsets();
   const visible = fixture != null;
   const [tab, setTab] = useState<SheetTabKey>('overview');
@@ -101,7 +104,12 @@ export const MatchSheet = memo(function MatchSheet({ fixture, onClose, onPlayCha
           </View>
 
           <View style={styles.scoreRow}>
-            <TeamColumn name={score.home} crest={merged.homeTeamCrest} />
+            <TeamColumn
+              label={score.home}
+              crest={merged.homeTeamCrest}
+              team={teamRef(merged.homeTeamId, merged.homeTeam, merged.homeTeamCrest)}
+              onPress={onOpenTeam}
+            />
             <View style={styles.scoreBlock}>
               {score.score ? (
                 <Text style={[styles.score, score.isLive && { color: SPORTS_ACCENT.live }]}>{score.score}</Text>
@@ -115,7 +123,12 @@ export const MatchSheet = memo(function MatchSheet({ fixture, onClose, onPlayCha
                 </Text>
               </View>
             </View>
-            <TeamColumn name={score.away} crest={merged.awayTeamCrest} />
+            <TeamColumn
+              label={score.away}
+              crest={merged.awayTeamCrest}
+              team={teamRef(merged.awayTeamId, merged.awayTeam, merged.awayTeamCrest)}
+              onPress={onOpenTeam}
+            />
           </View>
 
           <TouchableOpacity
@@ -166,14 +179,48 @@ export const MatchSheet = memo(function MatchSheet({ fixture, onClose, onPlayCha
   );
 });
 
-function TeamColumn({ name, crest }: { name: string; crest?: string }) {
-  return (
-    <View style={styles.teamColumn}>
+/** The side as the team sheet needs it, or null when the provider gave no id. */
+function teamRef(id: number | undefined, name: string, crest?: string): TeamRef | null {
+  return id != null ? { id, name, crest } : null;
+}
+
+/**
+ * One side of the score line. Tappable into the team's upcoming matches
+ * whenever the fixture carries a team id — without one there is nothing to
+ * look up, so it stays a plain column.
+ */
+function TeamColumn({
+  label,
+  crest,
+  team,
+  onPress,
+}: {
+  label: string;
+  crest?: string;
+  team: TeamRef | null;
+  onPress: (team: TeamRef) => void;
+}) {
+  const content = (
+    <>
       {crest ? <Image source={{ uri: crest }} style={styles.crest} contentFit="contain" /> : <View style={styles.crest} />}
       <Text style={styles.teamName} numberOfLines={2}>
-        {name}
+        {label}
       </Text>
-    </View>
+    </>
+  );
+
+  if (!team) return <View style={styles.teamColumn}>{content}</View>;
+
+  return (
+    <TouchableOpacity
+      style={styles.teamColumn}
+      onPress={() => onPress(team)}
+      activeOpacity={0.6}
+      accessibilityRole="button"
+      accessibilityLabel={`${team.name}, upcoming matches`}
+    >
+      {content}
+    </TouchableOpacity>
   );
 }
 
