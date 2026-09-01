@@ -122,9 +122,17 @@ describe('buildMatchTabs', () => {
 });
 
 describe('getFixtureScoreDisplay', () => {
-  it('shows the score and LIVE for in-play matches', () => {
+  it('shows the score and LIVE for in-play matches without a captured clock', () => {
     const display = getFixtureScoreDisplay(makeFixture());
     expect(display).toMatchObject({ home: 'ARS', away: 'CHE', score: '2 - 1', status: 'LIVE', isLive: true });
+  });
+
+  it('shows the match minute when the fixture carries the clock', () => {
+    const display = getFixtureScoreDisplay(
+      makeFixture({ periodStart: 1_700_000_000, periodInitialSecs: 2700, periodMaxSecs: 5400 }),
+      new Date(1_700_000_600 * 1000)
+    );
+    expect(display).toMatchObject({ status: "55'", isLive: true });
   });
 
   it('shows FT for finished matches', () => {

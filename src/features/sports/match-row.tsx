@@ -6,6 +6,7 @@ import { memo } from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 
 import { getFixtureStatus, type FixtureStatusKind } from './fixture-status';
+import { liveMinuteLabel } from './live-minute';
 import { SPORTS_ACCENT, useSportsPalette } from './sports-theme';
 
 interface MatchRowProps {
@@ -39,19 +40,22 @@ export const MatchRow = memo(function MatchRow({ fixture, isFavorite, onPress, s
   const homeWon = isFinished && (fixture.homeScore ?? 0) > (fixture.awayScore ?? 0);
   const awayWon = isFinished && (fixture.awayScore ?? 0) > (fixture.homeScore ?? 0);
   const scoreColor = isLive ? SPORTS_ACCENT.live : palette.text;
+  // The match minute in place of a bare "LIVE", when the backend captured the
+  // clock. No timer: the list already re-renders on the ~60s fixture poll.
+  const label = liveMinuteLabel(fixture, new Date()) ?? status.label;
 
   return (
     <TouchableOpacity
       onPress={() => onPress(fixture)}
       activeOpacity={0.6}
       accessibilityRole="button"
-      accessibilityLabel={`${fixture.homeTeam} versus ${fixture.awayTeam}, ${status.label}`}
+      accessibilityLabel={`${fixture.homeTeam} versus ${fixture.awayTeam}, ${label}`}
       style={[styles.row, showDivider && { borderBottomColor: palette.border, borderBottomWidth: StyleSheet.hairlineWidth }]}
     >
       {isLive && <View style={styles.liveBar} />}
       <View style={styles.statusColumn}>
         <ThemedText style={[styles.statusText, { color: statusColor(status.kind, palette.muted) }, isLive && styles.statusLive]}>
-          {status.label}
+          {label}
         </ThemedText>
       </View>
 

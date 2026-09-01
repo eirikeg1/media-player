@@ -1,5 +1,7 @@
 import type { Fixture } from 'expo-m3u-parser';
 
+import { liveMinuteLabel } from './live-minute';
+
 /**
  * Helpers for the SofaScore match overlay.
  *
@@ -110,8 +112,13 @@ export interface FixtureScoreDisplay {
   isLive: boolean;
 }
 
-/** Format the compact score line shown on the in-player score button. */
-export function getFixtureScoreDisplay(fixture: Fixture): FixtureScoreDisplay {
+/**
+ * Format the compact score line shown on the in-player score button.
+ *
+ * `now` decides the live match minute; it is a parameter so callers can pin it
+ * in tests, and defaults to the current time.
+ */
+export function getFixtureScoreDisplay(fixture: Fixture, now: Date = new Date()): FixtureScoreDisplay {
   const home = fixture.homeTeamShort || fixture.homeTeam;
   const away = fixture.awayTeamShort || fixture.awayTeam;
   const normalized = fixture.status.toUpperCase();
@@ -130,7 +137,15 @@ export function getFixtureScoreDisplay(fixture: Fixture): FixtureScoreDisplay {
     case 'IN_PROGRESS':
     case 'IN_PLAY':
     case 'LIVE':
-      return { home, away, score, status: 'LIVE', statusColor: '#FF3B30', isLive: true };
+      return {
+        home,
+        away,
+        score,
+        // The match minute when the backend captured the clock, "LIVE" otherwise.
+        status: liveMinuteLabel(fixture, now) ?? 'LIVE',
+        statusColor: '#FF3B30',
+        isLive: true,
+      };
     case 'PAUSED':
     case 'HALFTIME':
       return { home, away, score, status: 'HT', statusColor: '#FF9500', isLive: true };
