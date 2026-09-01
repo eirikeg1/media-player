@@ -1,8 +1,13 @@
 import { getSportsDatabase } from '@/services/sports-service';
 
 import { invalidateSportsCaches } from '../cache-invalidation';
-import { dayWindow } from '../date-utils';
-import { TTL_FAVORITES_SECS, TTL_TODAY_SECS, fetchFavoriteTeamFixtures } from '../fixture-fetch';
+import { addDays, dayWindow } from '../date-utils';
+import {
+  TTL_FAVORITES_SECS,
+  TTL_TODAY_SECS,
+  cacheTtlFor,
+  fetchFavoriteTeamFixtures,
+} from '../fixture-fetch';
 
 /** The run currently in flight, shared by every caller until it settles. */
 let inFlight: Promise<void> | null = null;
@@ -30,6 +35,47 @@ export async function runForegroundRefresh(opts: { force?: boolean } = {}): Prom
     inFlight = null;
   });
   return inFlight;
+}
+
+/** Days warmed around today at boot: tomorrow first, then yesterday's results
+ * and the rest of the week ahead. */
+const ADJACENT_DAY_OFFSETS = [1, -1, 2, 3, 4, 5] as const;
+
+/**
+ * Warm the day schedules around today, so paging the date strip after a cold
+ * launch lands on cached data.
+ *
+ * Runs after {@link runForegroundRefresh} has today in hand: one day at a time,
+ * each read with the same TTL the day view itself would use, so a day that is
+ * still fresh costs nothing and a stale one pays its fan-out here — in the
+ * background — instead of under the user's finger. Never throws, and a failed
+ * day doesn't stop the ones behind it: this is an optimisation only, and every
+ * day view fetches for itself regardless.
+ */
+export async function warmAdjacentDays(): Promise<void> {
+  let db;
+  try {
+    db = await getSportsDatabase();
+  } catch (err) {
+    console.warn('[sports-refresh] Sports database unavailable:', err);
+    return;
+  }
+
+  const now = new Date();
+  for (const offset of ADJACENT_DAY_OFFSETS) {
+    const date = addDays(now, offset);
+    const window = dayWindow(date);
+    try {
+      await db.getFixturesForDate(
+        window.providerDate,
+        window.fromTs,
+        window.toTs,
+        cacheTtlFor(date, now)
+      );
+    } catch (err) {
+      console.warn('[sports-refresh] Day warm failed:', window.providerDate, err);
+    }
+  }
 }
 
 async function run(force: boolean): Promise<void> {

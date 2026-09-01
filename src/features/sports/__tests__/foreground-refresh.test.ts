@@ -2,8 +2,9 @@ import { getSportsDatabase } from '@/services/sports-service';
 import { __resetM3uFake } from '@/test/fakes/m3u-database-fake';
 import type { Fixture, SportsDatabase, Team } from 'expo-m3u-parser';
 
-import { runForegroundRefresh } from '../background/foreground-refresh';
-import { TTL_FAVORITES_SECS, TTL_TODAY_SECS } from '../fixture-fetch';
+import { runForegroundRefresh, warmAdjacentDays } from '../background/foreground-refresh';
+import { localDateKey } from '../date-utils';
+import { TTL_FAVORITES_SECS, TTL_FUTURE_SECS, TTL_PAST_SECS, TTL_TODAY_SECS } from '../fixture-fetch';
 
 const ARSENAL: Team = {
   providerId: 42,
@@ -140,5 +141,42 @@ describe('runForegroundRefresh', () => {
 
     await expect(runForegroundRefresh()).resolves.toBeUndefined();
     expect(day).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('warmAdjacentDays', () => {
+  /** The local date `offset` days from now, as the provider date string. */
+  function dateKey(offset: number): string {
+    const date = new Date();
+    date.setDate(date.getDate() + offset);
+    return localDateKey(date);
+  }
+
+  it('warms yesterday and the next five days, each at the day view\'s own TTL', async () => {
+    const day = jest.spyOn(db, 'getFixturesForDate');
+
+    await warmAdjacentDays();
+
+    expect(day).toHaveBeenCalledTimes(6);
+    const byDate = new Map(day.mock.calls.map((call) => [call[0], call[3]]));
+    expect([...byDate.keys()].sort()).toEqual(
+      [-1, 1, 2, 3, 4, 5].map(dateKey).sort()
+    );
+    expect(byDate.get(dateKey(-1))).toBe(TTL_PAST_SECS);
+    for (const offset of [1, 2, 3, 4, 5]) {
+      expect(byDate.get(dateKey(offset))).toBe(TTL_FUTURE_SECS);
+    }
+    // Today is the foreground refresh's job, not this one's.
+    expect(byDate.has(dateKey(0))).toBe(false);
+  });
+
+  it('continues past a day that fails and never rejects', async () => {
+    const day = jest
+      .spyOn(db, 'getFixturesForDate')
+      .mockRejectedValueOnce(new Error('provider down'));
+
+    await expect(warmAdjacentDays()).resolves.toBeUndefined();
+
+    expect(day).toHaveBeenCalledTimes(6);
   });
 });

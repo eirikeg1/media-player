@@ -7,12 +7,15 @@ import { useEffect } from 'react';
 import { AppState } from 'react-native';
 
 import { expoBackgroundScheduler } from './expo-scheduler';
-import { runForegroundRefresh } from './foreground-refresh';
+import { runForegroundRefresh, warmAdjacentDays } from './foreground-refresh';
 import { refreshStateStore } from './refresh-state-store';
 import { schedulerIntervalMinutes } from './refresh-policy';
 
 /** Warn once per launch — an unavailable OS scheduler stays unavailable. */
 let warnedUnavailable = false;
+
+/** The adjacent-day warm runs once per launch, not on every settings change. */
+let warmedAdjacentDays = false;
 
 /**
  * Mirror the preference to the device-level store and (un)register the OS task
@@ -64,6 +67,8 @@ export function useBackgroundRefresh(): void {
   const currentUser = useUserStore((s) => s.currentUser);
   const { mode, intervalHours, dailyTime, refreshOnOpen } =
     currentUser?.settings?.sportsBackgroundRefresh ?? DEFAULT_SPORTS_BACKGROUND_REFRESH;
+  // No sports tab, no sports traffic: every warm below is for that tab alone.
+  const sportsEnabled = currentUser?.settings?.showSportsTab ?? true;
 
   // Depend on the fields rather than the preference object: the user object is
   // replaced on every settings write, so its identity says nothing about the
@@ -73,7 +78,7 @@ export function useBackgroundRefresh(): void {
   }, [mode, intervalHours, dailyTime, refreshOnOpen]);
 
   useEffect(() => {
-    if (!refreshOnOpen) return;
+    if (!refreshOnOpen || !sportsEnabled) return;
     // Standard TTLs, so a refresh is a no-op whenever the cache is still fresh.
     const refresh = () => {
       runForegroundRefresh().catch((err) => {
@@ -83,12 +88,24 @@ export function useBackgroundRefresh(): void {
 
     // The cold launch is the first "open" — and the only one AppState never
     // reports, since the app is already 'active' by the time this mounts. Warm
-    // today's cache now so the sports tab has it before the user gets there.
-    refresh();
+    // today's cache now so the sports tab has it before the user gets there,
+    // then the surrounding days so the date strip pages onto cached data. The
+    // adjacent days run once per launch: later foregrounds re-warm today (it
+    // has the shortest TTL), the rest is still fresh from this pass.
+    if (!warmedAdjacentDays) {
+      warmedAdjacentDays = true;
+      runForegroundRefresh()
+        .catch((err) => {
+          console.warn('[sports-refresh] Foreground refresh failed:', err);
+        })
+        .then(() => warmAdjacentDays());
+    } else {
+      refresh();
+    }
 
     const subscription = AppState.addEventListener('change', (nextState) => {
       if (nextState === 'active') refresh();
     });
     return () => subscription.remove();
-  }, [refreshOnOpen]);
+  }, [refreshOnOpen, sportsEnabled]);
 }
