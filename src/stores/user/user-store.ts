@@ -3,6 +3,7 @@ import { getChannelId } from '@/lib/channel-utils';
 import { parseEpisodeInfo, stripEpisodeInfo } from '@/lib/series-utils';
 import { RustChannelService } from '@/services/rust-channel-service';
 import type {
+  ContentReactionValue,
   ContentType,
   ContinueWatchingItem,
   CreateUserInput,
@@ -12,6 +13,7 @@ import type {
   User,
   UserSettings,
   ViewingSession,
+  WatchedContent,
 } from '@/types/user.types';
 import type { Channel } from '@/types/playlist.types';
 import { create } from 'zustand';
@@ -23,6 +25,7 @@ interface UserState {
   isLoading: boolean;
   error: string | null;
   favoriteChannels: string[];
+  contentReactions: Record<string, ContentReactionValue>;
   recentlyWatchedVersion: number;
 
   // User management actions
@@ -40,6 +43,11 @@ interface UserState {
   getFavoriteChannels: (userId: string) => Promise<string[]>;
   toggleFavorite: (userId: string, channelId: string) => Promise<void>;
   isFavorite: (userId: string, channelId: string) => Promise<boolean>;
+
+  // Content reactions actions (like/dislike on movies/series)
+  loadContentReactions: (userId: string) => Promise<void>;
+  getReaction: (channelId: string) => ContentReactionValue | null;
+  setReaction: (userId: string, channelId: string, reaction: ContentReactionValue | null) => Promise<void>;
 
   // Hidden channels actions
   getHiddenChannels: (userId: string) => Promise<string[]>;
@@ -64,6 +72,7 @@ interface UserState {
   getContinueWatching: (userId: string, playlistId: string, limit?: number) => Promise<ContinueWatchingItem[]>;
   getRecentlyWatched: (userId: string, playlistId: string, limit?: number) => Promise<RecentlyWatchedItem[]>;
   getMostWatchedGroups: (userId: string, playlistId: string, limit?: number) => Promise<GroupWatchStats[]>;
+  getWatchedContent: (userId: string, playlistId: string) => Promise<WatchedContent>;
   getViewingHistory: (userId: string, limit?: number) => Promise<ViewingSession[]>;
   clearViewingHistory: (userId: string) => Promise<void>;
   closeOrphanedSessions: () => Promise<void>;
@@ -89,6 +98,7 @@ export const useUserStore = create<UserState>((set, get) => ({
   isLoading: true, // Start as true until users are loaded
   error: null,
   favoriteChannels: [],
+  contentReactions: {},
   activeSessionId: null,
   recentlyWatchedVersion: 0,
 
@@ -110,9 +120,10 @@ export const useUserStore = create<UserState>((set, get) => ({
         isLoading: false,
       });
 
-      // Hydrate favorite channels for the initial user
+      // Hydrate favorite channels and content reactions for the initial user
       if (firstUser) {
         get().loadFavoriteChannels(firstUser.id);
+        get().loadContentReactions(firstUser.id);
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to load users';
@@ -167,8 +178,9 @@ export const useUserStore = create<UserState>((set, get) => ({
         isLoading: false,
       });
 
-      // Hydrate favorite channels for the new user
+      // Hydrate favorite channels and content reactions for the new user
       get().loadFavoriteChannels(userId);
+      get().loadContentReactions(userId);
 
       // Reload header background selections for the new user
       try {
@@ -326,6 +338,50 @@ export const useUserStore = create<UserState>((set, get) => ({
     return await userRepository.isFavoriteChannel(userId, channelId);
   },
 
+  // Load content reactions into store state
+  loadContentReactions: async (userId: string) => {
+    try {
+      const reactions = await userRepository.getContentReactions(userId);
+      const contentReactions: Record<string, ContentReactionValue> = {};
+      for (const { channelId, reaction } of reactions) {
+        contentReactions[channelId] = reaction;
+      }
+      set({ contentReactions });
+    } catch (error) {
+      console.error('[UserStore] Error loading content reactions:', error);
+    }
+  },
+
+  // Get the current user's reaction for a movie/series (null = no reaction)
+  getReaction: (channelId: string) => {
+    return get().contentReactions[channelId] ?? null;
+  },
+
+  // Set (or clear, with null) the current user's reaction for a movie/series
+  setReaction: async (userId: string, channelId: string, reaction: ContentReactionValue | null) => {
+    console.log('[UserStore] setReaction called:', { userId, channelId, reaction });
+
+    // Optimistic update; rolled back if the write fails
+    const previousReactions = get().contentReactions;
+    const contentReactions = { ...previousReactions };
+    if (reaction === null) {
+      delete contentReactions[channelId];
+    } else {
+      contentReactions[channelId] = reaction;
+    }
+    set({ contentReactions });
+
+    try {
+      await userRepository.setContentReaction(userId, channelId, reaction);
+      console.log('[UserStore] Reaction set successfully');
+    } catch (error) {
+      set({ contentReactions: previousReactions });
+      const errorMessage = error instanceof Error ? error.message : 'Failed to set reaction';
+      console.error('[UserStore] Error setting reaction:', errorMessage);
+      throw error;
+    }
+  },
+
   // Get hidden channels
   getHiddenChannels: async (userId: string) => {
     return await userRepository.getHiddenChannels(userId);
@@ -401,6 +457,11 @@ export const useUserStore = create<UserState>((set, get) => ({
   // Get most watched groups
   getMostWatchedGroups: async (userId, playlistId, limit) => {
     return await userRepository.getMostWatchedGroups(userId, playlistId, limit);
+  },
+
+  // Get the seen set (watched movies and series) for the recommendation engine
+  getWatchedContent: async (userId, playlistId) => {
+    return await userRepository.getWatchedContent(userId, playlistId);
   },
 
   // Get full viewing history

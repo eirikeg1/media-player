@@ -1,5 +1,8 @@
 import { getChannelId } from '@/lib/channel-utils';
+import { stripEpisodeInfo } from '@/lib/series-utils';
 import type {
+    ContentReaction,
+    ContentReactionValue,
     ContentType,
     ContinueWatchingItem,
     CreateUserInput,
@@ -11,6 +14,7 @@ import type {
     User,
     UserSettings,
     ViewingSession,
+    WatchedContent,
 } from '@/types/user.types';
 import { DEFAULT_USER_SETTINGS } from '@/types/user.types';
 import { randomUUID } from 'expo-crypto';
@@ -45,6 +49,10 @@ export interface IUserRepository {
   unhideChannel(userId: string, channelId: string): Promise<void>;
   isChannelHidden(userId: string, channelId: string): Promise<boolean>;
 
+  // Content reactions operations (like/dislike on movies/series)
+  getContentReactions(userId: string): Promise<ContentReaction[]>;
+  setContentReaction(userId: string, channelId: string, reaction: ContentReactionValue | null): Promise<void>;
+
   // Favorite groups operations
   getFavoriteGroups(userId: string): Promise<string[]>;
   addFavoriteGroup(userId: string, groupName: string): Promise<void>;
@@ -74,6 +82,7 @@ export interface IUserRepository {
   getContinueWatching(userId: string, playlistId: string, limit?: number): Promise<ContinueWatchingItem[]>;
   getRecentlyWatched(userId: string, playlistId: string, limit?: number): Promise<RecentlyWatchedItem[]>;
   getMostWatchedGroups(userId: string, playlistId: string, limit?: number): Promise<GroupWatchStats[]>;
+  getWatchedContent(userId: string, playlistId: string): Promise<WatchedContent>;
   getViewingHistory(userId: string, limit?: number): Promise<ViewingSession[]>;
   clearViewingHistory(userId: string): Promise<void>;
   clearViewingHistoryForPlaylist(userId: string, playlistId: string): Promise<void>;
@@ -173,6 +182,14 @@ interface UserHiddenChannelRow {
   hiddenAt: string;
 }
 
+interface UserContentReactionRow {
+  id: string;
+  userId: string;
+  channelId: string;
+  reaction: number;
+  createdAt: string;
+}
+
 interface UserFavoriteGroupRow {
   id: string;
   userId: string;
@@ -226,6 +243,13 @@ interface ContinueWatchingRow {
   lastPosition: number;
   totalDuration: number | null;
   lastWatchedAt: string;
+}
+
+interface WatchedContentRow {
+  channelId: string;
+  channelName: string;
+  contentType: string;
+  completionCount: number;
 }
 
 interface RecentlyWatchedRow {
@@ -432,6 +456,7 @@ class SQLiteUserRepository implements IUserRepository {
       'user_hidden_channels',
       'user_channel_order',
       'user_favorite_groups',
+      'user_content_reactions',
       'viewing_sessions',
       'channel_watch_stats',
       'group_watch_stats',
@@ -581,6 +606,38 @@ class SQLiteUserRepository implements IUserRepository {
     );
 
     return (row?.count || 0) > 0;
+  }
+
+  async getContentReactions(userId: string): Promise<ContentReaction[]> {
+    const rows = await executeQuery<UserContentReactionRow>(
+      'SELECT channelId, reaction, createdAt FROM user_content_reactions WHERE userId = ?',
+      [userId]
+    );
+
+    return rows.map(row => ({
+      channelId: row.channelId,
+      reaction: row.reaction as ContentReactionValue,
+      createdAt: row.createdAt,
+    }));
+  }
+
+  async setContentReaction(userId: string, channelId: string, reaction: ContentReactionValue | null): Promise<void> {
+    console.log('[UserRepository] setContentReaction called:', { userId, channelId, reaction });
+
+    if (reaction === null) {
+      await executeStatement(
+        'DELETE FROM user_content_reactions WHERE userId = ? AND channelId = ?',
+        [userId, channelId]
+      );
+      return;
+    }
+
+    await executeStatement(
+      `INSERT INTO user_content_reactions (id, userId, channelId, reaction, createdAt)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(userId, channelId) DO UPDATE SET reaction = excluded.reaction, createdAt = excluded.createdAt`,
+      [randomUUID(), userId, channelId, reaction, new Date().toISOString()]
+    );
   }
 
   async getFavoriteGroups(userId: string): Promise<string[]> {
@@ -887,6 +944,56 @@ class SQLiteUserRepository implements IUserRepository {
       nextEpisodeChannelId: row.nextEpisodeChannelId ?? undefined,
       nextEpisodeChannelName: row.nextEpisodeChannelName ?? undefined,
     }));
+  }
+
+  /**
+   * The user's watch history for one playlist, as consumed by the
+   * recommendation engine: the seen set plus the completed watches it treats as
+   * an implicit "probably liked".
+   *
+   * Series names are derived from the stored episode titles with
+   * `stripEpisodeInfo` — the TS port of the same SQL function the Rust import
+   * uses to group episodes into series. That matching is exact for the common
+   * case and simply fails to match (rather than excluding the wrong series)
+   * when a channel's `tvgName` differs from its title, which is the only case
+   * the two derivations can disagree on.
+   *
+   * A series' completed count is a count of distinct completed episode
+   * channels, not of completed sessions: rewatching one episode three times is
+   * not the same signal as finishing three episodes.
+   */
+  async getWatchedContent(userId: string, playlistId: string): Promise<WatchedContent> {
+    const rows = await executeQuery<WatchedContentRow>(
+      `SELECT channelId, channelName, contentType, completionCount
+       FROM channel_watch_stats
+       WHERE userId = ? AND playlistId = ?`,
+      [userId, playlistId]
+    );
+
+    const seriesNames = new Set<string>();
+    const completedChannelIds: string[] = [];
+    const completedEpisodesBySeries: Record<string, number> = {};
+
+    for (const row of rows) {
+      const isCompleted = row.completionCount > 0;
+
+      if (row.contentType === 'series') {
+        const seriesName = stripEpisodeInfo(row.channelName);
+        seriesNames.add(seriesName);
+        if (isCompleted) {
+          completedEpisodesBySeries[seriesName] = (completedEpisodesBySeries[seriesName] ?? 0) + 1;
+        }
+      } else if (row.contentType === 'movie' && isCompleted) {
+        completedChannelIds.push(row.channelId);
+      }
+    }
+
+    return {
+      channelIds: rows.map((row) => row.channelId),
+      seriesNames: [...seriesNames],
+      completedChannelIds,
+      completedEpisodesBySeries,
+    };
   }
 
   async getMostWatchedGroups(userId: string, playlistId: string, limit: number = 10): Promise<GroupWatchStats[]> {

@@ -375,6 +375,89 @@ describe('hidden channels', () => {
   });
 });
 
+describe('content reactions', () => {
+  it('stores a like and returns it with its timestamp', async () => {
+    const user = await createUser();
+
+    await userRepository.setContentReaction(user.id, 'movie-1', 1);
+
+    await expect(userRepository.getContentReactions(user.id)).resolves.toEqual([
+      { channelId: 'movie-1', reaction: 1, createdAt: BASE_TIME.toISOString() },
+    ]);
+  });
+
+  it('upserts so like and dislike are mutually exclusive', async () => {
+    const user = await createUser();
+
+    await userRepository.setContentReaction(user.id, 'movie-1', 1);
+    tick();
+    await userRepository.setContentReaction(user.id, 'movie-1', -1);
+
+    const reactions = await userRepository.getContentReactions(user.id);
+    expect(reactions).toEqual([
+      {
+        channelId: 'movie-1',
+        reaction: -1,
+        createdAt: new Date(BASE_TIME.getTime() + 1000).toISOString(),
+      },
+    ]);
+
+    const rows = await executeQuery(
+      'SELECT * FROM user_content_reactions WHERE userId = ? AND channelId = ?',
+      [user.id, 'movie-1'],
+    );
+    expect(rows).toHaveLength(1);
+  });
+
+  it('deletes the row when the reaction is null', async () => {
+    const user = await createUser();
+    await userRepository.setContentReaction(user.id, 'movie-1', 1);
+    await userRepository.setContentReaction(user.id, 'series:Some Show', -1);
+
+    await userRepository.setContentReaction(user.id, 'movie-1', null);
+
+    await expect(userRepository.getContentReactions(user.id)).resolves.toEqual([
+      { channelId: 'series:Some Show', reaction: -1, createdAt: BASE_TIME.toISOString() },
+    ]);
+  });
+
+  it('clearing a reaction that does not exist is a no-op', async () => {
+    const user = await createUser();
+
+    await userRepository.setContentReaction(user.id, 'movie-1', null);
+
+    await expect(userRepository.getContentReactions(user.id)).resolves.toEqual([]);
+  });
+
+  it('isolates reactions per user', async () => {
+    const alice = await createUser('Alice');
+    const bob = await createUser('Bob');
+
+    await userRepository.setContentReaction(alice.id, 'movie-1', 1);
+    await userRepository.setContentReaction(bob.id, 'movie-1', -1);
+
+    await expect(userRepository.getContentReactions(alice.id)).resolves.toEqual([
+      { channelId: 'movie-1', reaction: 1, createdAt: BASE_TIME.toISOString() },
+    ]);
+    await expect(userRepository.getContentReactions(bob.id)).resolves.toEqual([
+      { channelId: 'movie-1', reaction: -1, createdAt: BASE_TIME.toISOString() },
+    ]);
+  });
+
+  it('deleteUser removes the user\'s reactions', async () => {
+    const user = await createUser();
+    await userRepository.setContentReaction(user.id, 'movie-1', 1);
+
+    await userRepository.deleteUser(user.id);
+
+    const rows = await executeQuery(
+      'SELECT * FROM user_content_reactions WHERE userId = ?',
+      [user.id],
+    );
+    expect(rows).toEqual([]);
+  });
+});
+
 describe('favorite groups', () => {
   it('round-trips add/is/remove with dedup', async () => {
     const user = await createUser();
@@ -831,6 +914,96 @@ describe('getMostWatchedGroups', () => {
     const groups = await userRepository.getMostWatchedGroups(user.id, PLAYLIST_ID);
     expect(groups.map((g) => g.groupTitle)).toEqual(['Movies', 'News']);
     expect(groups[0].totalTimeWatched).toBe(900);
+  });
+});
+
+describe('getWatchedContent', () => {
+  it('returns every watched channel id and the series names behind watched episodes', async () => {
+    const user = await createUser();
+    await watchSession({ userId: user.id, channelId: 'movie-1', channelName: 'Blade Runner' });
+    await watchSession({
+      userId: user.id,
+      channelId: 'ep-1',
+      channelName: 'Breaking Bad S01E01',
+      contentType: 'series',
+    });
+    await watchSession({
+      userId: user.id,
+      channelId: 'ep-2',
+      channelName: 'Breaking Bad S01E02',
+      contentType: 'series',
+    });
+
+    const watched = await userRepository.getWatchedContent(user.id, PLAYLIST_ID);
+
+    expect(watched.channelIds.sort()).toEqual(['ep-1', 'ep-2', 'movie-1']);
+    // Episodes of one series collapse to a single series name.
+    expect(watched.seriesNames).toEqual(['Breaking Bad']);
+  });
+
+  it('scopes results to the requested user and playlist', async () => {
+    const user = await createUser();
+    const other = await createUser('Bob');
+    await watchSession({ userId: user.id, channelId: 'ch-a', playlistId: 'playlist-a' });
+    await watchSession({ userId: user.id, channelId: 'ch-b', playlistId: 'playlist-b' });
+    await watchSession({ userId: other.id, channelId: 'ch-c', playlistId: 'playlist-a' });
+
+    const watched = await userRepository.getWatchedContent(user.id, 'playlist-a');
+    expect(watched.channelIds).toEqual(['ch-a']);
+  });
+
+  it('is empty for a user who has watched nothing', async () => {
+    const user = await createUser();
+    await expect(userRepository.getWatchedContent(user.id, PLAYLIST_ID)).resolves.toEqual({
+      channelIds: [],
+      seriesNames: [],
+      completedChannelIds: [],
+      completedEpisodesBySeries: {},
+    });
+  });
+
+  it('reports only the movies watched to completion', async () => {
+    const user = await createUser();
+    await watchSession({ userId: user.id, channelId: 'finished', completed: true });
+    await watchSession({ userId: user.id, channelId: 'abandoned', completed: false });
+
+    const watched = await userRepository.getWatchedContent(user.id, PLAYLIST_ID);
+
+    expect(watched.completedChannelIds).toEqual(['finished']);
+  });
+
+  it('counts distinct completed episodes per series', async () => {
+    const user = await createUser();
+    const episode = (channelId: string, channelName: string, completed: boolean) =>
+      watchSession({ userId: user.id, channelId, channelName, contentType: 'series', completed });
+
+    await episode('a-1', 'Show A S01E01', true);
+    await episode('a-2', 'Show A S01E02', true);
+    await episode('a-3', 'Show A S01E03', false);
+    await episode('b-1', 'Show B S01E01', true);
+    // A rewatch is one more session on the same episode, not a second episode.
+    await episode('b-1', 'Show B S01E01', true);
+
+    const watched = await userRepository.getWatchedContent(user.id, PLAYLIST_ID);
+
+    expect(watched.completedEpisodesBySeries).toEqual({ 'Show A': 2, 'Show B': 1 });
+  });
+
+  it('never counts live channels as completed content', async () => {
+    const user = await createUser();
+    await watchSession({
+      userId: user.id,
+      channelId: 'live-1',
+      channelName: 'NRK1',
+      contentType: 'live',
+      completed: true,
+    });
+
+    const watched = await userRepository.getWatchedContent(user.id, PLAYLIST_ID);
+
+    expect(watched.channelIds).toEqual(['live-1']);
+    expect(watched.completedChannelIds).toEqual([]);
+    expect(watched.completedEpisodesBySeries).toEqual({});
   });
 });
 

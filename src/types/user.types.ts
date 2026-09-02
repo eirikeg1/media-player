@@ -115,6 +115,22 @@ export interface UserChannelOrder {
 export type ContentType = 'live' | 'movie' | 'series';
 
 /**
+ * Reaction value for movies/series: 1 = like, -1 = dislike
+ */
+export type ContentReactionValue = 1 | -1;
+
+/**
+ * User's like/dislike reaction on a movie or series.
+ * channelId follows the favorites convention: the channel id for movies,
+ * the `series:`-prefixed id for series.
+ */
+export interface ContentReaction {
+  channelId: string;
+  reaction: ContentReactionValue;
+  createdAt: string;
+}
+
+/**
  * A single viewing session (raw event log row)
  */
 export interface ViewingSession {
@@ -203,6 +219,22 @@ export interface RecentlyWatchedItem {
   nextEpisodeChannelName?: string;
   seriesName?: string;
   seriesPoster?: string;
+}
+
+/**
+ * What a user has watched in one playlist, as the recommender consumes it: the
+ * "seen set" (never recommended again) plus the completed watches it reads as
+ * an implicit "probably liked".
+ */
+export interface WatchedContent {
+  /** Every watched channel id, regardless of content type */
+  channelIds: string[];
+  /** Distinct series names derived from watched episodes */
+  seriesNames: string[];
+  /** Movie channel ids watched to completion at least once */
+  completedChannelIds: string[];
+  /** Series name → number of distinct episodes watched to completion */
+  completedEpisodesBySeries: Record<string, number>;
 }
 
 /**

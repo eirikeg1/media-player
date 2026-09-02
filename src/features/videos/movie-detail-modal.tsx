@@ -5,6 +5,7 @@ import { ThemedView } from '@/components/ui/display/themed-view';
 import { CategoryPill } from '@/features/videos/category-pill';
 import { MetadataSection } from '@/features/videos/components/metadata-section';
 import { FavoriteStar } from '@/features/live/favorite-star';
+import { ReactionButtons } from '@/features/videos/reaction-buttons';
 import { useMovieMetadata } from '@/features/videos/hooks/use-movie-metadata';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { getChannelId } from '@/lib/channel-utils';
@@ -119,6 +120,12 @@ export function MovieDetailModal({
               ))}
             </View>
           )}
+
+          {/* Like/dislike reactions */}
+          <ReactionButtons
+            channelId={getChannelId(movie)}
+            contentName={movie.name}
+          />
 
           {/* Metadata */}
           <MetadataSection

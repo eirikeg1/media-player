@@ -5,6 +5,7 @@ import { ThemedView } from '@/components/ui/display/themed-view';
 import { CategoryPill } from '@/features/videos/category-pill';
 import { MetadataSection } from '@/features/videos/components/metadata-section';
 import { FavoriteStar } from '@/features/live/favorite-star';
+import { ReactionButtons } from '@/features/videos/reaction-buttons';
 import { SeasonAccordion } from '@/features/videos/season-accordion';
 import { useSeriesContinueEpisode } from '@/features/videos/hooks/use-series-continue-episode';
 import { useSeriesEpisodes } from '@/features/videos/hooks/use-series-episodes';
@@ -182,6 +183,12 @@ export function SeriesDetailModal({
               ))}
             </View>
           )}
+
+          {/* Like/dislike reactions */}
+          <ReactionButtons
+            channelId={getSeriesId(series)}
+            contentName={series.seriesName}
+          />
 
           {/* Metadata */}
           <MetadataSection
