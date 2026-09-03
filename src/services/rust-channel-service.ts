@@ -8,6 +8,7 @@ import {
   type Credentials,
   type GroupCount,
   type PlaylistMetadata,
+  type RecommendationSignals,
   type SeriesInfo,
   type SeriesListResult,
 } from 'expo-m3u-parser';
@@ -301,6 +302,86 @@ export class RustChannelService {
   ): Promise<SeriesInfo[]> {
     const db = await getRustDatabase();
     return db.regenerateSeriesRecommendations(playlistId, excludeAdult, limit);
+  }
+
+  /**
+   * Load the taste model used for personalized recommendations. The model is
+   * process-global, so one call per app launch serves every database handle.
+   */
+  static async loadRecommendationModel(path: string): Promise<void> {
+    const db = await getRustDatabase();
+    await db.loadRecommendationModel(path);
+  }
+
+  /** Whether a taste model is available for personalized generation. */
+  static async isRecommendationModelLoaded(): Promise<boolean> {
+    const db = await getRustDatabase();
+    return db.isRecommendationModelLoaded();
+  }
+
+  /**
+   * Get the user's current personalized movie batch, generating one
+   * synchronously when there is none yet. Falls back to the random
+   * recommender inside the engine when the user has no signals or no model
+   * is loaded.
+   */
+  static async getPersonalizedMovieRecommendations(
+    playlistId: string,
+    userKey: string,
+    excludeAdult: boolean,
+    limit: number,
+    signals: RecommendationSignals
+  ): Promise<Channel[]> {
+    const db = await getRustDatabase();
+    const rustChannels = await db.getPersonalizedMovieRecommendations(
+      playlistId, userKey, excludeAdult, limit, signals
+    );
+    return rustChannels.map(rustChannelToJsChannel);
+  }
+
+  /**
+   * Regenerate the personalized movie batch (fire-and-forget precompute of
+   * the batch the next read will serve)
+   */
+  static async regeneratePersonalizedMovieRecommendations(
+    playlistId: string,
+    userKey: string,
+    excludeAdult: boolean,
+    limit: number,
+    signals: RecommendationSignals
+  ): Promise<void> {
+    const db = await getRustDatabase();
+    await db.regeneratePersonalizedMovieRecommendations(
+      playlistId, userKey, excludeAdult, limit, signals
+    );
+  }
+
+  /** Series counterpart of {@link getPersonalizedMovieRecommendations} */
+  static async getPersonalizedSeriesRecommendations(
+    playlistId: string,
+    userKey: string,
+    excludeAdult: boolean,
+    limit: number,
+    signals: RecommendationSignals
+  ): Promise<SeriesInfo[]> {
+    const db = await getRustDatabase();
+    return db.getPersonalizedSeriesRecommendations(
+      playlistId, userKey, excludeAdult, limit, signals
+    );
+  }
+
+  /** Series counterpart of {@link regeneratePersonalizedMovieRecommendations} */
+  static async regeneratePersonalizedSeriesRecommendations(
+    playlistId: string,
+    userKey: string,
+    excludeAdult: boolean,
+    limit: number,
+    signals: RecommendationSignals
+  ): Promise<void> {
+    const db = await getRustDatabase();
+    await db.regeneratePersonalizedSeriesRecommendations(
+      playlistId, userKey, excludeAdult, limit, signals
+    );
   }
 
   /**

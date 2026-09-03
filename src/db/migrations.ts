@@ -599,6 +599,33 @@ const migrations: Migration[] = [
       console.log('[Migration] Added sportsBackgroundRefresh column to user_settings');
     },
   },
+  {
+    version: 21,
+    name: 'add_user_content_reactions',
+    up: async (db) => {
+      // Like/dislike reactions on movies and series. One row per
+      // (user, content): the UNIQUE constraint makes like/dislike mutually
+      // exclusive. channelId follows the favorites convention (channel id for
+      // movies, `series:`-prefixed id for series) and intentionally has no
+      // foreign key — the catalog lives in the Rust database.
+      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS user_content_reactions (
+          id TEXT PRIMARY KEY NOT NULL,
+          userId TEXT NOT NULL,
+          channelId TEXT NOT NULL,
+          reaction INTEGER NOT NULL CHECK (reaction IN (1, -1)),
+          createdAt TEXT NOT NULL,
+          FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE,
+          UNIQUE(userId, channelId)
+        );
+      `);
+      await db.execAsync(`
+        CREATE INDEX IF NOT EXISTS idx_user_content_reactions_userId ON user_content_reactions (userId);
+      `);
+
+      console.log('[Migration] Created user_content_reactions table');
+    },
+  },
 ];
 
 /**

@@ -3,10 +3,10 @@
  * resetTestDatabases() runs all migrations against a fresh in-memory database.
  */
 import { runMigrations } from '@/db/migrations';
-import { executeQuery } from '@/db/sqlite-client';
+import { executeQuery, executeStatement } from '@/db/sqlite-client';
 import { resetTestDatabases } from '@/test/helpers';
 
-const LATEST_VERSION = 20;
+const LATEST_VERSION = 21;
 
 const EXPECTED_TABLES = [
   'migrations',
@@ -23,6 +23,7 @@ const EXPECTED_TABLES = [
   'group_watch_stats',
   'user_uploaded_backgrounds',
   'user_header_selections',
+  'user_content_reactions',
 ];
 
 interface MigrationRow {
@@ -66,7 +67,7 @@ describe('runMigrations', () => {
       Array.from({ length: LATEST_VERSION }, (_, i) => i + 1),
     );
     expect(rows[0].name).toBe('initial_schema');
-    expect(rows[LATEST_VERSION - 1].name).toBe('add_sports_background_refresh');
+    expect(rows[LATEST_VERSION - 1].name).toBe('add_user_content_reactions');
 
     for (const row of rows) {
       expect(row.name).toBeTruthy();
@@ -97,6 +98,40 @@ describe('runMigrations', () => {
       );
       expect(foreignKeys.map((fk) => fk.table)).toEqual(['users']);
     }
+  });
+
+  it('creates the user_content_reactions table with the expected shape (migration 21)', async () => {
+    const columns = await executeQuery<{ name: string }>(
+      'PRAGMA table_info(user_content_reactions)',
+    );
+    expect(columns.map((column) => column.name)).toEqual([
+      'id',
+      'userId',
+      'channelId',
+      'reaction',
+      'createdAt',
+    ]);
+
+    // channelId points into the Rust database; only the users FK may exist.
+    const foreignKeys = await executeQuery<{ table: string }>(
+      'PRAGMA foreign_key_list(user_content_reactions)',
+    );
+    expect(foreignKeys.map((fk) => fk.table)).toEqual(['users']);
+
+    // The CHECK constraint only admits like (1) and dislike (-1).
+    const now = '2026-01-01T00:00:00.000Z';
+    await executeStatement(
+      'INSERT INTO users (id, username, createdAt, updatedAt) VALUES (?, ?, ?, ?)',
+      ['user-1', 'Alice', now, now],
+    );
+    const insertReaction = (id: string, reaction: number) =>
+      executeStatement(
+        `INSERT INTO user_content_reactions (id, userId, channelId, reaction, createdAt)
+         VALUES (?, ?, ?, ?, ?)`,
+        [id, 'user-1', 'ch-1', reaction, now],
+      );
+    await expect(insertReaction('r-invalid', 0)).rejects.toThrow();
+    await expect(insertReaction('r-like', 1)).resolves.toBeDefined();
   });
 
   it('is a no-op when run a second time', async () => {

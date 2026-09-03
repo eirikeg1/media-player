@@ -2,7 +2,8 @@ import ParallaxScrollView from '@/components/ui/containers/parallax-scroll-view'
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
 import { DiscoverRow } from '@/features/home/discover-row';
-import { useRandomContent } from '@/features/home/hooks/use-random-content';
+import { usePersonalizedContent } from '@/features/home/hooks/use-personalized-content';
+import type { RecommendationMode } from '@/features/home/recommendation-signals';
 import { useRecentlyWatched } from '@/features/home/hooks/use-recently-watched';
 import { RecentlyWatchedCarousel } from '@/features/home/recently-watched-carousel';
 import { usePlaylistData } from '@/features/live/hooks/use-playlist-data';
@@ -28,6 +29,19 @@ import { getChannelId } from '@/lib/channel-utils';
 
 const DEFAULT_HOME_HEADER = require('../../../assets/images/parallax-headers/general/blue-minimalist-wavy.jpg');
 
+// A row title must not promise more than the engine delivered for this batch.
+const MOVIE_ROW_TITLES: Record<RecommendationMode, string> = {
+  personalized: 'For You',
+  popular: 'Popular Movies',
+  random: 'Discover Movies',
+};
+
+const SERIES_ROW_TITLES: Record<RecommendationMode, string> = {
+  personalized: 'Series For You',
+  popular: 'Popular Series',
+  random: 'Discover Series',
+};
+
 export default function HomeScreen() {
   const router = useRouter();
   const { activePlaylist } = usePlaylistData();
@@ -39,7 +53,13 @@ export default function HomeScreen() {
 
   // Data hooks
   const { items: recentlyWatched, isLoading: isRecentlyWatchedLoading, refresh: refreshRecentlyWatched } = useRecentlyWatched(20);
-  const { movies, series, isLoading: isContentLoading, refresh: refreshContent } = useRandomContent(30);
+  const {
+    movies,
+    series,
+    mode: recommendationMode,
+    isLoading: isContentLoading,
+    refresh: refreshContent,
+  } = usePersonalizedContent(30);
 
   // The first load is complete once playlists are initialized AND — when there
   // is an active playlist — BOTH the discover content and the recently-watched
@@ -268,7 +288,7 @@ export default function HomeScreen() {
           )}
 
           <DiscoverRow
-            title="Discover Movies"
+            title={MOVIE_ROW_TITLES[recommendationMode]}
             data={movies}
             keyExtractor={(channel) => getChannelId(channel)}
             renderItem={(channel) => (
@@ -281,7 +301,7 @@ export default function HomeScreen() {
           />
 
           <DiscoverRow
-            title="Discover Series"
+            title={SERIES_ROW_TITLES[recommendationMode]}
             data={series}
             keyExtractor={(s) => s.seriesName}
             renderItem={(s) => (

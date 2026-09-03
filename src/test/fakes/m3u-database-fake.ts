@@ -35,6 +35,7 @@ import type {
   GroupedProgrammesResult,
   PlaylistMetadata,
   RankedBroadcast,
+  RecommendationSignals,
   SeriesFilter,
   SeriesInfo,
   SeriesListResult,
@@ -274,6 +275,8 @@ export class Database {
   private epgSources = new Map<string, EpgSource>();
   private programmes = new Map<string, EpgProgramme[]>(); // keyed by sourceId
   private nextPosition = 1;
+  /** Path of the last loaded recommendation model, or null when none is loaded. */
+  __recommendationModelPath: string | null = null;
 
   static async open(path: string): Promise<Database> {
     let instance = Database.__instances.get(path);
@@ -300,6 +303,7 @@ export class Database {
     this.epgSources.clear();
     this.programmes.clear();
     this.nextPosition = 1;
+    this.__recommendationModelPath = null;
   }
 
   __seedChannels(playlistId: string, channels: Channel[]): void {
@@ -526,6 +530,63 @@ export class Database {
     limit: number,
   ): Promise<SeriesInfo[]> {
     return this.getSeriesRecommendations(playlistId, excludeAdult, limit);
+  }
+
+  // ── Personalized recommendations ──
+  // No taste model here: the fake keeps the parts the app is responsible for
+  // (a loaded model path, the seen set) and otherwise returns the same
+  // deterministic first-N selection as the random recommender.
+
+  async loadRecommendationModel(path: string): Promise<void> {
+    this.__recommendationModelPath = path;
+  }
+
+  async isRecommendationModelLoaded(): Promise<boolean> {
+    return this.__recommendationModelPath !== null;
+  }
+
+  async getPersonalizedMovieRecommendations(
+    playlistId: string,
+    userKey: string,
+    excludeAdult: boolean,
+    limit: number,
+    signals: RecommendationSignals,
+  ): Promise<Channel[]> {
+    const seen = new Set(signals.seenChannelIds ?? []);
+    const movies = await this.getChannels({ playlistId, contentType: 'movie', excludeAdult });
+    return movies.filter((channel) => !seen.has(channel.channelId)).slice(0, limit);
+  }
+
+  async regeneratePersonalizedMovieRecommendations(
+    _playlistId: string,
+    _userKey: string,
+    _excludeAdult: boolean,
+    _limit: number,
+    _signals: RecommendationSignals,
+  ): Promise<void> {
+    // Generation is a background side effect with no observable result here.
+  }
+
+  async getPersonalizedSeriesRecommendations(
+    playlistId: string,
+    userKey: string,
+    excludeAdult: boolean,
+    limit: number,
+    signals: RecommendationSignals,
+  ): Promise<SeriesInfo[]> {
+    const seen = new Set(signals.seenSeriesNames ?? []);
+    const { series } = await this.getSeriesList({ playlistId, excludeAdult });
+    return series.filter((entry) => !seen.has(entry.seriesName)).slice(0, limit);
+  }
+
+  async regeneratePersonalizedSeriesRecommendations(
+    _playlistId: string,
+    _userKey: string,
+    _excludeAdult: boolean,
+    _limit: number,
+    _signals: RecommendationSignals,
+  ): Promise<void> {
+    // Generation is a background side effect with no observable result here.
   }
 
   // ── Metadata ──

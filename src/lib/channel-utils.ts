@@ -31,10 +31,16 @@ export function getRawChannelId(item: any): string {
 }
 
 /**
+ * Marks an id as a series name rather than a channel id, so favorites and
+ * reactions can share one keyspace.
+ */
+export const SERIES_ID_PREFIX = 'series:';
+
+/**
  * Generate a consistent unique identifier for a series
  */
 export function getSeriesId(series: SeriesInfo): string {
-  return `series:${series.seriesName}`;
+  return `${SERIES_ID_PREFIX}${series.seriesName}`;
 }
 
 /**
