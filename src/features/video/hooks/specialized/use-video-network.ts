@@ -8,14 +8,14 @@ import {
 } from '../../utils/network-utils';
 
 export function useVideoNetwork() {
-  const {
-    networkState,
-    isMonitoring,
-    unsubscribe,
-    setNetworkState,
-    setIsMonitoring,
-    setUnsubscribe,
-  } = useVideoNetworkStore();
+  // Selected rather than subscribing to the whole store, so an unrelated write
+  // doesn't re-render the player tree.
+  const networkState = useVideoNetworkStore((s) => s.networkState);
+  const isMonitoring = useVideoNetworkStore((s) => s.isMonitoring);
+  const unsubscribe = useVideoNetworkStore((s) => s.unsubscribe);
+  const setNetworkState = useVideoNetworkStore((s) => s.setNetworkState);
+  const setIsMonitoring = useVideoNetworkStore((s) => s.setIsMonitoring);
+  const setUnsubscribe = useVideoNetworkStore((s) => s.setUnsubscribe);
 
   const checkNetwork = useCallback(async () => {
     try {

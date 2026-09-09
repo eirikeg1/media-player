@@ -5,33 +5,33 @@ export function useFavoriteGroups() {
   const [favoriteGroups, setFavoriteGroups] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
-  const currentUser = useUserStore((state) => state.currentUser);
+  const userId = useUserStore((state) => state.currentUser?.id);
   const getFavoriteGroups = useUserStore((state) => state.getFavoriteGroups);
   const toggleFavoriteGroup = useUserStore((state) => state.toggleFavoriteGroup);
 
   const loadFavorites = useCallback(async () => {
-    if (!currentUser) {
+    if (!userId) {
       setFavoriteGroups([]);
       setIsLoading(false);
       return;
     }
 
     try {
-      const favorites = await getFavoriteGroups(currentUser.id);
+      const favorites = await getFavoriteGroups(userId);
       setFavoriteGroups(favorites);
     } catch (error) {
       console.error('Failed to load favorite groups:', error);
     } finally {
       setIsLoading(false);
     }
-  }, [currentUser, getFavoriteGroups]);
+  }, [userId, getFavoriteGroups]);
 
   useEffect(() => {
     loadFavorites();
   }, [loadFavorites]);
 
   const handleToggleFavorite = useCallback(async (groupName: string) => {
-    if (!currentUser) return;
+    if (!userId) return;
 
     // Optimistic update
     setFavoriteGroups((prev) => {
@@ -43,13 +43,13 @@ export function useFavoriteGroups() {
     });
 
     try {
-      await toggleFavoriteGroup(currentUser.id, groupName);
+      await toggleFavoriteGroup(userId, groupName);
     } catch (error) {
       console.error('Failed to toggle favorite group:', error);
       // Revert on error
       loadFavorites();
     }
-  }, [currentUser, toggleFavoriteGroup, loadFavorites]);
+  }, [userId, toggleFavoriteGroup, loadFavorites]);
 
   return {
     favoriteGroups,

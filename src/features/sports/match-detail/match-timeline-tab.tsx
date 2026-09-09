@@ -3,7 +3,8 @@ import { memo } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import type { MatchDataState } from '../hooks/use-match-detail';
-import { FAINT, MUTED, SectionLoading, SectionMessage } from './match-detail-shared';
+import { MatchTimelineSkeleton } from '../skeletons';
+import { FAINT, MUTED, SectionMessage } from './match-detail-shared';
 
 interface TimelineTabProps {
   state: MatchDataState<MatchTimeline>;
@@ -19,7 +20,7 @@ export const MatchTimelineTab = memo(function MatchTimelineTab({
   state,
   compact = false,
 }: TimelineTabProps) {
-  if (state.isLoading) return <SectionLoading />;
+  if (state.isLoading) return <MatchTimelineSkeleton compact={compact} />;
   if (state.error) return <SectionMessage text={state.error} />;
 
   const timeline = state.data;

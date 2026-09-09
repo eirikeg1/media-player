@@ -1,4 +1,3 @@
-import { getChannelId } from '@/lib/channel-utils';
 import { stripEpisodeInfo } from '@/lib/series-utils';
 import type {
     ContentReaction,
@@ -6,7 +5,6 @@ import type {
     ContentType,
     ContinueWatchingItem,
     CreateUserInput,
-    GroupWatchStats,
     RecentlyWatchedItem,
     SportsBackgroundRefresh,
     SportsRefreshMode,
@@ -43,12 +41,6 @@ export interface IUserRepository {
   removeFavoriteChannel(userId: string, channelId: string): Promise<void>;
   isFavoriteChannel(userId: string, channelId: string): Promise<boolean>;
 
-  // Hidden channels operations
-  getHiddenChannels(userId: string): Promise<string[]>;
-  hideChannel(userId: string, channelId: string): Promise<void>;
-  unhideChannel(userId: string, channelId: string): Promise<void>;
-  isChannelHidden(userId: string, channelId: string): Promise<boolean>;
-
   // Content reactions operations (like/dislike on movies/series)
   getContentReactions(userId: string): Promise<ContentReaction[]>;
   setContentReaction(userId: string, channelId: string, reaction: ContentReactionValue | null): Promise<void>;
@@ -58,11 +50,6 @@ export interface IUserRepository {
   addFavoriteGroup(userId: string, groupName: string): Promise<void>;
   removeFavoriteGroup(userId: string, groupName: string): Promise<void>;
   isFavoriteGroup(userId: string, groupName: string): Promise<boolean>;
-
-  // Channel ordering operations
-  getChannelOrder(userId: string): Promise<Map<string, number>>;
-  setChannelOrder(userId: string, channelId: string, order: number): Promise<void>;
-  clearChannelOrder(userId: string): Promise<void>;
 
   // Viewing history operations
   startViewingSession(params: {
@@ -81,16 +68,11 @@ export interface IUserRepository {
   closeOrphanedSessions(): Promise<void>;
   getContinueWatching(userId: string, playlistId: string, limit?: number): Promise<ContinueWatchingItem[]>;
   getRecentlyWatched(userId: string, playlistId: string, limit?: number): Promise<RecentlyWatchedItem[]>;
-  getMostWatchedGroups(userId: string, playlistId: string, limit?: number): Promise<GroupWatchStats[]>;
   getWatchedContent(userId: string, playlistId: string): Promise<WatchedContent>;
   getViewingHistory(userId: string, limit?: number): Promise<ViewingSession[]>;
   clearViewingHistory(userId: string): Promise<void>;
-  clearViewingHistoryForPlaylist(userId: string, playlistId: string): Promise<void>;
   setNextEpisode(userId: string, playlistId: string, channelId: string, nextChannelId: string, nextChannelName: string): Promise<void>;
   getSavedPosition(userId: string, playlistId: string, channelId: string): Promise<{ lastPosition: number; totalDuration?: number } | null>;
-
-  // Migration helper
-  migrateFavoritesToNewFormat(userId: string, channels: { name: string; url: string; tvg?: { id?: string } }[]): Promise<void>;
 }
 
 /**
@@ -175,13 +157,6 @@ interface UserFavoriteChannelRow {
   addedAt: string;
 }
 
-interface UserHiddenChannelRow {
-  id: string;
-  userId: string;
-  channelId: string;
-  hiddenAt: string;
-}
-
 interface UserContentReactionRow {
   id: string;
   userId: string;
@@ -195,13 +170,6 @@ interface UserFavoriteGroupRow {
   userId: string;
   groupName: string;
   addedAt: string;
-}
-
-interface UserChannelOrderRow {
-  id: string;
-  userId: string;
-  channelId: string;
-  sortOrder: number;
 }
 
 interface ViewingSessionRow {
@@ -222,16 +190,6 @@ interface ViewingSessionRow {
   dayOfWeek: number;
   hourOfDay: number;
   completed: number;
-}
-
-interface GroupWatchStatsRow {
-  userId: string;
-  playlistId: string;
-  groupTitle: string;
-  watchCount: number;
-  totalTimeWatched: number;
-  uniqueChannelsWatched: number;
-  lastWatchedAt: string;
 }
 
 interface ContinueWatchingRow {
@@ -572,42 +530,6 @@ class SQLiteUserRepository implements IUserRepository {
     return (row?.count || 0) > 0;
   }
 
-  async getHiddenChannels(userId: string): Promise<string[]> {
-    const rows = await executeQuery<UserHiddenChannelRow>(
-      'SELECT channelId FROM user_hidden_channels WHERE userId = ?',
-      [userId]
-    );
-
-    return rows.map(row => row.channelId);
-  }
-
-  async hideChannel(userId: string, channelId: string): Promise<void> {
-    console.log('[UserRepository] hideChannel called:', { userId, channelId });
-
-    await executeStatement(
-      'INSERT OR IGNORE INTO user_hidden_channels (id, userId, channelId, hiddenAt) VALUES (?, ?, ?, ?)',
-      [randomUUID(), userId, channelId, new Date().toISOString()]
-    );
-  }
-
-  async unhideChannel(userId: string, channelId: string): Promise<void> {
-    console.log('[UserRepository] unhideChannel called:', { userId, channelId });
-
-    await executeStatement(
-      'DELETE FROM user_hidden_channels WHERE userId = ? AND channelId = ?',
-      [userId, channelId]
-    );
-  }
-
-  async isChannelHidden(userId: string, channelId: string): Promise<boolean> {
-    const row = await executeQuerySingle<{ count: number }>(
-      'SELECT COUNT(*) as count FROM user_hidden_channels WHERE userId = ? AND channelId = ?',
-      [userId, channelId]
-    );
-
-    return (row?.count || 0) > 0;
-  }
-
   async getContentReactions(userId: string): Promise<ContentReaction[]> {
     const rows = await executeQuery<UserContentReactionRow>(
       'SELECT channelId, reaction, createdAt FROM user_content_reactions WHERE userId = ?',
@@ -674,40 +596,6 @@ class SQLiteUserRepository implements IUserRepository {
     );
 
     return (row?.count || 0) > 0;
-  }
-
-  async getChannelOrder(userId: string): Promise<Map<string, number>> {
-    const rows = await executeQuery<UserChannelOrderRow>(
-      'SELECT channelId, sortOrder FROM user_channel_order WHERE userId = ?',
-      [userId]
-    );
-
-    const orderMap = new Map<string, number>();
-    rows.forEach(row => {
-      orderMap.set(row.channelId, row.sortOrder);
-    });
-
-    return orderMap;
-  }
-
-  async setChannelOrder(userId: string, channelId: string, order: number): Promise<void> {
-    console.log('[UserRepository] setChannelOrder called:', { userId, channelId, order });
-
-    await executeStatement(
-      `INSERT INTO user_channel_order (id, userId, channelId, sortOrder)
-       VALUES (?, ?, ?, ?)
-       ON CONFLICT(userId, channelId) DO UPDATE SET sortOrder = ?`,
-      [randomUUID(), userId, channelId, order, order]
-    );
-  }
-
-  async clearChannelOrder(userId: string): Promise<void> {
-    console.log('[UserRepository] clearChannelOrder called:', userId);
-
-    await executeStatement(
-      'DELETE FROM user_channel_order WHERE userId = ?',
-      [userId]
-    );
   }
 
   // ── Viewing History ──
@@ -996,26 +884,6 @@ class SQLiteUserRepository implements IUserRepository {
     };
   }
 
-  async getMostWatchedGroups(userId: string, playlistId: string, limit: number = 10): Promise<GroupWatchStats[]> {
-    const rows = await executeQuery<GroupWatchStatsRow>(
-      `SELECT * FROM group_watch_stats
-       WHERE userId = ? AND playlistId = ?
-       ORDER BY totalTimeWatched DESC
-       LIMIT ?`,
-      [userId, playlistId, limit]
-    );
-
-    return rows.map(row => ({
-      userId: row.userId,
-      playlistId: row.playlistId,
-      groupTitle: row.groupTitle,
-      watchCount: row.watchCount,
-      totalTimeWatched: row.totalTimeWatched,
-      uniqueChannelsWatched: row.uniqueChannelsWatched,
-      lastWatchedAt: row.lastWatchedAt,
-    }));
-  }
-
   async getViewingHistory(userId: string, limit: number = 50): Promise<ViewingSession[]> {
     const rows = await executeQuery<ViewingSessionRow>(
       `SELECT * FROM viewing_sessions
@@ -1055,15 +923,6 @@ class SQLiteUserRepository implements IUserRepository {
     });
   }
 
-  async clearViewingHistoryForPlaylist(userId: string, playlistId: string): Promise<void> {
-    console.log('[UserRepository] clearViewingHistoryForPlaylist called:', { userId, playlistId });
-    await executeTransaction(async (db) => {
-      await db.runAsync('DELETE FROM viewing_sessions WHERE userId = ? AND playlistId = ?', [userId, playlistId]);
-      await db.runAsync('DELETE FROM channel_watch_stats WHERE userId = ? AND playlistId = ?', [userId, playlistId]);
-      await db.runAsync('DELETE FROM group_watch_stats WHERE userId = ? AND playlistId = ?', [userId, playlistId]);
-    });
-  }
-
   async setNextEpisode(
     userId: string,
     playlistId: string,
@@ -1091,50 +950,6 @@ class SQLiteUserRepository implements IUserRepository {
     );
     if (!row) return null;
     return { lastPosition: row.lastPosition, totalDuration: row.totalDuration ?? undefined };
-  }
-
-  async migrateFavoritesToNewFormat(userId: string, channels: { name: string; url: string; tvg?: { id?: string } }[]): Promise<void> {
-    console.log('[UserRepository] migrateFavoritesToNewFormat called for user:', userId);
-
-    const favorites = await this.getFavoriteChannels(userId);
-    const channelMap = new Map<string, string>();
-
-    // Create mapping from old formats to new tvg.id based format
-    channels.forEach(channel => {
-      const newChannelId = getChannelId(channel as any);
-
-      // Map from old name-only format
-      channelMap.set(channel.name, newChannelId);
-
-      // Map from old name|url format
-      const oldNameUrlFormat = `${channel.name}|${channel.url}`;
-      channelMap.set(oldNameUrlFormat, newChannelId);
-    });
-
-    let migratedCount = 0;
-    for (const favoriteId of favorites) {
-      // Check if this favorite needs migration
-      if (channelMap.has(favoriteId)) {
-        const newChannelId = channelMap.get(favoriteId)!;
-
-        // Only migrate if the new ID is different
-        if (newChannelId !== favoriteId) {
-          try {
-            // Remove old favorite
-            await this.removeFavoriteChannel(userId, favoriteId);
-            // Add new favorite with proper format
-            await this.addFavoriteChannel(userId, newChannelId);
-            migratedCount++;
-          } catch (error) {
-            console.error('[UserRepository] Error migrating favorite:', favoriteId, error);
-          }
-        }
-      }
-    }
-
-    if (migratedCount > 0) {
-      console.log(`[UserRepository] Migrated ${migratedCount} favorites to new format`);
-    }
   }
 }
 

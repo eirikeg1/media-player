@@ -63,7 +63,9 @@ describe('selectPrefetchFixtures', () => {
 
     expect(selected).toHaveLength(PREFETCH_LIMIT);
     // The cap keeps the most useful ones: the earliest kickoffs.
-    expect(selected.map((f) => f.providerId)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(selected.map((f) => f.providerId)).toEqual(
+      Array.from({ length: PREFETCH_LIMIT }, (_, i) => i + 1)
+    );
   });
 
   it("leaves the caller's array untouched", () => {

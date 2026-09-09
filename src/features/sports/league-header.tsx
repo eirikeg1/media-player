@@ -11,7 +11,8 @@ import { SPORTS_ACCENT, useSportsPalette, withAlpha } from './sports-theme';
 interface LeagueHeaderProps {
   group: MatchGroup;
   collapsed: boolean;
-  onToggle: (key: string) => void;
+  /** Receives the state being flipped, so the list never has to look it up. */
+  onToggle: (key: string, collapsed: boolean) => void;
   /** Opens the competition sheet on `tab`; omitted for Favorites. */
   onOpenLeague?: (group: MatchGroup, tab?: LeagueTab) => void;
 }
@@ -44,7 +45,7 @@ export const LeagueHeader = memo(function LeagueHeader({ group, collapsed, onTog
     <View style={[styles.container, { backgroundColor: palette.background }]}>
       <TouchableOpacity
         style={[styles.header, { backgroundColor: palette.faint }]}
-        onPress={() => onToggle(group.key)}
+        onPress={() => onToggle(group.key, collapsed)}
         activeOpacity={0.7}
         accessibilityRole="button"
         accessibilityState={{ expanded: !collapsed }}
@@ -55,7 +56,16 @@ export const LeagueHeader = memo(function LeagueHeader({ group, collapsed, onTog
             <IconSymbol name="star.fill" size={18} color={SPORTS_ACCENT.favorite} />
           </View>
         ) : group.logoUrl ? (
-          <Image source={{ uri: group.logoUrl }} style={styles.logo} contentFit="contain" transition={150} />
+          <Image
+            source={{ uri: group.logoUrl }}
+            style={styles.logo}
+            contentFit="contain"
+            transition={150}
+            // Recycled headers keep their crest until the new one decodes
+            // without this; the disk cache keeps it off the network entirely.
+            recyclingKey={group.key}
+            cachePolicy="memory-disk"
+          />
         ) : (
           <View style={styles.logoBox}>
             <IconSymbol name="sportscourt.fill" size={18} color={palette.muted} />

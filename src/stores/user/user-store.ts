@@ -7,7 +7,6 @@ import type {
   ContentType,
   ContinueWatchingItem,
   CreateUserInput,
-  GroupWatchStats,
   RecentlyWatchedItem,
   UpdateUserInput,
   User,
@@ -40,19 +39,11 @@ interface UserState {
 
   // Favorite channels actions
   loadFavoriteChannels: (userId: string) => Promise<void>;
-  getFavoriteChannels: (userId: string) => Promise<string[]>;
   toggleFavorite: (userId: string, channelId: string) => Promise<void>;
-  isFavorite: (userId: string, channelId: string) => Promise<boolean>;
 
   // Content reactions actions (like/dislike on movies/series)
   loadContentReactions: (userId: string) => Promise<void>;
-  getReaction: (channelId: string) => ContentReactionValue | null;
   setReaction: (userId: string, channelId: string, reaction: ContentReactionValue | null) => Promise<void>;
-
-  // Hidden channels actions
-  getHiddenChannels: (userId: string) => Promise<string[]>;
-  toggleHidden: (userId: string, channelId: string) => Promise<void>;
-  isHidden: (userId: string, channelId: string) => Promise<boolean>;
 
   // Viewing history actions
   activeSessionId: string | null;
@@ -71,7 +62,6 @@ interface UserState {
   endViewingSession: (sessionId: string, endPosition: number, durationWatched: number, completed: boolean) => Promise<void>;
   getContinueWatching: (userId: string, playlistId: string, limit?: number) => Promise<ContinueWatchingItem[]>;
   getRecentlyWatched: (userId: string, playlistId: string, limit?: number) => Promise<RecentlyWatchedItem[]>;
-  getMostWatchedGroups: (userId: string, playlistId: string, limit?: number) => Promise<GroupWatchStats[]>;
   getWatchedContent: (userId: string, playlistId: string) => Promise<WatchedContent>;
   getViewingHistory: (userId: string, limit?: number) => Promise<ViewingSession[]>;
   clearViewingHistory: (userId: string) => Promise<void>;
@@ -82,13 +72,9 @@ interface UserState {
   // Utility actions
   clearError: () => void;
 
-  // Migration helper
-  migrateFavoritesToNewFormat: (userId: string, channels: { name: string; url: string; tvg?: { id?: string } }[]) => Promise<void>;
-
   // Favorite groups actions
   getFavoriteGroups: (userId: string) => Promise<string[]>;
   toggleFavoriteGroup: (userId: string, groupName: string) => Promise<void>;
-  isFavoriteGroup: (userId: string, groupName: string) => Promise<boolean>;
 }
 
 export const useUserStore = create<UserState>((set, get) => ({
@@ -120,11 +106,8 @@ export const useUserStore = create<UserState>((set, get) => ({
         isLoading: false,
       });
 
-      // Hydrate favorite channels and content reactions for the initial user
-      if (firstUser) {
-        get().loadFavoriteChannels(firstUser.id);
-        get().loadContentReactions(firstUser.id);
-      }
+      // Favorite channels and content reactions are hydrated by the caller
+      // (see runInit in use-playlist-init), which needs them awaited in order.
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to load users';
       console.error('[UserStore] Error loading users:', errorMessage);
@@ -305,11 +288,6 @@ export const useUserStore = create<UserState>((set, get) => ({
     }
   },
 
-  // Get favorite channels
-  getFavoriteChannels: async (userId: string) => {
-    return await userRepository.getFavoriteChannels(userId);
-  },
-
   // Toggle favorite channel
   toggleFavorite: async (userId: string, channelId: string) => {
     console.log('[UserStore] toggleFavorite called:', { userId, channelId });
@@ -333,11 +311,6 @@ export const useUserStore = create<UserState>((set, get) => ({
     }
   },
 
-  // Check if channel is favorite
-  isFavorite: async (userId: string, channelId: string) => {
-    return await userRepository.isFavoriteChannel(userId, channelId);
-  },
-
   // Load content reactions into store state
   loadContentReactions: async (userId: string) => {
     try {
@@ -350,11 +323,6 @@ export const useUserStore = create<UserState>((set, get) => ({
     } catch (error) {
       console.error('[UserStore] Error loading content reactions:', error);
     }
-  },
-
-  // Get the current user's reaction for a movie/series (null = no reaction)
-  getReaction: (channelId: string) => {
-    return get().contentReactions[channelId] ?? null;
   },
 
   // Set (or clear, with null) the current user's reaction for a movie/series
@@ -380,37 +348,6 @@ export const useUserStore = create<UserState>((set, get) => ({
       console.error('[UserStore] Error setting reaction:', errorMessage);
       throw error;
     }
-  },
-
-  // Get hidden channels
-  getHiddenChannels: async (userId: string) => {
-    return await userRepository.getHiddenChannels(userId);
-  },
-
-  // Toggle hidden channel
-  toggleHidden: async (userId: string, channelId: string) => {
-    console.log('[UserStore] toggleHidden called:', { userId, channelId });
-
-    try {
-      const isHidden = await userRepository.isChannelHidden(userId, channelId);
-
-      if (isHidden) {
-        await userRepository.unhideChannel(userId, channelId);
-      } else {
-        await userRepository.hideChannel(userId, channelId);
-      }
-
-      console.log('[UserStore] Hidden toggled successfully');
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to toggle hidden';
-      console.error('[UserStore] Error toggling hidden:', errorMessage);
-      throw error;
-    }
-  },
-
-  // Check if channel is hidden
-  isHidden: async (userId: string, channelId: string) => {
-    return await userRepository.isChannelHidden(userId, channelId);
   },
 
   // Start a viewing session
@@ -452,11 +389,6 @@ export const useUserStore = create<UserState>((set, get) => ({
   // Get recently watched items
   getRecentlyWatched: async (userId, playlistId, limit) => {
     return await userRepository.getRecentlyWatched(userId, playlistId, limit);
-  },
-
-  // Get most watched groups
-  getMostWatchedGroups: async (userId, playlistId, limit) => {
-    return await userRepository.getMostWatchedGroups(userId, playlistId, limit);
   },
 
   // Get the seen set (watched movies and series) for the recommendation engine
@@ -534,11 +466,6 @@ export const useUserStore = create<UserState>((set, get) => ({
     set({ error: null });
   },
 
-  // Migrate favorites to new format
-  migrateFavoritesToNewFormat: async (userId: string, channels: { name: string; url: string; tvg?: { id?: string } }[]) => {
-    await userRepository.migrateFavoritesToNewFormat(userId, channels);
-  },
-
   // Get favorite groups
   getFavoriteGroups: async (userId: string) => {
     return await userRepository.getFavoriteGroups(userId);
@@ -563,10 +490,5 @@ export const useUserStore = create<UserState>((set, get) => ({
       console.error('[UserStore] Error toggling favorite group:', errorMessage);
       throw error;
     }
-  },
-
-  // Check if group is favorite
-  isFavoriteGroup: async (userId: string, groupName: string) => {
-    return await userRepository.isFavoriteGroup(userId, groupName);
   },
 }));

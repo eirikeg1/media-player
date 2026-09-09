@@ -26,8 +26,7 @@ interface BackgroundSectionProps {
 }
 
 export const BackgroundSection = memo(function BackgroundSection({ pageId }: BackgroundSectionProps) {
-  const currentUser = useUserStore((s) => s.currentUser);
-  const userId = currentUser?.id;
+  const userId = useUserStore((s) => s.currentUser?.id);
 
   const selection = useHeaderBackgroundStore((s) => s.selections[pageId]);
   const setSelection = useHeaderBackgroundStore((s) => s.setSelection);
@@ -60,24 +59,36 @@ export const BackgroundSection = memo(function BackgroundSection({ pageId }: Bac
   const allUploads = [...uploads, ...sharedUploads];
 
   const handleSelectTemplate = useCallback(
-    (key: string) => {
+    async (key: string) => {
       if (!userId) return;
-      setSelection(userId, pageId, 'template', key);
+      try {
+        await setSelection(userId, pageId, 'template', key);
+      } catch {
+        Alert.alert('Error', 'Failed to save background. Please try again.');
+      }
     },
     [userId, pageId, setSelection],
   );
 
   const handleSelectUploaded = useCallback(
-    (id: string) => {
+    async (id: string) => {
       if (!userId) return;
-      setSelection(userId, pageId, 'uploaded', id);
+      try {
+        await setSelection(userId, pageId, 'uploaded', id);
+      } catch {
+        Alert.alert('Error', 'Failed to save background. Please try again.');
+      }
     },
     [userId, pageId, setSelection],
   );
 
-  const handleReset = useCallback(() => {
+  const handleReset = useCallback(async () => {
     if (!userId) return;
-    resetSelection(userId, pageId);
+    try {
+      await resetSelection(userId, pageId);
+    } catch {
+      Alert.alert('Error', 'Failed to reset background. Please try again.');
+    }
   }, [userId, pageId, resetSelection]);
 
   const handleUpload = useCallback(async () => {
@@ -132,13 +143,18 @@ export const BackgroundSection = memo(function BackgroundSection({ pageId }: Bac
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            await headerBackgroundRepository.deleteUploadedImage(id);
-            removeUploadedUri(id);
-            setUploads((prev) => prev.filter((u) => u.id !== id));
-            setSharedUploads((prev) => prev.filter((u) => u.id !== id));
-            // If currently selected, reset to default
-            if (selection?.type === 'uploaded' && selection.value === id && userId) {
-              resetSelection(userId, pageId);
+            try {
+              await headerBackgroundRepository.deleteUploadedImage(id);
+              removeUploadedUri(id);
+              setUploads((prev) => prev.filter((u) => u.id !== id));
+              setSharedUploads((prev) => prev.filter((u) => u.id !== id));
+              // If currently selected, reset to default
+              if (selection?.type === 'uploaded' && selection.value === id && userId) {
+                await resetSelection(userId, pageId);
+              }
+            } catch (error) {
+              console.error('[BackgroundSection] Delete error:', error);
+              Alert.alert('Error', 'Failed to delete image. Please try again.');
             }
           },
         },

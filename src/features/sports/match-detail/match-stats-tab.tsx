@@ -3,13 +3,13 @@ import { memo } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import type { MatchDataState } from '../hooks/use-match-detail';
+import { MatchStatsSkeleton } from '../skeletons';
 import {
   AWAY_COLOR,
   ComparisonBar,
   FAINT,
   HOME_COLOR,
   MUTED,
-  SectionLoading,
   SectionMessage,
 } from './match-detail-shared';
 
@@ -26,7 +26,7 @@ export const MatchStatsTab = memo(function MatchStatsTab({
   homeLabel,
   awayLabel,
 }: StatsTabProps) {
-  if (state.isLoading) return <SectionLoading />;
+  if (state.isLoading) return <MatchStatsSkeleton />;
   if (state.error) return <SectionMessage text={state.error} />;
 
   const stats = state.data;

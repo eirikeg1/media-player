@@ -4,8 +4,9 @@ import { GlassColors, THEME } from '@/lib/theme';
 import { Image } from 'expo-image';
 import type { Standing, StandingEntry } from 'expo-m3u-parser';
 import { memo, useMemo } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 
+import { StandingsSkeleton } from './skeletons';
 import { SPORTS_ACCENT, withAlpha } from './sports-theme';
 
 interface StandingsTableProps {
@@ -72,9 +73,7 @@ export const StandingsTable = memo(function StandingsTable({
   return (
     <View style={styles.container}>
       {isLoading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator />
-        </View>
+        <StandingsSkeleton />
       ) : error ? (
         <View style={styles.emptyContainer}>
           <ThemedText style={[styles.errorText, { color: destructiveColor }]}>{error}</ThemedText>
@@ -122,10 +121,6 @@ const styles = StyleSheet.create({
   container: {
     gap: 12,
     paddingHorizontal: 16,
-  },
-  loadingContainer: {
-    padding: 32,
-    alignItems: 'center',
   },
   emptyContainer: {
     padding: 32,

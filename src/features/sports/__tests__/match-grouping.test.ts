@@ -77,6 +77,17 @@ describe('groupFixturesByLeague', () => {
     expect(groups[0].liveCount).toBe(1);
   });
 
+  it('marks favorites and the ranked leagues, so the list knows what to expand', () => {
+    const groups = groupFixturesByLeague([fixture({}), fixture({ ...obscure })], {
+      favoriteTeamIds: new Set([42]),
+      leagueOrder: [17],
+    });
+    const ranked = new Map(groups.map((g) => [g.title, g.isRanked]));
+    expect(ranked.get('Favorites')).toBe(true);
+    expect(ranked.get('Premier League')).toBe(true);
+    expect(ranked.get('Veikkausliiga')).toBe(false);
+  });
+
   it('groups fixtures without a competition id by name', () => {
     const groups = groupFixturesByLeague(
       [

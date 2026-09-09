@@ -15,7 +15,7 @@ export function useSeriesContinueEpisode(
 ): SeriesContinueResult {
   const [continueEpisode, setContinueEpisode] = useState<ParsedEpisode | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const currentUser = useUserStore((s) => s.currentUser);
+  const userId = useUserStore((s) => s.currentUser?.id);
   const getRecentlyWatched = useUserStore((s) => s.getRecentlyWatched);
 
   // Build a flat sorted list of parsed episodes
@@ -27,7 +27,7 @@ export function useSeriesContinueEpisode(
   }, [episodes]);
 
   useEffect(() => {
-    if (!playlistId || !currentUser || !sortedEpisodes.length) {
+    if (!playlistId || !userId || !sortedEpisodes.length) {
       setContinueEpisode(null);
       return;
     }
@@ -37,7 +37,7 @@ export function useSeriesContinueEpisode(
     (async () => {
       setIsLoading(true);
       try {
-        const history = await getRecentlyWatched(currentUser.id, playlistId, 200);
+        const history = await getRecentlyWatched(userId, playlistId, 200);
 
         // Build a set of episode channel IDs for fast lookup
         const episodeIds = new Set(episodes.map((ch) => getChannelId(ch)));
@@ -89,7 +89,7 @@ export function useSeriesContinueEpisode(
     return () => {
       cancelled = true;
     };
-  }, [playlistId, currentUser, sortedEpisodes, episodes, getRecentlyWatched]);
+  }, [playlistId, userId, sortedEpisodes, episodes, getRecentlyWatched]);
 
   return { continueEpisode, isLoading };
 }

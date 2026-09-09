@@ -10,14 +10,14 @@ import { Pressable, StyleSheet, View } from 'react-native';
  * User settings and profile management component
  */
 export const UserSettings = memo(function UserSettings() {
-  const currentUser = useUserStore((state) => state.currentUser);
+  const username = useUserStore((state) => state.currentUser?.username);
 
   const handleSwitchUser = useCallback(() => {
     // Navigate to the user selection screen
     router.push('/user-select');
   }, []);
 
-  if (!currentUser) {
+  if (!username) {
     return null;
   }
 
@@ -38,7 +38,7 @@ export const UserSettings = memo(function UserSettings() {
           <View style={styles.userCard}>
             <View style={[styles.avatar, { backgroundColor: '#007AFF' }]}>
               <ThemedText style={styles.avatarText}>
-                {currentUser.username
+                {username
                   .split(' ')
                   .map((n) => n[0])
                   .join('')
@@ -46,7 +46,7 @@ export const UserSettings = memo(function UserSettings() {
                   .slice(0, 2)}
               </ThemedText>
             </View>
-            <ThemedText style={styles.username}>{currentUser.username}</ThemedText>
+            <ThemedText style={styles.username}>{username}</ThemedText>
             <IconSymbol name="person.2" size={28} color="#007AFF" />
           </View>
         </Pressable>

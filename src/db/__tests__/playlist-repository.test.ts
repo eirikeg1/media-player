@@ -6,7 +6,7 @@
  */
 import { playlistRepository } from '@/db/playlist-repository';
 import { userRepository } from '@/db/user-repository';
-import { executeQuerySingle, executeStatement } from '@/db/sqlite-client';
+import { executeQuerySingle } from '@/db/sqlite-client';
 import { FACTORY_NOW as BASE_TIME, makePlaylist, makePlaylistCredentials } from '@/test/factories';
 import { resetTestDatabases, tick } from '@/test/helpers';
 
@@ -200,23 +200,6 @@ describe('delete', () => {
     await expect(playlistRepository.delete('missing-id')).rejects.toThrow(
       'Playlist with id missing-id not found',
     );
-  });
-});
-
-describe('clear', () => {
-  it('removes all playlists and legacy channel rows', async () => {
-    await playlistRepository.create(makePlaylist({ id: 'pl-1' }));
-    await playlistRepository.create(makePlaylist({ id: 'pl-2' }));
-    await executeStatement(
-      'INSERT INTO channels (id, playlistId, name, url) VALUES (?, ?, ?, ?)',
-      ['ch-1', 'pl-1', 'Channel 1', 'http://stream.example.com/1.m3u8'],
-    );
-
-    await playlistRepository.clear();
-
-    await expect(playlistRepository.getAll()).resolves.toEqual([]);
-    const channelRow = await executeQuerySingle('SELECT * FROM channels');
-    expect(channelRow).toBeNull();
   });
 });
 

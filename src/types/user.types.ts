@@ -72,9 +72,14 @@ export interface UserSettings {
 }
 
 /**
- * Check if private mode is currently active (not expired)
+ * Check if private mode is currently active (not expired).
+ *
+ * Takes only the field it reads, so callers that subscribe to that one setting
+ * (rather than the whole user) can pass it straight through.
  */
-export function isPrivateModeActive(settings?: UserSettings): boolean {
+export function isPrivateModeActive(
+  settings?: Pick<UserSettings, 'privateModeExpiresAt'>
+): boolean {
   if (!settings?.privateModeExpiresAt) return false;
   return new Date(settings.privateModeExpiresAt).getTime() > Date.now();
 }
@@ -87,26 +92,6 @@ export interface UserFavoriteChannel {
   userId: string;
   channelId: string;
   addedAt: Date;
-}
-
-/**
- * User's hidden channel
- */
-export interface UserHiddenChannel {
-  id: string;
-  userId: string;
-  channelId: string;
-  hiddenAt: Date;
-}
-
-/**
- * User's custom channel ordering
- */
-export interface UserChannelOrder {
-  id: string;
-  userId: string;
-  channelId: string;
-  sortOrder: number;
 }
 
 /**
@@ -173,19 +158,6 @@ export interface ChannelWatchStats {
   completionCount: number;
   avgSessionDuration: number;
   longestSessionDuration: number;
-}
-
-/**
- * Aggregated watch stats per group (per user + playlist)
- */
-export interface GroupWatchStats {
-  userId: string;
-  playlistId: string;
-  groupTitle: string;
-  watchCount: number;
-  totalTimeWatched: number;
-  uniqueChannelsWatched: number;
-  lastWatchedAt: string;
 }
 
 /**

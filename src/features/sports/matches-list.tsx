@@ -1,12 +1,20 @@
 import { ThemedText } from '@/components/ui/display/themed-text';
 import type { Fixture } from 'expo-m3u-parser';
 import { memo, useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, RefreshControl, SectionList, StyleSheet, View, type SectionListData } from 'react-native';
+import {
+  Platform,
+  RefreshControl,
+  SectionList,
+  StyleSheet,
+  View,
+  type SectionListData,
+} from 'react-native';
 
 import { LeagueHeader } from './league-header';
 import type { LeagueTab } from './league-sheet';
 import { involvesFavorite, type MatchGroup } from './match-grouping';
 import { MatchRow } from './match-row';
+import { MatchesListSkeleton } from './skeletons';
 import { SPORTS_ACCENT, useSportsPalette } from './sports-theme';
 
 interface MatchesListProps {
@@ -28,6 +36,11 @@ interface MatchesListProps {
 
 type Section = SectionListData<Fixture, { group: MatchGroup; collapsed: boolean }>;
 
+/** Shared identity for a collapsed section's rows, so `sections` stays stable. */
+const NO_FIXTURES: Fixture[] = [];
+
+const keyExtractor = (fixture: Fixture) => String(fixture.providerId);
+
 /** Virtualised, league-grouped list of a day's matches with collapsible sections. */
 export const MatchesList = memo(function MatchesList({
   groups,
@@ -44,26 +57,30 @@ export const MatchesList = memo(function MatchesList({
   bottomInset,
 }: MatchesListProps) {
   const palette = useSportsPalette();
-  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
+  // Only the groups the user has toggled themselves; everything else follows
+  // the default below. Storing the overrides rather than the collapsed set
+  // keeps a deliberate "expand this one" from being undone by a regrouping.
+  const [overrides, setOverrides] = useState<ReadonlyMap<string, boolean>>(new Map());
 
-  const toggle = useCallback((key: string) => {
-    setCollapsed((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
+  const toggle = useCallback((key: string, collapsed: boolean) => {
+    setOverrides((prev) => new Map(prev).set(key, !collapsed));
   }, []);
 
   const sections = useMemo<Section[]>(
     () =>
-      groups.map((group) => ({
-        key: group.key,
-        group,
-        collapsed: collapsed.has(group.key),
-        data: collapsed.has(group.key) ? [] : group.fixtures,
-      })),
-    [groups, collapsed]
+      groups.map((group) => {
+        // Favorites and the user's own leagues open; the long tail of other
+        // competitions stays a header row until it is asked for, so a busy
+        // Saturday is a screenful of leagues instead of hundreds of rows.
+        const collapsed = overrides.get(group.key) ?? !group.isRanked;
+        return {
+          key: group.key,
+          group,
+          collapsed,
+          data: collapsed ? NO_FIXTURES : group.fixtures,
+        };
+      }),
+    [groups, overrides]
   );
 
   const isFavorite = useCallback(
@@ -73,18 +90,14 @@ export const MatchesList = memo(function MatchesList({
 
   // Only reached when no group survived filtering: a failed refresh that still
   // has fixtures from a previous load keeps showing them instead of the error.
-  const empty = (
+  const empty = isLoading ? (
+    <MatchesListSkeleton />
+  ) : (
     <View style={styles.empty}>
-      {isLoading ? (
-        <ActivityIndicator color={SPORTS_ACCENT.tint} />
-      ) : (
-        <>
-          <ThemedText style={styles.emptyTitle}>{error ?? emptyTitle}</ThemedText>
-          {emptyHint && !error ? (
-            <ThemedText style={[styles.emptyHint, { color: palette.muted }]}>{emptyHint}</ThemedText>
-          ) : null}
-        </>
-      )}
+      <ThemedText style={styles.emptyTitle}>{error ?? emptyTitle}</ThemedText>
+      {emptyHint && !error ? (
+        <ThemedText style={[styles.emptyHint, { color: palette.muted }]}>{emptyHint}</ThemedText>
+      ) : null}
     </View>
   );
 
@@ -124,7 +137,7 @@ export const MatchesList = memo(function MatchesList({
   return (
     <SectionList
       sections={sections}
-      keyExtractor={(item) => String(item.providerId)}
+      keyExtractor={keyExtractor}
       stickySectionHeadersEnabled
       ListHeaderComponent={header}
       ListEmptyComponent={empty}
@@ -135,6 +148,9 @@ export const MatchesList = memo(function MatchesList({
       style={{ backgroundColor: palette.background }}
       initialNumToRender={16}
       windowSize={7}
+      // Android only: on iOS it is known to blank cells inside a SectionList.
+      // No `getItemLayout` — sections make the offset arithmetic error-prone.
+      removeClippedSubviews={Platform.OS === 'android'}
     />
   );
 });

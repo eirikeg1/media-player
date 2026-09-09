@@ -637,9 +637,15 @@ async function getCurrentVersion(db: SQLite.SQLiteDatabase): Promise<number> {
       'SELECT MAX(version) as version FROM migrations'
     ) as { version: number } | null;
     return result?.version || 0;
-  } catch {
-    // migrations table doesn't exist yet
-    return 0;
+  } catch (error) {
+    // A missing migrations table means a fresh database — start at version 0.
+    // Anything else (corruption, a locked or unreadable file) must not be read
+    // as "fresh", which would re-run every migration over existing data.
+    const message = error instanceof Error ? error.message : String(error);
+    if (/no such table/i.test(message)) {
+      return 0;
+    }
+    throw error;
   }
 }
 

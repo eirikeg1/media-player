@@ -7,7 +7,7 @@ import { usePlaylistStore } from '@/stores/playlist/playlist-store';
 import { useUserStore } from '@/stores/user/user-store';
 import type { Channel } from '@/types/playlist.types';
 import type { SeriesInfo } from 'expo-m3u-parser';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
  * The home page's discover rows, personalized from the user's likes, dislikes,
@@ -33,7 +33,19 @@ export function usePersonalizedContent(limit = 50) {
   const [mode, setMode] = useState<RecommendationMode>('random');
   const [isLoading, setIsLoading] = useState(true);
 
+  // Every fetch takes the next generation; only the newest one may write state,
+  // so an unmount or a superseding refresh discards the in-flight run's result.
+  const generationRef = useRef(0);
+
+  /** Supersede whatever run is in flight, so its result is discarded. */
+  const cancelInFlightFetch = useCallback(() => {
+    generationRef.current += 1;
+  }, []);
+
   const fetch = useCallback(async () => {
+    const generation = ++generationRef.current;
+    const isCurrent = () => generationRef.current === generation;
+
     if (!userId || !activePlaylistId) {
       setMovies([]);
       setSeries([]);
@@ -77,9 +89,11 @@ export function usePersonalizedContent(limit = 50) {
         (s, i, arr) => arr.findIndex((x) => x.seriesName === s.seriesName) === i
       );
 
-      setMovies(uniqueMovies);
-      setSeries(uniqueSeries);
-      setMode(recommendationMode(signals, isModelLoaded));
+      if (isCurrent()) {
+        setMovies(uniqueMovies);
+        setSeries(uniqueSeries);
+        setMode(recommendationMode(signals, isModelLoaded));
+      }
 
       // Fire-and-forget: precompute the batch the next read will serve
       RustChannelService.regeneratePersonalizedMovieRecommendations(
@@ -89,18 +103,22 @@ export function usePersonalizedContent(limit = 50) {
         activePlaylistId, userId, excludeAdult, limit, signals
       ).catch(() => {});
     } catch (error) {
+      if (!isCurrent()) return;
       console.error('[usePersonalizedContent] Error:', error);
       setMovies([]);
       setSeries([]);
       setMode('random');
     } finally {
-      setIsLoading(false);
+      if (isCurrent()) {
+        setIsLoading(false);
+      }
     }
   }, [userId, activePlaylistId, limit, excludeAdult]);
 
   useEffect(() => {
     fetch();
-  }, [fetch]);
+    return cancelInFlightFetch;
+  }, [fetch, cancelInFlightFetch]);
 
   return { movies, series, mode, isLoading, refresh: fetch };
 }

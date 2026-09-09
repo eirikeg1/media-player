@@ -1,5 +1,6 @@
 import type { Fixture } from 'expo-m3u-parser';
 import type { VideoPlayer } from 'expo-video';
+import { memo } from 'react';
 import { TouchableOpacity, View } from 'react-native';
 import { CastButton } from 'react-native-google-cast';
 import type { SharedValue } from 'react-native-reanimated';
@@ -39,7 +40,7 @@ interface VideoControlsProps {
   onResync?: () => void;
 }
 
-export function VideoControls({
+function VideoControlsComponent({
   channel,
   player,
   isLoading,
@@ -302,6 +303,12 @@ export function VideoControls({
     </View>
   );
 }
+
+/**
+ * Memoised so the overlay only re-renders when what it displays actually
+ * changes — not on every unrelated store write in the player tree.
+ */
+export const VideoControls = memo(VideoControlsComponent);
 
 interface VideoTapOverlayProps {
   onTap: () => void;

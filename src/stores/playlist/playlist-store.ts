@@ -263,7 +263,9 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
       // Fire-and-forget: detect and fetch EPG data, update lastEpgFetchedAt on success
       EpgService.detectAndFetchEpgSources(id, playlist.epgUrl).then(() => {
         const epgNow = new Date();
-        playlistRepository.update(id, { lastEpgFetchedAt: epgNow }).catch(() => {});
+        playlistRepository.update(id, { lastEpgFetchedAt: epgNow }).catch((err) => {
+          console.warn('[PlaylistStore] Failed to record lastEpgFetchedAt:', err);
+        });
         set((state) => ({
           playlists: state.playlists.map((p) =>
             p.id === id ? { ...p, lastEpgFetchedAt: epgNow } : p
@@ -363,7 +365,9 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
       if (updates.url || updates.credentials || updates.epgUrl !== undefined) {
         EpgService.detectAndFetchEpgSources(id, effectiveEpgUrl || undefined).then(() => {
           const epgNow = new Date();
-          playlistRepository.update(id, { lastEpgFetchedAt: epgNow }).catch(() => {});
+          playlistRepository.update(id, { lastEpgFetchedAt: epgNow }).catch((err) => {
+          console.warn('[PlaylistStore] Failed to record lastEpgFetchedAt:', err);
+        });
           set((state) => ({
             playlists: state.playlists.map((p) =>
               p.id === id ? { ...p, lastEpgFetchedAt: epgNow } : p

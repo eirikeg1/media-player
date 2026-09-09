@@ -63,6 +63,7 @@ export const MatchRow = memo(function MatchRow({ fixture, isFavorite, onPress, s
         <TeamLine
           name={fixture.homeTeam}
           crest={fixture.homeTeamCrest}
+          recyclingKey={`${fixture.providerId}:home`}
           score={status.showScore ? fixture.homeScore : undefined}
           scoreColor={scoreColor}
           dim={isFinished && !homeWon && !!awayWon}
@@ -71,6 +72,7 @@ export const MatchRow = memo(function MatchRow({ fixture, isFavorite, onPress, s
         <TeamLine
           name={fixture.awayTeam}
           crest={fixture.awayTeamCrest}
+          recyclingKey={`${fixture.providerId}:away`}
           score={status.showScore ? fixture.awayScore : undefined}
           scoreColor={scoreColor}
           dim={isFinished && !awayWon && !!homeWon}
@@ -92,6 +94,7 @@ export const MatchRow = memo(function MatchRow({ fixture, isFavorite, onPress, s
 function TeamLine({
   name,
   crest,
+  recyclingKey,
   score,
   scoreColor,
   dim,
@@ -99,6 +102,8 @@ function TeamLine({
 }: {
   name: string;
   crest?: string;
+  /** Identifies the crest slot so a recycled row doesn't show the last team's. */
+  recyclingKey: string;
   score?: number;
   scoreColor: string;
   dim: boolean;
@@ -107,7 +112,14 @@ function TeamLine({
   return (
     <View style={styles.teamLine}>
       {crest ? (
-        <Image source={{ uri: crest }} style={styles.crest} contentFit="contain" transition={150} />
+        <Image
+          source={{ uri: crest }}
+          style={styles.crest}
+          contentFit="contain"
+          transition={150}
+          recyclingKey={recyclingKey}
+          cachePolicy="memory-disk"
+        />
       ) : (
         <View style={styles.crest} />
       )}

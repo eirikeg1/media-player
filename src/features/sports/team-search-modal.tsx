@@ -9,13 +9,14 @@ import { GlassColors } from '@/lib/theme';
 import { Image } from 'expo-image';
 import type { Team, TeamSearchResult } from 'expo-m3u-parser';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Modal, Pressable, StyleSheet, View } from 'react-native';
+import { FlatList, Modal, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CompetitionGrid } from './competition-grid';
 import { useAllCompetitionTeams } from './hooks/use-all-competition-teams';
 import { useCompetitionTeams } from './hooks/use-competition-teams';
 import { useCompetitions } from './hooks/use-competitions';
+import { TeamListSkeleton } from './skeletons';
 import { teamKey } from './utils';
 
 function searchResultToTeam(result: TeamSearchResult): Team {
@@ -200,9 +201,7 @@ export const ManageFavoritesModal = memo(function ManageFavoritesModal({
             }
             ListEmptyComponent={
               (selectedCompId !== null ? isLoadingTeams : isLoadingAll) ? (
-                <View style={styles.loadingContainer}>
-                  <ActivityIndicator />
-                </View>
+                <TeamListSkeleton />
               ) : (
                 <View style={styles.emptyContainer}>
                   <ThemedText style={styles.emptyText}>
@@ -238,10 +237,6 @@ const styles = StyleSheet.create({
   listWrapper: {
     flex: 1,
     overflow: 'hidden',
-  },
-  loadingContainer: {
-    padding: 32,
-    alignItems: 'center',
   },
   emptyContainer: {
     padding: 32,

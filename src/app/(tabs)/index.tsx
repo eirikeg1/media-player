@@ -89,14 +89,6 @@ export default function HomeScreen() {
     }
   }, [isRevealed]);
 
-  // Safety timeout: reveal the UI after 10s no matter what
-  useEffect(() => {
-    const timeout = setTimeout(() => {
-      useAppReadyStore.getState().markReady();
-    }, 10_000);
-    return () => clearTimeout(timeout);
-  }, []);
-
   // Auto-refresh recently watched when tab gains focus
   const isInitialMount = useRef(true);
   useFocusEffect(

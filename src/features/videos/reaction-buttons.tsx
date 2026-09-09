@@ -23,7 +23,7 @@ const MUTED_COLOR = 'rgba(160, 160, 160, 0.9)';
 export function ReactionButtons({ channelId, contentName, size = 22 }: ReactionButtonsProps) {
   const [isSaving, setIsSaving] = useState(false);
 
-  const currentUser = useUserStore((state) => state.currentUser);
+  const userId = useUserStore((state) => state.currentUser?.id);
   const reaction = useUserStore((state) => state.contentReactions[channelId] ?? null);
   const setReaction = useUserStore((state) => state.setReaction);
 
@@ -31,22 +31,22 @@ export function ReactionButtons({ channelId, contentName, size = 22 }: ReactionB
 
   const handlePress = useCallback(
     async (value: ContentReactionValue) => {
-      if (!currentUser || isSaving) return;
+      if (!userId || isSaving) return;
 
       setIsSaving(true);
       try {
         // Tapping the active thumb clears the reaction
-        await setReaction(currentUser.id, channelId, reaction === value ? null : value);
+        await setReaction(userId, channelId, reaction === value ? null : value);
       } catch (error) {
         console.error('[ReactionButtons] Error setting reaction:', error);
       } finally {
         setIsSaving(false);
       }
     },
-    [currentUser, isSaving, channelId, reaction, setReaction]
+    [userId, isSaving, channelId, reaction, setReaction]
   );
 
-  if (!currentUser) return null;
+  if (!userId) return null;
 
   const isLiked = reaction === 1;
   const isDisliked = reaction === -1;

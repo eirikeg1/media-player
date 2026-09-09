@@ -83,7 +83,7 @@ describe('loadUsers', () => {
     expect(state.error).toBeNull();
   });
 
-  it('loads persisted users, selects the first as current, and hydrates favorites', async () => {
+  it('loads persisted users and selects the first as current', async () => {
     const created = await useUserStore.getState().createUser({ username: 'Alice' });
     await userRepository.addFavoriteChannel(created.id, 'nrk1.no');
 
@@ -97,7 +97,11 @@ describe('loadUsers', () => {
     expect(state.users).toHaveLength(1);
     expect(state.currentUser?.id).toBe(created.id);
     expect(state.currentUser?.settings?.theme).toBe('system');
-    expect(state.favoriteChannels).toEqual(['nrk1.no']);
+    // Hydration is the caller's job (runInit), so loadUsers leaves it alone.
+    expect(state.favoriteChannels).toEqual([]);
+
+    await useUserStore.getState().loadFavoriteChannels(created.id);
+    expect(useUserStore.getState().favoriteChannels).toEqual(['nrk1.no']);
   });
 });
 
@@ -230,7 +234,7 @@ describe('toggleFavorite', () => {
     await useUserStore.getState().toggleFavorite(user.id, 'nrk1.no');
 
     expect(useUserStore.getState().favoriteChannels).toEqual(['nrk1.no']);
-    expect(await useUserStore.getState().isFavorite(user.id, 'nrk1.no')).toBe(true);
+    await expect(userRepository.getFavoriteChannels(user.id)).resolves.toEqual(['nrk1.no']);
   });
 
   it('removes the favorite on a second toggle', async () => {
@@ -240,7 +244,7 @@ describe('toggleFavorite', () => {
     await useUserStore.getState().toggleFavorite(user.id, 'nrk1.no');
 
     expect(useUserStore.getState().favoriteChannels).toEqual([]);
-    expect(await useUserStore.getState().isFavorite(user.id, 'nrk1.no')).toBe(false);
+    await expect(userRepository.getFavoriteChannels(user.id)).resolves.toEqual([]);
   });
 });
 

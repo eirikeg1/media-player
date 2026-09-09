@@ -2,7 +2,8 @@ import { ThemedText } from '@/components/ui/display/themed-text';
 import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
 import { ScrollView, StyleSheet, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 
-import { addDays, isSameLocalDay, localDateKey, startOfLocalDay } from './date-utils';
+import { addDays, isSameLocalDay, localDateKey } from './date-utils';
+import { useToday } from './hooks/use-today';
 import { SPORTS_ACCENT, useSportsPalette } from './sports-theme';
 
 const DAYS_BEFORE = 7;
@@ -20,7 +21,9 @@ interface DateStripProps {
 export const DateStrip = memo(function DateStrip({ selected, onSelect }: DateStripProps) {
   const palette = useSportsPalette();
   const scrollRef = useRef<ScrollView>(null);
-  const today = useMemo(() => startOfLocalDay(new Date()), []);
+  // Re-emitted at midnight, so the strip re-centres and stops labelling
+  // yesterday as "Today" in a session left open overnight.
+  const today = useToday();
   const days = useMemo(
     () => Array.from({ length: DAYS_BEFORE + DAYS_AFTER + 1 }, (_, i) => addDays(today, i - DAYS_BEFORE)),
     [today]

@@ -2,6 +2,13 @@
  * Video player constants
  */
 
+/**
+ * How long an Xtream panel needs to free a connection slot after the player
+ * holding it is unloaded. The account allows a single concurrent connection,
+ * so the next stream must wait this long before opening its own.
+ */
+export const CONNECTION_RELEASE_DELAY_MS = 2000;
+
 export const VIDEO_CONSTANTS = {
   // Timeouts
   CONTROLS_HIDE_TIMEOUT: 3000,

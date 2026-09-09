@@ -98,15 +98,11 @@ export function SeriesDetailModal({
   }, [sortedSeasons, seasonMap]);
 
   const handleEpisodePressWithQueue = useCallback((channel: Channel) => {
-    const queueItems = flatEpisodes.map(ch => ({
-      channelId: getChannelId(ch),
-      channel: ch,
-    }));
-    const currentIndex = queueItems.findIndex(
-      item => item.channelId === getChannelId(channel)
+    const currentIndex = flatEpisodes.findIndex(
+      ch => getChannelId(ch) === getChannelId(channel)
     );
     usePlaybackQueueStore.getState().setQueue(
-      queueItems,
+      flatEpisodes,
       currentIndex >= 0 ? currentIndex : 0
     );
     onEpisodePress(channel);

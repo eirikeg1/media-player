@@ -346,35 +346,6 @@ describe('favorite channels', () => {
   });
 });
 
-describe('hidden channels', () => {
-  beforeEach(async () => {
-    await seedChannels('ch-1');
-  });
-
-  it('round-trips hide/is/unhide with dedup', async () => {
-    const user = await createUser();
-
-    await userRepository.hideChannel(user.id, 'ch-1');
-    await userRepository.hideChannel(user.id, 'ch-1');
-
-    await expect(userRepository.isChannelHidden(user.id, 'ch-1')).resolves.toBe(true);
-    await expect(userRepository.getHiddenChannels(user.id)).resolves.toEqual(['ch-1']);
-
-    await userRepository.unhideChannel(user.id, 'ch-1');
-    await expect(userRepository.isChannelHidden(user.id, 'ch-1')).resolves.toBe(false);
-    await expect(userRepository.getHiddenChannels(user.id)).resolves.toEqual([]);
-  });
-
-  it('isolates hidden channels per user', async () => {
-    const alice = await createUser('Alice');
-    const bob = await createUser('Bob');
-
-    await userRepository.hideChannel(alice.id, 'ch-1');
-
-    await expect(userRepository.isChannelHidden(bob.id, 'ch-1')).resolves.toBe(false);
-  });
-});
-
 describe('content reactions', () => {
   it('stores a like and returns it with its timestamp', async () => {
     const user = await createUser();
@@ -480,52 +451,6 @@ describe('favorite groups', () => {
     await userRepository.addFavoriteGroup(alice.id, 'Sports');
 
     await expect(userRepository.getFavoriteGroups(bob.id)).resolves.toEqual([]);
-  });
-});
-
-describe('channel order', () => {
-  beforeEach(async () => {
-    await seedChannels('ch-1', 'ch-2');
-  });
-
-  it('returns the order as a map', async () => {
-    const user = await createUser();
-
-    await userRepository.setChannelOrder(user.id, 'ch-1', 2);
-    await userRepository.setChannelOrder(user.id, 'ch-2', 1);
-
-    const order = await userRepository.getChannelOrder(user.id);
-    expect(order.get('ch-1')).toBe(2);
-    expect(order.get('ch-2')).toBe(1);
-    expect(order.size).toBe(2);
-  });
-
-  it('upserts so the latest order wins without duplicating rows', async () => {
-    const user = await createUser();
-
-    await userRepository.setChannelOrder(user.id, 'ch-1', 5);
-    await userRepository.setChannelOrder(user.id, 'ch-1', 9);
-
-    const order = await userRepository.getChannelOrder(user.id);
-    expect(order.get('ch-1')).toBe(9);
-
-    const rows = await executeQuery(
-      'SELECT * FROM user_channel_order WHERE userId = ? AND channelId = ?',
-      [user.id, 'ch-1'],
-    );
-    expect(rows).toHaveLength(1);
-  });
-
-  it('clearChannelOrder only clears the given user', async () => {
-    const alice = await createUser('Alice');
-    const bob = await createUser('Bob');
-    await userRepository.setChannelOrder(alice.id, 'ch-1', 1);
-    await userRepository.setChannelOrder(bob.id, 'ch-1', 1);
-
-    await userRepository.clearChannelOrder(alice.id);
-
-    expect((await userRepository.getChannelOrder(alice.id)).size).toBe(0);
-    expect((await userRepository.getChannelOrder(bob.id)).size).toBe(1);
   });
 });
 
@@ -862,23 +787,6 @@ describe('clearViewingHistory', () => {
   });
 });
 
-describe('clearViewingHistoryForPlaylist', () => {
-  it('removes history for the given playlist only', async () => {
-    const user = await createUser();
-    await watchSession({ userId: user.id, channelId: 'ch-a', playlistId: 'playlist-a', groupTitle: 'Movies', durationWatched: 100 });
-    await watchSession({ userId: user.id, channelId: 'ch-b', playlistId: 'playlist-b', groupTitle: 'Movies', durationWatched: 100 });
-
-    await userRepository.clearViewingHistoryForPlaylist(user.id, 'playlist-a');
-
-    const sessions = await userRepository.getViewingHistory(user.id);
-    expect(sessions.map((s) => s.playlistId)).toEqual(['playlist-b']);
-    expect(await getChannelStatsRow(user.id, 'ch-a', 'playlist-a')).toBeNull();
-    expect(await getChannelStatsRow(user.id, 'ch-b', 'playlist-b')).not.toBeNull();
-    expect(await getGroupStatsRow(user.id, 'Movies', 'playlist-a')).toBeNull();
-    expect(await getGroupStatsRow(user.id, 'Movies', 'playlist-b')).not.toBeNull();
-  });
-});
-
 describe('setNextEpisode', () => {
   it('is returned by getRecentlyWatched', async () => {
     const user = await createUser();
@@ -902,18 +810,6 @@ describe('setNextEpisode', () => {
     const [item] = await userRepository.getRecentlyWatched(user.id, PLAYLIST_ID);
     expect(item.nextEpisodeChannelId).toBeUndefined();
     expect(item.nextEpisodeChannelName).toBeUndefined();
-  });
-});
-
-describe('getMostWatchedGroups', () => {
-  it('orders groups by totalTimeWatched descending', async () => {
-    const user = await createUser();
-    await watchSession({ userId: user.id, channelId: 'n-1', groupTitle: 'News', durationWatched: 100 });
-    await watchSession({ userId: user.id, channelId: 'm-1', groupTitle: 'Movies', durationWatched: 900 });
-
-    const groups = await userRepository.getMostWatchedGroups(user.id, PLAYLIST_ID);
-    expect(groups.map((g) => g.groupTitle)).toEqual(['Movies', 'News']);
-    expect(groups[0].totalTimeWatched).toBe(900);
   });
 });
 
@@ -1004,23 +900,5 @@ describe('getWatchedContent', () => {
     expect(watched.channelIds).toEqual(['live-1']);
     expect(watched.completedChannelIds).toEqual([]);
     expect(watched.completedEpisodesBySeries).toEqual({});
-  });
-});
-
-describe('migrateFavoritesToNewFormat', () => {
-  it('rewrites legacy name-based favorites to tvg.id-based ids', async () => {
-    const user = await createUser();
-    const channel = {
-      name: 'TV2 Sport',
-      url: 'http://stream.example.com/tv2sport.m3u8',
-      tvg: { id: 'tv2sport.no' },
-    };
-    await seedChannels('TV2 Sport', `${channel.name}|${channel.url}`, 'tv2sport.no');
-    await userRepository.addFavoriteChannel(user.id, 'TV2 Sport');
-    await userRepository.addFavoriteChannel(user.id, `${channel.name}|${channel.url}`);
-
-    await userRepository.migrateFavoritesToNewFormat(user.id, [channel]);
-
-    await expect(userRepository.getFavoriteChannels(user.id)).resolves.toEqual(['tv2sport.no']);
   });
 });

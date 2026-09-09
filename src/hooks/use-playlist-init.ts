@@ -4,16 +4,10 @@ import { useUserStore } from '@/stores/user/user-store';
 import { useHeaderBackgroundStore } from '@/stores/header-background';
 import { useFirstPageCacheStore } from '@/stores/cache';
 import { initializeDatabase } from '@/db/migrations';
-import { ensureRecommendationModelLoaded } from '@/services/recommendation-model';
 
 async function runInit() {
   const loadUsers = useUserStore.getState().loadUsers;
   const loadPlaylists = usePlaylistStore.getState().loadPlaylists;
-
-  // Materialize and load the recommendation taste model alongside the rest of
-  // startup. Not awaited: the home page awaits the same memoized promise when
-  // it needs the model, and nothing else here depends on it.
-  void ensureRecommendationModelLoaded();
 
   try {
     // Initialize database schema (run migrations)
@@ -44,6 +38,10 @@ async function runInit() {
     if (currentUser) {
       console.log('[App] Loading favorite channels...');
       await useUserStore.getState().loadFavoriteChannels(currentUser.id);
+
+      // Taste signals for the personalized home rows
+      console.log('[App] Loading content reactions...');
+      await useUserStore.getState().loadContentReactions(currentUser.id);
 
       // Load header background selections
       console.log('[App] Loading header background selections...');

@@ -4,14 +4,15 @@ import { ThemedView } from '@/components/ui/display/themed-view';
 import { Image } from 'expo-image';
 import type { Fixture } from 'expo-m3u-parser';
 import { memo, useMemo } from 'react';
-import { ActivityIndicator, Modal, ScrollView, StyleSheet, View } from 'react-native';
+import { Modal, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { groupFixturesByDay } from './day-sections';
 import { useTeamSchedule } from './hooks/use-team-schedule';
 import { involvesFavorite } from './match-grouping';
 import { MatchRow } from './match-row';
-import { SPORTS_ACCENT, useSportsPalette } from './sports-theme';
+import { TeamScheduleSkeleton } from './skeletons';
+import { useSportsPalette } from './sports-theme';
 
 /** The team a sheet is opened for — everything a fixture knows about a side. */
 export interface TeamRef {
@@ -62,9 +63,7 @@ export const TeamSheet = memo(function TeamSheet({
 
             <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 24 }]}>
               {isLoading && sections.length === 0 ? (
-                <View style={styles.placeholder}>
-                  <ActivityIndicator color={SPORTS_ACCENT.tint} />
-                </View>
+                <TeamScheduleSkeleton />
               ) : sections.length === 0 ? (
                 <View style={styles.placeholder}>
                   <ThemedText style={[styles.placeholderText, { color: palette.muted }]}>

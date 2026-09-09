@@ -22,6 +22,13 @@ module.exports = function (api) {
     plugins.push('babel-plugin-dynamic-import-node');
   }
 
+  if (process.env.NODE_ENV === 'production') {
+    // The app logs verbosely through startup, imports and playback — some of it
+    // with playlist URLs. Strip that from release builds, keeping the levels
+    // that report real problems.
+    plugins.push(['transform-remove-console', { exclude: ['error', 'warn'] }]);
+  }
+
   // Must stay last per react-native-reanimated's docs.
   plugins.push('react-native-reanimated/plugin');
 

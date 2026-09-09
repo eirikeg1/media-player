@@ -51,3 +51,9 @@ tmp
 
 # Test coverage output
 coverage/
+
+# Local SQLite databases
+*.db
+
+# Claude Code local settings
+.claude/

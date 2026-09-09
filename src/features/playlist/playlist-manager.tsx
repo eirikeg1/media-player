@@ -1,6 +1,7 @@
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
+import { saveSetting } from '@/features/user/save-setting';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { usePlaylistStore } from '@/stores/playlist/playlist-store';
 import { useUserStore } from '@/stores/user/user-store';
@@ -22,13 +23,15 @@ export const PlaylistManager = memo(function PlaylistManager() {
   const isLoading = usePlaylistStore((state) => state.isLoading);
   const error = usePlaylistStore((state) => state.error);
 
-  const currentUser = useUserStore((state) => state.currentUser);
-  const updateSettings = useUserStore((state) => state.updateSettings);
-  const playlistSharingEnabled = currentUser?.settings?.playlistSharingEnabled ?? true;
+  const playlistSharingEnabled = useUserStore(
+    (state) => state.currentUser?.settings?.playlistSharingEnabled ?? true,
+  );
   // Adult filtering is on by default: keep this fallback in sync with
   // DEFAULT_USER_SETTINGS and every consumer that filters content (`?? true`)
   // — the switch must never claim filtering is off while the queries filter.
-  const parentalControlEnabled = currentUser?.settings?.parentalControlEnabled ?? true;
+  const parentalControlEnabled = useUserStore(
+    (state) => state.currentUser?.settings?.parentalControlEnabled ?? true,
+  );
 
   const handleCloseModal = useCallback(() => {
     setShowModal(false);
@@ -38,21 +41,13 @@ export const PlaylistManager = memo(function PlaylistManager() {
     setShowModal(true);
   }, []);
 
-  const handleTogglePlaylistSharing = useCallback(
-    (value: boolean) => {
-      if (!currentUser) return;
-      updateSettings(currentUser.id, { playlistSharingEnabled: value });
-    },
-    [currentUser, updateSettings],
-  );
+  const handleTogglePlaylistSharing = useCallback((value: boolean) => {
+    void saveSetting({ playlistSharingEnabled: value }, 'playlist sharing');
+  }, []);
 
-  const handleToggleParentalControl = useCallback(
-    (value: boolean) => {
-      if (!currentUser) return;
-      updateSettings(currentUser.id, { parentalControlEnabled: value });
-    },
-    [currentUser, updateSettings],
-  );
+  const handleToggleParentalControl = useCallback((value: boolean) => {
+    void saveSetting({ parentalControlEnabled: value }, 'adult content filtering');
+  }, []);
 
   return (
     <ThemedView style={styles.container}>

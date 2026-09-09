@@ -37,9 +37,15 @@ export async function runForegroundRefresh(opts: { force?: boolean } = {}): Prom
   return inFlight;
 }
 
-/** Days warmed around today at boot: tomorrow first, then yesterday's results
- * and the rest of the week ahead. */
-const ADJACENT_DAY_OFFSETS = [1, -1, 2, 3, 4, 5] as const;
+/**
+ * Days warmed around today at boot: tomorrow first, then yesterday's results.
+ *
+ * Deliberately just the two the date strip can reach in one swipe. Every extra
+ * day is another ~10 paced provider requests at every cold launch, all of them
+ * for days the user may never open — and they compete with the fetch for the
+ * day that is actually on screen.
+ */
+const ADJACENT_DAY_OFFSETS = [1, -1] as const;
 
 /**
  * Warm the day schedules around today, so paging the date strip after a cold

@@ -174,15 +174,11 @@ export default function LiveScreen() {
     setChannelModalVisible(false);
 
     // Populate playback queue with currently loaded channels
-    const queueItems = channels.map(ch => ({
-      channelId: getChannelId(ch),
-      channel: ch,
-    }));
-    const currentIndex = queueItems.findIndex(
-      item => item.channelId === getChannelId(channel)
+    const currentIndex = channels.findIndex(
+      ch => getChannelId(ch) === getChannelId(channel)
     );
     usePlaybackQueueStore.getState().setQueue(
-      queueItems,
+      channels,
       currentIndex >= 0 ? currentIndex : 0
     );
 

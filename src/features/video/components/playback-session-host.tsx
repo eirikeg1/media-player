@@ -18,11 +18,11 @@ import { useViewingHistory } from '../hooks/specialized/use-viewing-history';
 export function PlaybackSessionHost() {
   const session = usePlaybackSessionStore((s) => s.session);
   if (!session) return null;
-  // Keyed per channel so a channel switch cleanly ends one history session
-  // and starts the next.
+  // Keyed per channel — and per catch-up window, so switching the same channel
+  // between live and an archive window also starts a fresh history session.
   return (
     <SessionHistoryTracker
-      key={`${session.playlistId}:${getChannelId(session.channel)}`}
+      key={`${session.playlistId}:${getChannelId(session.channel)}:${session.catchup?.start ?? 'live'}`}
       session={session}
     />
   );

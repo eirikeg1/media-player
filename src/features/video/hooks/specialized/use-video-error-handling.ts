@@ -1,19 +1,20 @@
 import { useVideoErrorStore } from '@/stores/video/error-store';
 import { useCallback, useMemo } from 'react';
 import { Alert } from 'react-native';
+import { useShallow } from 'zustand/react/shallow';
 import { calculateRetryDelay, getVideoErrorInfo, type RawVideoError } from '../../types/video-error.types';
 
 export function useVideoErrorHandling() {
-  const {
-    hasError,
-    error,
-    retryState,
-    setError,
-    clearError,
-    setRetryState,
-    incrementRetryAttempt,
-    resetRetryState,
-  } = useVideoErrorStore();
+  // Selected rather than subscribing to the whole store: an unrelated write
+  // must not re-render the entire player tree.
+  const { hasError, error, retryState } = useVideoErrorStore(
+    useShallow((s) => ({ hasError: s.hasError, error: s.error, retryState: s.retryState }))
+  );
+  const setError = useVideoErrorStore((s) => s.setError);
+  const clearError = useVideoErrorStore((s) => s.clearError);
+  const setRetryState = useVideoErrorStore((s) => s.setRetryState);
+  const incrementRetryAttempt = useVideoErrorStore((s) => s.incrementRetryAttempt);
+  const resetRetryState = useVideoErrorStore((s) => s.resetRetryState);
 
   const handleError = useCallback((rawError: RawVideoError) => {
     const enhancedError = getVideoErrorInfo(rawError, retryState.attempt);

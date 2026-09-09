@@ -263,6 +263,16 @@ function stripStored(channel: StoredChannel): Channel {
   return rest;
 }
 
+/** Key for one catch-up window of one channel, as the fake's archive is seeded. */
+function catchupKey(
+  playlistId: string,
+  channelId: string,
+  startUnix: number,
+  durationMinutes: number,
+): string {
+  return `${playlistId}|${channelId}|${startUnix}|${durationMinutes}`;
+}
+
 // ── Database fake ──
 
 export class Database {
@@ -274,6 +284,8 @@ export class Database {
   private metadata: ChannelMetadata[] = [];
   private epgSources = new Map<string, EpgSource>();
   private programmes = new Map<string, EpgProgramme[]>(); // keyed by sourceId
+  /** Seeded catch-up archive: window key → stream URL. Empty means no archive. */
+  private catchupUrls = new Map<string, string>();
   private nextPosition = 1;
   /** Path of the last loaded recommendation model, or null when none is loaded. */
   __recommendationModelPath: string | null = null;
@@ -302,6 +314,7 @@ export class Database {
     this.metadata = [];
     this.epgSources.clear();
     this.programmes.clear();
+    this.catchupUrls.clear();
     this.nextPosition = 1;
     this.__recommendationModelPath = null;
   }
@@ -314,6 +327,17 @@ export class Database {
 
   __seedMetadata(metadata: ChannelMetadata[]): void {
     this.metadata.push(...metadata);
+  }
+
+  /** Register the archive URL the panel serves for one channel + window. */
+  __seedCatchupUrl(
+    playlistId: string,
+    channelId: string,
+    startUnix: number,
+    durationMinutes: number,
+    url: string,
+  ): void {
+    this.catchupUrls.set(catchupKey(playlistId, channelId, startUnix, durationMinutes), url);
   }
 
   __seedProgrammes(sourceId: string, programmes: EpgProgramme[]): void {
@@ -372,6 +396,16 @@ export class Database {
       (c) => c.playlistId === playlistId && c.channelId === channelId,
     );
     return found ? stripStored(found) : null;
+  }
+
+  /** Like Rust, an unseeded channel/window simply has no archive to serve. */
+  async getCatchupStreamUrl(
+    playlistId: string,
+    channelId: string,
+    startUnix: number,
+    durationMinutes: number,
+  ): Promise<string | null> {
+    return this.catchupUrls.get(catchupKey(playlistId, channelId, startUnix, durationMinutes)) ?? null;
   }
 
   async deleteChannelsByPlaylist(playlistId: string): Promise<void> {
@@ -463,6 +497,9 @@ export class Database {
     }
 
     let series = [...seriesMap.values()];
+    if (filter?.exactName) {
+      series = series.filter((s) => s.seriesName === filter.exactName);
+    }
     if (filter?.search) {
       const needle = filter.search.toLowerCase();
       series = series.filter((s) => s.seriesName.toLowerCase().includes(needle));

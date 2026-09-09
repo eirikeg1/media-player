@@ -5,6 +5,7 @@ import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import type { CatchupWindow } from './catchup';
 import { useFixtureBroadcasts } from './hooks/use-fixture-broadcasts';
 import { useLiveMatchScore } from './hooks/use-match-detail';
 import { MatchDetailContent } from './match-detail/match-detail-content';
@@ -36,7 +37,8 @@ const HEADER_BACKGROUND = '#1C1C21';
 interface MatchSheetProps {
   fixture: Fixture | null;
   onClose: () => void;
-  onPlayChannel: (channelId: string, fixture: Fixture) => void;
+  /** `catchup` plays the match from the panel's archive instead of live. */
+  onPlayChannel: (channelId: string, fixture: Fixture, catchup?: CatchupWindow | null) => void;
   /** Opens the team sheet for a side; the caller closes this sheet first. */
   onOpenTeam: (team: TeamRef) => void;
 }
@@ -78,8 +80,8 @@ export const MatchSheet = memo(function MatchSheet({ fixture, onClose, onPlayCha
   const bestChannel = broadcasts[0];
 
   const handlePlay = useCallback(
-    (channelId: string) => {
-      if (fixture) onPlayChannel(channelId, fixture);
+    (channelId: string, catchup: CatchupWindow | null = null) => {
+      if (fixture) onPlayChannel(channelId, fixture, catchup);
     },
     [fixture, onPlayChannel]
   );
@@ -168,7 +170,12 @@ export const MatchSheet = memo(function MatchSheet({ fixture, onClose, onPlayCha
         <ScrollView style={styles.body} contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}>
           {tab === 'overview' && <MatchOverviewTab fixture={merged} />}
           {tab === 'watch' && (
-            <MatchWatchTab broadcasts={broadcasts} isLoading={isLoadingBroadcasts} onPlay={handlePlay} />
+            <MatchWatchTab
+              fixture={merged}
+              broadcasts={broadcasts}
+              isLoading={isLoadingBroadcasts}
+              onPlay={handlePlay}
+            />
           )}
           {hasWidgets && (
             <MatchDetailContent fixture={merged} activeKey={detailKey} homeLabel={score.home} awayLabel={score.away} />

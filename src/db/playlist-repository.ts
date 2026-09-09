@@ -1,6 +1,5 @@
-import type { Playlist, Channel } from '@/types/playlist.types';
+import type { Playlist } from '@/types/playlist.types';
 import { executeQuery, executeQuerySingle, executeStatement } from './sqlite-client';
-import { RustChannelService } from '@/services/rust-channel-service';
 
 /**
  * Repository interface for playlist data access
@@ -12,12 +11,6 @@ export interface IPlaylistRepository {
   create(playlist: Playlist): Promise<Playlist>;
   update(id: string, updates: Partial<Playlist>): Promise<Playlist>;
   delete(id: string): Promise<void>;
-  clear(): Promise<void>;
-
-  // Channel operations
-  getChannelsByPlaylistId(playlistId: string): Promise<Channel[]>;
-  saveChannels(playlistId: string, channels: Channel[]): Promise<void>;
-  deleteChannelsByPlaylistId(playlistId: string): Promise<void>;
 }
 
 /**
@@ -40,22 +33,6 @@ interface PlaylistRow {
   lastEpgFetchedAt: string | null;
 }
 
-interface ChannelRow {
-  id: string;
-  playlistId: string;
-  name: string;
-  url: string;
-  tvgId: string | null;
-  tvgName: string | null;
-  tvgLogo: string | null;
-  tvgCountry: string | null;
-  tvgLanguage: string | null;
-  tvgUrl: string | null;
-  groupTitle: string | null;
-  httpReferrer: string | null;
-  httpUserAgent: string | null;
-}
-
 /**
  * SQLite implementation of playlist repository
  */
@@ -63,7 +40,7 @@ class SQLitePlaylistRepository implements IPlaylistRepository {
   /**
    * Convert database row to Playlist object
    */
-  private rowToPlaylist(row: PlaylistRow, channels?: Channel[]): Playlist {
+  private rowToPlaylist(row: PlaylistRow): Playlist {
     const playlist: Playlist = {
       id: row.id,
       name: row.name,
@@ -86,42 +63,7 @@ class SQLitePlaylistRepository implements IPlaylistRepository {
       };
     }
 
-    if (channels && channels.length > 0) {
-      playlist.parsedData = {
-        items: channels as any,
-        header: {
-          attrs: { 'x-tvg-url': '' },
-          raw: '',
-        },
-      };
-    }
-
     return playlist;
-  }
-
-  /**
-   * Convert database row to Channel object
-   */
-  private rowToChannel(row: ChannelRow): Channel {
-    return {
-      name: row.name,
-      url: row.url,
-      tvg: {
-        id: row.tvgId || undefined,
-        name: row.tvgName || undefined,
-        logo: row.tvgLogo || undefined,
-        country: row.tvgCountry || undefined,
-        language: row.tvgLanguage || undefined,
-        url: row.tvgUrl || undefined,
-      },
-      group: {
-        title: row.groupTitle || undefined,
-      },
-      http: row.httpReferrer || row.httpUserAgent ? {
-        referrer: row.httpReferrer || undefined,
-        userAgent: row.httpUserAgent || undefined,
-      } : undefined,
-    };
   }
 
   async getAll(): Promise<Playlist[]> {
@@ -262,30 +204,6 @@ class SQLitePlaylistRepository implements IPlaylistRepository {
     console.log('[SQLitePlaylistRepository] Playlist deleted successfully');
   }
 
-  async clear(): Promise<void> {
-    console.log('[SQLitePlaylistRepository] clear called');
-    await executeStatement('DELETE FROM playlists');
-    await executeStatement('DELETE FROM channels');
-    console.log('[SQLitePlaylistRepository] All playlists and channels cleared');
-  }
-
-  async getChannelsByPlaylistId(playlistId: string): Promise<Channel[]> {
-    // Channels are now stored in Rust database
-    console.log('[SQLitePlaylistRepository] getChannelsByPlaylistId - delegating to Rust:', playlistId);
-    return RustChannelService.getChannelsByPlaylistId(playlistId);
-  }
-
-  async saveChannels(_playlistId: string, _channels: Channel[]): Promise<void> {
-    // Channels are now managed by Rust - this is a no-op
-    // Channel import happens via RustChannelService.fetchAndImportPlaylist()
-    console.log('[SQLitePlaylistRepository] saveChannels - no-op, channels managed by Rust');
-  }
-
-  async deleteChannelsByPlaylistId(playlistId: string): Promise<void> {
-    // Channels are now stored in Rust database
-    console.log('[SQLitePlaylistRepository] deleteChannelsByPlaylistId - delegating to Rust:', playlistId);
-    await RustChannelService.deleteChannelsByPlaylist(playlistId);
-  }
 }
 
 /**

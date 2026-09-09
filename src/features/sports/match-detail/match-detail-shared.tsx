@@ -2,7 +2,6 @@ import { Image } from 'expo-image';
 import type { PlayerEntry } from 'expo-m3u-parser';
 import { useState } from 'react';
 import {
-  ActivityIndicator,
   Pressable,
   StyleSheet,
   Text,
@@ -45,14 +44,6 @@ export function formColor(result: string): string {
     default:
       return MUTED;
   }
-}
-
-export function SectionLoading() {
-  return (
-    <View style={styles.stateBox}>
-      <ActivityIndicator color="#FFFFFF" />
-    </View>
-  );
 }
 
 export function SectionMessage({ text }: { text: string }) {

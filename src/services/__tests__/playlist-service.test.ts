@@ -1,8 +1,7 @@
 /**
  * Integration tests for the playlist service layer.
  *
- * `PlaylistService` is the HTTP fetch/validation wrapper, exercised against a
- * stubbed global `fetch` (the network boundary). The actual import lifecycle
+ * `PlaylistService` is the URL-validation wrapper. The import lifecycle
  * (create / refresh / delete) flows through `RustChannelService` into the
  * Rust backend, which is faked by the in-memory m3u-database fake — remote
  * content is registered per URL and parsed with a real M3U parser.
@@ -29,124 +28,6 @@ describe('PlaylistService.validateUrl', () => {
     expect(PlaylistService.validateUrl('ftp://example.com/playlist.m3u')).toBe(false);
     expect(PlaylistService.validateUrl('not a url')).toBe(false);
     expect(PlaylistService.validateUrl('')).toBe(false);
-  });
-});
-
-describe('PlaylistService.fetchPlaylistContent', () => {
-  const mockFetch = jest.fn();
-  let originalFetch: typeof fetch | undefined;
-
-  beforeAll(() => {
-    originalFetch = global.fetch;
-    global.fetch = mockFetch as unknown as typeof fetch;
-  });
-
-  afterAll(() => {
-    global.fetch = originalFetch as typeof fetch;
-  });
-
-  function httpResponse(body: string, status = 200, statusText = '') {
-    return {
-      ok: status >= 200 && status < 300,
-      status,
-      statusText,
-      text: () => Promise.resolve(body),
-    };
-  }
-
-  it('returns the playlist content on success', async () => {
-    mockFetch.mockResolvedValue(httpResponse(BASIC_M3U));
-
-    const content = await PlaylistService.fetchPlaylistContent(PLAYLIST_URL);
-
-    expect(content).toBe(BASIC_M3U);
-    expect(mockFetch).toHaveBeenCalledWith(PLAYLIST_URL, expect.objectContaining({ method: 'GET' }));
-  });
-
-  it('embeds credentials into the URL as HTTP basic auth', async () => {
-    mockFetch.mockResolvedValue(httpResponse(BASIC_M3U));
-
-    await PlaylistService.fetchPlaylistContent('https://example.com/playlist.m3u', {
-      username: 'user',
-      password: 'p@ss',
-    });
-
-    expect(mockFetch).toHaveBeenCalledWith(
-      'https://user:p%40ss@example.com/playlist.m3u',
-      expect.anything(),
-    );
-  });
-
-  it('fetches the URL untouched when no credentials are given', async () => {
-    const url = 'https://example.com/get.php?username=a&password=b&type=m3u_plus';
-    mockFetch.mockResolvedValue(httpResponse(BASIC_M3U));
-
-    await PlaylistService.fetchPlaylistContent(url);
-
-    expect(mockFetch).toHaveBeenCalledWith(url, expect.anything());
-  });
-
-  it('rejects an invalid URL before hitting the network', async () => {
-    await expect(PlaylistService.fetchPlaylistContent('ftp://example.com/list.m3u')).rejects.toThrow(
-      'Invalid URL format. Please provide a valid HTTP or HTTPS URL.',
-    );
-    expect(mockFetch).not.toHaveBeenCalled();
-  });
-
-  it.each([401, 403])('maps HTTP %i to an authentication error', async (status) => {
-    mockFetch.mockResolvedValue(httpResponse('', status));
-
-    await expect(PlaylistService.fetchPlaylistContent(PLAYLIST_URL)).rejects.toThrow(
-      'Authentication failed. Please check your credentials or URL.',
-    );
-  });
-
-  it('maps HTTP 404 to a not-found error', async () => {
-    mockFetch.mockResolvedValue(httpResponse('', 404));
-
-    await expect(PlaylistService.fetchPlaylistContent(PLAYLIST_URL)).rejects.toThrow(
-      'Playlist not found. Please verify the URL.',
-    );
-  });
-
-  it('maps HTTP 5xx to a server error', async () => {
-    mockFetch.mockResolvedValue(httpResponse('', 503));
-
-    await expect(PlaylistService.fetchPlaylistContent(PLAYLIST_URL)).rejects.toThrow(
-      'Server error. Please try again later.',
-    );
-  });
-
-  it('surfaces other HTTP errors with status and text', async () => {
-    mockFetch.mockResolvedValue(httpResponse('', 418, "I'm a teapot"));
-
-    await expect(PlaylistService.fetchPlaylistContent(PLAYLIST_URL)).rejects.toThrow(
-      "HTTP 418: I'm a teapot",
-    );
-  });
-
-  it('rejects an empty or whitespace-only body', async () => {
-    mockFetch.mockResolvedValue(httpResponse('   \n  '));
-
-    await expect(PlaylistService.fetchPlaylistContent(PLAYLIST_URL)).rejects.toThrow(
-      'Playlist content is empty',
-    );
-  });
-
-  it('maps a fetch TypeError to a network error', async () => {
-    mockFetch.mockRejectedValue(new TypeError('Network request failed'));
-
-    await expect(PlaylistService.fetchPlaylistContent(PLAYLIST_URL)).rejects.toThrow(
-      'Network error. Please check your internet connection.',
-    );
-  });
-
-  it('maps non-Error rejections to a generic error', async () => {
-    mockFetch.mockRejectedValue('boom');
-
-    await expect(PlaylistService.fetchPlaylistContent(PLAYLIST_URL)).rejects.toThrow(
-      'Unknown error occurred while fetching playlist',
-    );
   });
 });
 

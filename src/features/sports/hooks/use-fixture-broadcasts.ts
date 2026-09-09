@@ -6,13 +6,23 @@ import { useUserStore } from '@/stores/user/user-store';
 import type { Fixture, RankedBroadcast } from 'expo-m3u-parser';
 import { useEffect, useRef, useState } from 'react';
 
+import { broadcastCacheKey, readBroadcastCache, writeBroadcastCache } from '../broadcast-cache';
+
 interface FixtureBroadcasts {
   broadcasts: RankedBroadcast[];
   isLoading: boolean;
 }
 
+/** Shared identity for "no channels", so a sheet without any never re-renders. */
+const NO_BROADCASTS: RankedBroadcast[] = [];
+
+/**
+ * The playable channels for a fixture, matched by the native engine and cached
+ * per playlist/fixture/country so reopening the same match sheet is instant —
+ * the matcher is heavy and holds the channel database lock while it runs.
+ */
 export function useFixtureBroadcasts(fixture: Fixture | null): FixtureBroadcasts {
-  const [broadcasts, setBroadcasts] = useState<RankedBroadcast[]>([]);
+  const [broadcasts, setBroadcasts] = useState<RankedBroadcast[]>(NO_BROADCASTS);
   const [isLoading, setIsLoading] = useState(false);
   const fetchRef = useRef(0);
   const fixtureRef = useRef(fixture);
@@ -27,7 +37,19 @@ export function useFixtureBroadcasts(fixture: Fixture | null): FixtureBroadcasts
   useEffect(() => {
     const currentFixture = fixtureRef.current;
     if (!currentFixture || !playlistId) {
-      setBroadcasts([]);
+      setBroadcasts(NO_BROADCASTS);
+      setIsLoading(false);
+      return;
+    }
+
+    const key = broadcastCacheKey(playlistId, currentFixture.providerId, country);
+    const cached = readBroadcastCache(key);
+    if (cached) {
+      // Straight from the cache, before paint and without a loading state: a
+      // reopened sheet shows its channels rather than a spinner.
+      ++fetchRef.current;
+      setBroadcasts(cached);
+      setIsLoading(false);
       return;
     }
 
@@ -50,6 +72,9 @@ export function useFixtureBroadcasts(fixture: Fixture | null): FixtureBroadcasts
           m3uDb,
         );
 
+        // Cached even when this run has been superseded: the work is done, and
+        // the result is keyed by the fixture it was matched for.
+        writeBroadcastCache(key, results);
         if (fetchId !== fetchRef.current) return;
         setBroadcasts(results);
       } catch (err) {

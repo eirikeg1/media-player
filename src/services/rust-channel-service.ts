@@ -163,28 +163,6 @@ export class RustChannelService {
   }
 
   /**
-   * Get channels with filtering, pagination, and sorting
-   */
-  static async getChannelsFiltered(
-    playlistId: string,
-    options?: {
-      groups?: string[];
-      search?: string;
-      contentType?: 'live' | 'movie' | 'series';
-      limit?: number;
-      offset?: number;
-      sortBy?: 'title' | 'group' | 'tvgName';
-      sortOrder?: 'asc' | 'desc';
-    }
-  ): Promise<Channel[]> {
-    const filter: ChannelFilter = {
-      playlistId,
-      ...options,
-    };
-    return this.getChannels(filter);
-  }
-
-  /**
    * Get channels with filtering, pagination, sorting, and total count.
    * Uses a single optimized query with COUNT(*) OVER() to avoid separate count call.
    */
@@ -222,6 +200,7 @@ export class RustChannelService {
     options?: {
       groups?: string[];
       search?: string;
+      exactName?: string;
       limit?: number;
       offset?: number;
       excludeAdult?: boolean;
@@ -255,68 +234,12 @@ export class RustChannelService {
   }
 
   /**
-   * Get movie recommendations from cache (generates on first call)
-   */
-  static async getMovieRecommendations(
-    playlistId: string,
-    excludeAdult: boolean,
-    limit: number
-  ): Promise<Channel[]> {
-    const db = await getRustDatabase();
-    const rustChannels = await db.getMovieRecommendations(playlistId, excludeAdult, limit);
-    return rustChannels.map(rustChannelToJsChannel);
-  }
-
-  /**
-   * Regenerate movie recommendations (fire-and-forget for next launch)
-   */
-  static async regenerateMovieRecommendations(
-    playlistId: string,
-    excludeAdult: boolean,
-    limit: number
-  ): Promise<Channel[]> {
-    const db = await getRustDatabase();
-    const rustChannels = await db.regenerateMovieRecommendations(playlistId, excludeAdult, limit);
-    return rustChannels.map(rustChannelToJsChannel);
-  }
-
-  /**
-   * Get series recommendations from cache (generates on first call)
-   */
-  static async getSeriesRecommendations(
-    playlistId: string,
-    excludeAdult: boolean,
-    limit: number
-  ): Promise<SeriesInfo[]> {
-    const db = await getRustDatabase();
-    return db.getSeriesRecommendations(playlistId, excludeAdult, limit);
-  }
-
-  /**
-   * Regenerate series recommendations (fire-and-forget for next launch)
-   */
-  static async regenerateSeriesRecommendations(
-    playlistId: string,
-    excludeAdult: boolean,
-    limit: number
-  ): Promise<SeriesInfo[]> {
-    const db = await getRustDatabase();
-    return db.regenerateSeriesRecommendations(playlistId, excludeAdult, limit);
-  }
-
-  /**
    * Load the taste model used for personalized recommendations. The model is
    * process-global, so one call per app launch serves every database handle.
    */
   static async loadRecommendationModel(path: string): Promise<void> {
     const db = await getRustDatabase();
     await db.loadRecommendationModel(path);
-  }
-
-  /** Whether a taste model is available for personalized generation. */
-  static async isRecommendationModelLoaded(): Promise<boolean> {
-    const db = await getRustDatabase();
-    return db.isRecommendationModelLoaded();
   }
 
   /**
@@ -397,19 +320,23 @@ export class RustChannelService {
   }
 
   /**
-   * Get rich metadata for a channel by its Xtream stream ID
+   * Build the panel URL for a window of a channel's catch-up archive.
+   *
+   * Returns null when the playlist or channel has no addressable archive —
+   * only Xtream panels expose one.
    */
-  static async getMetadataByStreamId(
+  static async getCatchupStreamUrl(
     playlistId: string,
-    streamId: number
-  ): Promise<ChannelMetadata | null> {
+    channelId: string,
+    startUnix: number,
+    durationMinutes: number
+  ): Promise<string | null> {
     const db = await getRustDatabase();
-    return db.getMetadataByStreamId(playlistId, streamId);
+    return db.getCatchupStreamUrl(playlistId, channelId, startUnix, durationMinutes);
   }
 
   /**
    * Get rich movie metadata by the channel's stable ID (the key playback uses).
-   * Preferred over getMetadataByStreamId — avoids URL parsing that could mismatch.
    */
   static async getMetadataByChannelId(
     playlistId: string,

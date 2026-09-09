@@ -47,16 +47,34 @@ export function useVideoOrchestrator({
     }
   }, [playerState.player]);
 
+  // Everything the long-lived native listeners and the focus effect need, kept
+  // current without becoming an effect dependency. Their memoised identities
+  // change on every error, retry and controls toggle; re-subscribing native
+  // listeners (or re-running the focus effect, whose cleanup pauses playback)
+  // that often is what made playback stutter and errors flicker away.
+  const collaborators = {
+    errorActions: errorHandling.actions,
+    controlActions: controls.actions,
+    playerControls: playerState.controls,
+    setters: playerState.setters,
+    onStopVideo,
+  };
+  const latest = useRef(collaborators);
+  latest.current = collaborators;
+
+  // Only a new stream resets the screen. Depending on the error/UI actions
+  // instead would make setting an error immediately clear it again, leaving
+  // the loading overlay up forever.
   useEffect(() => {
     hasAppliedStartPositionRef.current = false;
     setCurrentTime(0);
     setDuration(0);
     setIsLive(false);
-    playerState.setters.reset();
-    errorHandling.actions.clearError();
+    latest.current.setters.reset();
+    useVideoErrorStore.getState().clearError();
     useVideoErrorStore.getState().resetRetryState();
     useVideoUIStore.getState().reset();
-  }, [channel.url, playerState.setters, errorHandling.actions]);
+  }, [channel.url]);
 
   // Enhanced stop function that coordinates all state
   const stopVideo = useCallback(() => {
@@ -124,7 +142,11 @@ export function useVideoOrchestrator({
     playerState.setters.setIsLoading(true);
     playerState.setters.setLoadingStage('connecting');
     try {
-      await player.replaceAsync(buildVideoSource(channel));
+      // Reload what the session is actually playing: a catch-up window has its
+      // own archive URL, and reloading `channel.url` would drop the viewer out
+      // of the archive and onto the live stream.
+      const session = usePlaybackSessionStore.getState().session;
+      await player.replaceAsync(buildVideoSource(session?.channel ?? channel, session?.streamUrl));
     } catch (error) {
       console.warn('Error resyncing to live:', error);
       playerState.setters.setIsLoading(false);
@@ -134,87 +156,77 @@ export function useVideoOrchestrator({
     }
   }, [playerState.player, playerState.setters, errorHandling.actions, channel]);
 
-  // Player status change handler
+  // Player status change handler. Subscribes once per player: the callbacks
+  // reach everything else through `latest`, so a controls toggle or an error
+  // never tears the native listeners down mid-stream.
+  const player = playerState.player;
   useEffect(() => {
-    if (!playerState.player) {
-      console.log('No player available for status listener');
-      return;
-    }
+    if (!player) return;
 
-    console.log('Setting up video player status listener');
-    const statusSubscription = playerState.player.addListener('statusChange', ({ status, error }) => {
-      console.log('Video status change:', status, error);
+    const statusSubscription = player.addListener('statusChange', ({ status, error }) => {
+      const { setters, errorActions, playerControls, controlActions } = latest.current;
 
       if (status === 'loading') {
-        console.log('Video loading - setting buffering stage');
-        playerState.setters.setLoadingStage('buffering');
-        playerState.setters.setLoadingProgress(undefined);
+        setters.setLoadingStage('buffering');
+        setters.setLoadingProgress(undefined);
       } else if (status === 'readyToPlay') {
-        console.log('Video ready to play - auto starting');
-        playerState.setters.setIsLoading(false);
-        errorHandling.actions.onRetrySuccess();
+        setters.setIsLoading(false);
+        errorActions.onRetrySuccess();
 
         // Detect live stream vs finite content
-        if (playerState.player) {
-          setIsLive(playerState.player.isLive);
-          const d = playerState.player.duration;
-          if (isFinite(d) && d > 0) {
-            setDuration(d);
-          }
+        setIsLive(player.isLive);
+        const d = player.duration;
+        if (isFinite(d) && d > 0) {
+          setDuration(d);
         }
 
-        if (startPosition && startPosition > 0 && playerState.player && !hasAppliedStartPositionRef.current) {
+        if (startPosition && startPosition > 0 && !hasAppliedStartPositionRef.current) {
           hasAppliedStartPositionRef.current = true;
-          playerState.player.currentTime = startPosition;
+          player.currentTime = startPosition;
         }
 
-        const { isCasting } = useVideoPlayerStore.getState();
-        if (!isCasting) {
-          playerState.controls.playVideo();
+        if (!useVideoPlayerStore.getState().isCasting) {
+          playerControls.playVideo();
         }
 
         // Use a shorter timeout initially, then switch to temporary showing
         setTimeout(() => {
           if (!isUnmountedRef.current) {
-            controls.actions.showControlsTemporarily(4000);
+            controlActions.showControlsTemporarily(4000);
           }
         }, 500);
       } else if (status === 'error' || error) {
-        console.log('Video error:', error);
-        playerState.setters.setIsLoading(false);
-        errorHandling.actions.handleError(error);
-      } else {
-        console.log('Other video status:', status);
+        setters.setIsLoading(false);
+        errorActions.handleError(error);
       }
     });
 
-    const playingSubscription = playerState.player.addListener('playingChange', ({ isPlaying }) => {
-      console.log('Video playing state changed:', isPlaying);
-      playerState.setters.setIsPlaying(isPlaying);
+    const playingSubscription = player.addListener('playingChange', ({ isPlaying }) => {
+      latest.current.setters.setIsPlaying(isPlaying);
     });
 
-    const timeUpdateSubscription = playerState.player.addListener('timeUpdate', ({ currentTime: time }) => {
+    const timeUpdateSubscription = player.addListener('timeUpdate', ({ currentTime: time }) => {
       setCurrentTime(time);
       // Update duration if it becomes available after initial readyToPlay
-      const d = playerState.player!.duration;
+      const d = player.duration;
       if (isFinite(d) && d > 0) {
         setDuration(d);
       }
     });
 
     return () => {
-      console.log('Cleaning up video player status listener');
       statusSubscription?.remove();
       playingSubscription?.remove();
       timeUpdateSubscription?.remove();
     };
-  }, [playerState.player, playerState.setters, playerState.controls, errorHandling.actions, controls.actions, startPosition]);
+  }, [player, startPosition]);
 
   // Adopt an already-running player (expanding from the mini bar): its
   // statusChange event won't re-fire for a player that is already ready, so
   // read the current state synchronously instead of waiting on the listener.
+  // A freshly started session's player is still sourceless here, so this is a
+  // no-op for it and the listener above drives the load.
   useEffect(() => {
-    const player = playerState.player;
     if (!player || player.status !== 'readyToPlay') return;
     playerState.setters.setIsLoading(false);
     playerState.setters.setIsPlaying(player.playing);
@@ -224,47 +236,32 @@ export function useVideoOrchestrator({
     if (isFinite(d) && d > 0) {
       setDuration(d);
     }
-  }, [playerState.player, playerState.setters]);
-
-  // Network state monitoring for error recovery
-  useEffect(() => {
-    if (
-      network.networkState.isConnected &&
-      errorHandling.hasError &&
-      errorHandling.error?.type === 'NETWORK_ERROR'
-    ) {
-      console.log('Network connection restored, error can be retried');
-    }
-  }, [
-    network.networkState.isConnected,
-    errorHandling.hasError,
-    errorHandling.error?.type,
-  ]);
+  }, [player, playerState.setters]);
 
   // Register stop function
   useEffect(() => {
     onRegisterStopFunction?.(stopVideo);
   }, [onRegisterStopFunction, stopVideo]);
 
-  // Focus effect handling
+  // Focus effect handling. The cleanup pauses playback, so it must only be
+  // torn down when the player itself changes — never on an unrelated re-render
+  // of the screen.
   useFocusEffect(
     useCallback(() => {
-      console.log('Focus effect setup');
       return () => {
         // Backing out into the mini bar must keep playing — only pause when
         // the screen loses focus with the session still in fullscreen mode.
         if (usePlaybackSessionStore.getState().session?.mode === 'mini') return;
-        console.log('Focus effect cleanup - pausing video');
         try {
-          if (!isUnmountedRef.current && playerState.player) {
-            playerState.controls.pauseVideo();
+          if (!isUnmountedRef.current && player) {
+            latest.current.playerControls.pauseVideo();
           }
         } catch (error) {
           console.warn('Error pausing video on focus loss:', error);
         }
-        onStopVideo?.();
+        latest.current.onStopVideo?.();
       };
-    }, [playerState.player, playerState.controls, onStopVideo])
+    }, [player])
   );
 
   // Cleanup
@@ -278,6 +275,10 @@ export function useVideoOrchestrator({
       }
       useVideoErrorStore.getState().reset();
       useVideoUIStore.getState().reset();
+      // Only clears `isCasting` — the session owns the player and outlives
+      // this screen (minimized into the mini bar). The cast branch of the
+      // screen's `handleGoBack` ends the session before navigating away, so
+      // dropping the casting flag here is always correct.
       useVideoPlayerStore.getState().reset();
     };
   }, [clearHideControlsTimeout]);

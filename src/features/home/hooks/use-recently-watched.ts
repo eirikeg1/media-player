@@ -3,13 +3,43 @@ import { RustChannelService } from '@/services/rust-channel-service';
 import { usePlaylistStore } from '@/stores/playlist/playlist-store';
 import { useUserStore } from '@/stores/user/user-store';
 import type { RecentlyWatchedItem } from '@/types/user.types';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
-/** Substring search can return neighbours ("Office Wars" for "Office"); fetch enough rows to find the exact name. */
-const SERIES_POSTER_SEARCH_LIMIT = 50;
+/**
+ * Series posters never change while a playlist is loaded, so resolve each one
+ * over the FFI at most once per session. Keyed `playlistId|seriesName`; a null
+ * value records "this series has no poster" so misses aren't re-queried either.
+ */
+const posterCache = new Map<string, string | null>();
+
+async function resolveSeriesPoster(
+  playlistId: string,
+  seriesName: string,
+  excludeAdult: boolean
+): Promise<string | null> {
+  const cacheKey = `${playlistId}|${seriesName}`;
+  const cached = posterCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+
+  let poster: string | null = null;
+  try {
+    const result = await RustChannelService.getSeriesList(playlistId, {
+      exactName: seriesName,
+      limit: 1,
+      excludeAdult,
+    });
+    poster = result.series[0]?.poster ?? null;
+  } catch {
+    // Leave the miss uncached: a transient failure shouldn't stick.
+    return null;
+  }
+
+  posterCache.set(cacheKey, poster);
+  return poster;
+}
 
 export function useRecentlyWatched(limit = 20) {
-  const currentUser = useUserStore((s) => s.currentUser);
+  const userId = useUserStore((s) => s.currentUser?.id);
   const activePlaylistId = usePlaylistStore((s) => s.activePlaylistId);
   const getRecentlyWatched = useUserStore((s) => s.getRecentlyWatched);
   const excludeAdult = useUserStore(
@@ -20,8 +50,20 @@ export function useRecentlyWatched(limit = 20) {
   const [items, setItems] = useState<RecentlyWatchedItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Every fetch takes the next generation; only the newest one may write state,
+  // so an unmount or a superseding refresh discards the in-flight run's result.
+  const generationRef = useRef(0);
+
+  /** Supersede whatever run is in flight, so its result is discarded. */
+  const cancelInFlightFetch = useCallback(() => {
+    generationRef.current += 1;
+  }, []);
+
   const fetch = useCallback(async () => {
-    if (!currentUser?.id || !activePlaylistId) {
+    const generation = ++generationRef.current;
+    const isCurrent = () => generationRef.current === generation;
+
+    if (!userId || !activePlaylistId) {
       setItems([]);
       setIsLoading(false);
       return;
@@ -31,7 +73,7 @@ export function useRecentlyWatched(limit = 20) {
       setIsLoading(true);
 
       // Overfetch to have enough items after series dedup
-      const rawItems = await getRecentlyWatched(currentUser.id, activePlaylistId, limit * 3);
+      const rawItems = await getRecentlyWatched(userId, activePlaylistId, limit * 3);
       const filtered = rawItems.filter((item) => item.contentType !== 'live');
 
       // Phase 1: Look up channel data for series items to get series names
@@ -93,24 +135,12 @@ export function useRecentlyWatched(limit = 20) {
         }
       }
 
-      // Phase 2: Look up series posters for unique series names. The search is a
-      // substring match, so pick the exact series rather than the first hit
-      // ("Office" must not resolve to "Office Wars").
-      const uniqueSeriesNames = [...seenSeries];
+      // Phase 2: Look up series posters for unique series names.
       const posterLookups = await Promise.all(
-        uniqueSeriesNames.map(async (name) => {
-          try {
-            const result = await RustChannelService.getSeriesList(activePlaylistId, {
-              search: name,
-              limit: SERIES_POSTER_SEARCH_LIMIT,
-              excludeAdult,
-            });
-            const poster = result.series.find((s) => s.seriesName === name)?.poster ?? null;
-            return { name, poster };
-          } catch {
-            return { name, poster: null };
-          }
-        })
+        [...seenSeries].map(async (name) => ({
+          name,
+          poster: await resolveSeriesPoster(activePlaylistId, name, excludeAdult),
+        }))
       );
 
       const posterMap = new Map<string, string>();
@@ -142,18 +172,23 @@ export function useRecentlyWatched(limit = 20) {
         return true;
       });
 
+      if (!isCurrent()) return;
       setItems(unique.slice(0, limit));
     } catch (error) {
+      if (!isCurrent()) return;
       console.error('[useRecentlyWatched] Error:', error);
       setItems([]);
     } finally {
-      setIsLoading(false);
+      if (isCurrent()) {
+        setIsLoading(false);
+      }
     }
-  }, [currentUser?.id, activePlaylistId, limit, getRecentlyWatched, excludeAdult]);
+  }, [userId, activePlaylistId, limit, getRecentlyWatched, excludeAdult]);
 
   useEffect(() => {
     fetch();
-  }, [fetch, recentlyWatchedVersion]);
+    return cancelInFlightFetch;
+  }, [fetch, recentlyWatchedVersion, cancelInFlightFetch]);
 
   return { items, isLoading, refresh: fetch };
 }

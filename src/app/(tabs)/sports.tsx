@@ -1,4 +1,5 @@
 import { invalidateSportsCaches } from '@/features/sports/cache-invalidation';
+import type { CatchupWindow } from '@/features/sports/catchup';
 import { useDayFixtures } from '@/features/sports/hooks/use-day-fixtures';
 import { useFavoriteMatchPrefetch } from '@/features/sports/hooks/use-favorite-match-prefetch';
 import { useFavoriteTeams } from '@/features/sports/hooks/use-favorite-teams';
@@ -12,9 +13,12 @@ import { SportsHeader, type MatchFilter } from '@/features/sports/sports-header'
 import { isSameLocalDay, startOfLocalDay } from '@/features/sports/date-utils';
 import { ManageFavoritesModal } from '@/features/sports/team-search-modal';
 import { TeamSheet, type TeamRef } from '@/features/sports/team-sheet';
+import { useToday } from '@/features/sports/hooks/use-today';
+import { useAppState } from '@/hooks/use-app-state';
 import { getSportsDatabase } from '@/services/sports-service';
 import { usePlaylistStore } from '@/stores/playlist/playlist-store';
 import { usePlaybackQueueStore } from '@/stores/video/queue-store';
+import { useIsFocused } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import type { Fixture, Team } from 'expo-m3u-parser';
 import { useCallback, useMemo, useState } from 'react';
@@ -24,6 +28,11 @@ export default function SportsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const activePlaylistId = usePlaylistStore((s) => s.activePlaylistId);
+  // Tabs stay mounted once visited, so "is this screen on show" has to be asked
+  // rather than assumed: the day view polls only while it is.
+  const isFocused = useIsFocused();
+  const appState = useAppState();
+  const isActive = isFocused && appState === 'active';
 
   const [selectedDate, setSelectedDate] = useState(() => startOfLocalDay(new Date()));
   const [filter, setFilter] = useState<MatchFilter>('all');
@@ -37,32 +46,43 @@ export default function SportsScreen() {
   const { teams, isLoading: isLoadingTeams, addTeam, removeTeam, refresh: refreshTeams } = useFavoriteTeams();
   const { order, hideOtherLeagues } = useLeaguePreferences();
   const favoriteTeamIdList = useMemo(() => teams.map((t) => t.providerId), [teams]);
-  const { fixtures, isLoading, error, refresh } = useDayFixtures(selectedDate, favoriteTeamIdList);
+  const { fixtures, isLoading, error, refresh } = useDayFixtures(
+    selectedDate,
+    favoriteTeamIdList,
+    isActive
+  );
 
   const favoriteTeamIds = useMemo(() => new Set(favoriteTeamIdList), [favoriteTeamIdList]);
   const liveCount = useMemo(() => fixtures.filter(isMatchLive).length, [fixtures]);
-  // Unfiltered grouping: what the league sheet resolves against, so the sheet
-  // survives both the minute-level poll (it re-reads the group by key and picks
-  // up fresh scores instead of rendering a stale snapshot) and an All/Live
-  // toggle made while it is open.
-  const allGroups = useMemo(
-    () => groupFixturesByLeague(fixtures, { favoriteTeamIds, leagueOrder: order, hideOtherLeagues }),
-    [fixtures, favoriteTeamIds, order, hideOtherLeagues]
-  );
   const groups = useMemo(
     () =>
+      groupFixturesByLeague(fixtures, {
+        favoriteTeamIds,
+        leagueOrder: order,
+        hideOtherLeagues,
+        liveOnly: filter === 'live',
+      }),
+    [fixtures, favoriteTeamIds, order, hideOtherLeagues, filter]
+  );
+  // The league sheet resolves against the *unfiltered* grouping, so it survives
+  // both the minute-level poll (it re-reads its group by key and picks up fresh
+  // scores instead of rendering a stale snapshot) and an All/Live toggle made
+  // while it is open. Only the Live filter needs a second grouping for that,
+  // and only while a sheet is actually open.
+  const selectedLeagueGroup = useMemo(() => {
+    if (!selectedLeague) return null;
+    const source =
       filter === 'live'
-        ? groupFixturesByLeague(fixtures, { favoriteTeamIds, leagueOrder: order, hideOtherLeagues, liveOnly: true })
-        : allGroups,
-    [allGroups, fixtures, favoriteTeamIds, order, hideOtherLeagues, filter]
-  );
-  const selectedLeagueGroup = useMemo(
-    () => allGroups.find((g) => g.key === selectedLeague?.key) ?? null,
-    [allGroups, selectedLeague]
-  );
-  const isToday = isSameLocalDay(selectedDate, new Date());
+        ? groupFixturesByLeague(fixtures, { favoriteTeamIds, leagueOrder: order, hideOtherLeagues })
+        : groups;
+    return source.find((g) => g.key === selectedLeague.key) ?? null;
+  }, [groups, fixtures, favoriteTeamIds, order, hideOtherLeagues, filter, selectedLeague]);
+  const today = useToday();
+  const isToday = isSameLocalDay(selectedDate, today);
 
-  useFavoriteMatchPrefetch(fixtures, favoriteTeamIds, isToday);
+  // Held back until the day list has settled: the warm requests are paced by
+  // the provider and would otherwise queue ahead of the list's own fetch.
+  useFavoriteMatchPrefetch(fixtures, favoriteTeamIds, isToday && !isLoading);
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
@@ -120,7 +140,7 @@ export default function SportsScreen() {
   );
 
   const handlePlayChannel = useCallback(
-    (channelId: string, fixture: Fixture) => {
+    (channelId: string, fixture: Fixture, catchup?: CatchupWindow | null) => {
       setSelectedFixture(null);
       usePlaybackQueueStore.getState().reset();
       router.push({
@@ -131,10 +151,47 @@ export default function SportsScreen() {
           contentType: 'live',
           // Carry the fixture so the player can show SofaScore match widgets.
           fixture: JSON.stringify(fixture),
+          // Present, the window makes the player play the panel's archive.
+          ...(catchup
+            ? {
+                catchupStart: String(catchup.start),
+                catchupDuration: String(catchup.durationMinutes),
+              }
+            : {}),
         },
       });
     },
     [router, activePlaylistId]
+  );
+
+  const showFavoritesPrompt = !isLoadingTeams && teams.length === 0;
+  // A fresh element on every render would defeat `memo(MatchesList)`, so the
+  // whole list re-renders on every poll tick.
+  const header = useMemo(
+    () => (
+      <SportsHeader
+        selectedDate={selectedDate}
+        onSelectDate={setSelectedDate}
+        filter={filter}
+        onFilterChange={setFilter}
+        liveCount={liveCount}
+        onOpenFavorites={handleOpenFavorites}
+        onJumpToToday={handleJumpToToday}
+        isToday={isToday}
+        showFavoritesPrompt={showFavoritesPrompt}
+        topInset={insets.top}
+      />
+    ),
+    [
+      selectedDate,
+      filter,
+      liveCount,
+      handleOpenFavorites,
+      handleJumpToToday,
+      isToday,
+      showFavoritesPrompt,
+      insets.top,
+    ]
   );
 
   const emptyTitle =
@@ -164,20 +221,7 @@ export default function SportsScreen() {
         emptyTitle={emptyTitle}
         emptyHint={emptyHint}
         bottomInset={insets.bottom + 64}
-        header={
-          <SportsHeader
-            selectedDate={selectedDate}
-            onSelectDate={setSelectedDate}
-            filter={filter}
-            onFilterChange={setFilter}
-            liveCount={liveCount}
-            onOpenFavorites={handleOpenFavorites}
-            onJumpToToday={handleJumpToToday}
-            isToday={isToday}
-            showFavoritesPrompt={!isLoadingTeams && teams.length === 0}
-            topInset={insets.top}
-          />
-        }
+        header={header}
       />
 
       {favoritesVisible && (

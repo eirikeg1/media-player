@@ -52,17 +52,12 @@ export function useVideoPlayerState() {
   // deps don't include React's mirrored `isPlaying`. That keeps `controls`
   // stable across play/pause toggles, which downstream effects rely on.
   const togglePlayPause = useCallback(() => {
-    if (!videoPlayer) {
-      console.log('No video player available');
-      return;
-    }
+    if (!videoPlayer) return;
     try {
       if (videoPlayer.playing) {
-        console.log('Pausing video');
         videoPlayer.pause();
         dispatch({ type: 'setIsPlaying', value: false });
       } else {
-        console.log('Playing video');
         videoPlayer.play();
         dispatch({ type: 'setIsPlaying', value: true });
       }
@@ -83,12 +78,10 @@ export function useVideoPlayerState() {
   }, [videoPlayer]);
 
   const playVideo = useCallback(() => {
-    console.log('playVideo called');
     try {
       if (videoPlayer) {
         videoPlayer.play();
         dispatch({ type: 'setIsPlaying', value: true });
-        console.log('Video play() called, state set to true');
       }
     } catch (error) {
       console.warn('Error playing video:', error);
@@ -96,12 +89,10 @@ export function useVideoPlayerState() {
   }, [videoPlayer]);
 
   const pauseVideo = useCallback(() => {
-    console.log('pauseVideo called');
     try {
       if (videoPlayer) {
         videoPlayer.pause();
         dispatch({ type: 'setIsPlaying', value: false });
-        console.log('Video pause() called, state set to false');
       }
     } catch (error) {
       console.warn('Error pausing video:', error);

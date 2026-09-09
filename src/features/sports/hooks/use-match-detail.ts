@@ -153,6 +153,11 @@ export const useMatchPreview = (eventId: number | undefined, enabled: boolean, t
  * lifetime would leave the header showing "not started" minutes into the game.
  * It is one cheap request, and only while an overlay or the player is open.
  */
+/** The fields a scoreline renders; a poll changing none of them is a no-op. */
+function sameScore(a: MatchScore, b: MatchScore): boolean {
+  return a.status === b.status && a.homeScore === b.homeScore && a.awayScore === b.awayScore;
+}
+
 export function useLiveMatchScore(eventId: number | undefined, enabled: boolean): MatchScore | null {
   const [score, setScore] = useState<MatchScore | null>(null);
 
@@ -170,7 +175,9 @@ export function useLiveMatchScore(eventId: number | undefined, enabled: boolean)
         const db = await getSportsDatabase();
         const next = await db.getMatchScore(eventId, TTL_LIVE_SECS);
         if (cancelled) return;
-        setScore(next);
+        // Nothing changed on most polls; keeping the previous object spares the
+        // open sheet (and the player above it) a re-render every minute.
+        setScore((previous) => (previous && sameScore(previous, next) ? previous : next));
         // The match ended while we were watching — stop polling. A merely
         // not-live status (pre-kickoff, unknown/interrupted) keeps polling.
         if (isMatchConcluded(next.status) && interval) {

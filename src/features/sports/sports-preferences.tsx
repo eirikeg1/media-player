@@ -2,6 +2,7 @@ import { Dropdown, type DropdownOption } from '@/components/ui/controls/inputs/d
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
+import { saveSetting } from '@/features/user/save-setting';
 import { COUNTRY_OPTIONS, getDeviceCountry } from '@/lib/country-utils';
 import { getTimeElapsed } from '@/lib/playlist-utils';
 import { useUserStore } from '@/stores/user/user-store';
@@ -56,11 +57,14 @@ const IS_IOS = Platform.OS === 'ios';
 /** Settings → Sports: TV country, league ranking and list filters. */
 export const SportsPreferences = memo(function SportsPreferences() {
   const palette = useSportsPalette();
-  const currentUser = useUserStore((s) => s.currentUser);
-  const updateSettings = useUserStore((s) => s.updateSettings);
+  // Primitive selectors: the user object is replaced on every settings write.
+  const hasUser = useUserStore((s) => s.currentUser != null);
+  const sportsCountry = useUserStore((s) => s.currentUser?.settings?.sportsCountry ?? '');
+  const backgroundRefresh: SportsBackgroundRefresh = useUserStore(
+    (s) => s.currentUser?.settings?.sportsBackgroundRefresh ?? DEFAULT_SPORTS_BACKGROUND_REFRESH
+  );
   const { competitions, order, hideOtherLeagues, setOrder, resetOrder, setHideOtherLeagues } = useLeaguePreferences();
 
-  const sportsCountry = currentUser?.settings?.sportsCountry ?? '';
   const sportsCountryLabel = useMemo(() => {
     if (!sportsCountry) {
       const detected = getDeviceCountry();
@@ -70,30 +74,25 @@ export const SportsPreferences = memo(function SportsPreferences() {
     return COUNTRY_OPTIONS.find((o) => o.value === sportsCountry)?.label ?? sportsCountry;
   }, [sportsCountry]);
 
-  const handleCountryChange = useCallback(
-    (value: string) => {
-      if (!currentUser) return;
-      void updateSettings(currentUser.id, { sportsCountry: value || undefined });
-    },
-    [currentUser, updateSettings]
-  );
-
-  const backgroundRefresh: SportsBackgroundRefresh =
-    currentUser?.settings?.sportsBackgroundRefresh ?? DEFAULT_SPORTS_BACKGROUND_REFRESH;
+  const handleCountryChange = useCallback((value: string) => {
+    void saveSetting({ sportsCountry: value || undefined }, 'TV country');
+  }, []);
 
   /** Every write carries the whole preference, so a partial row can never persist. */
   const saveBackgroundRefresh = useCallback(
     (patch: Partial<SportsBackgroundRefresh>) => {
-      if (!currentUser) return;
-      void updateSettings(currentUser.id, {
-        sportsBackgroundRefresh: {
-          ...DEFAULT_SPORTS_BACKGROUND_REFRESH,
-          ...backgroundRefresh,
-          ...patch,
+      void saveSetting(
+        {
+          sportsBackgroundRefresh: {
+            ...DEFAULT_SPORTS_BACKGROUND_REFRESH,
+            ...backgroundRefresh,
+            ...patch,
+          },
         },
-      });
+        'background refresh'
+      );
     },
-    [backgroundRefresh, currentUser, updateSettings]
+    [backgroundRefresh]
   );
 
   const [lastRunAt, setLastRunAt] = useState<number | null>(null);
@@ -135,7 +134,7 @@ export const SportsPreferences = memo(function SportsPreferences() {
       .filter((c): c is NonNullable<typeof c> => c != null);
   }, [competitions, order]);
 
-  if (!currentUser) return null;
+  if (!hasUser) return null;
 
   return (
     <ThemedView style={styles.container}>

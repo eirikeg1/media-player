@@ -26,11 +26,21 @@ import {
   usePlaybackSessionStore,
   type PlaybackSession,
 } from '@/stores/video/playback-session-store';
+import type { CatchupWindow } from '@/types/playback.types';
 import type { Channel } from '@/types/playlist.types';
 import type { ContentType } from '@/types/user.types';
 
 const BAR_HEIGHT = 60;
 const ANIMATION_DURATION = 250;
+
+/** Route params that re-open the video screen on a catch-up window (none when live). */
+function catchupParams(catchup: CatchupWindow | null): Record<string, string> {
+  if (!catchup) return {};
+  return {
+    catchupStart: String(catchup.start),
+    catchupDuration: String(catchup.durationMinutes),
+  };
+}
 
 /**
  * The persistent bar above the tab bar that keeps playback around after the
@@ -128,6 +138,7 @@ function LocalMiniContent({ session }: { session: PlaybackSession }) {
         playlistId: session.playlistId,
         contentType: session.contentType,
         ...(session.fixture ? { fixture: JSON.stringify(session.fixture) } : {}),
+        ...catchupParams(session.catchup),
       },
     });
   };
@@ -192,6 +203,7 @@ function CastMiniContent({ channel }: { channel: Channel }) {
 
   const playlistId = useCastMiniPlayerStore((s) => s.playlistId);
   const contentType = useCastMiniPlayerStore((s) => s.contentType);
+  const catchup = useCastMiniPlayerStore((s) => s.catchup);
 
   const client = useRemoteMediaClient();
   const castState = useCastState();
@@ -216,6 +228,7 @@ function CastMiniContent({ channel }: { channel: Channel }) {
         channelId: getChannelId(channel),
         playlistId,
         contentType: (contentType ?? 'live') satisfies ContentType,
+        ...catchupParams(catchup),
       },
     });
   };

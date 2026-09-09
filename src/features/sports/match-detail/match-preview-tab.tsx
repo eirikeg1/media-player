@@ -3,13 +3,13 @@ import { memo } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import type { MatchDataState } from '../hooks/use-match-detail';
+import { MatchPreviewSkeleton } from '../skeletons';
 import {
   AWAY_COLOR,
   FAINT,
   FormPills,
   HOME_COLOR,
   MUTED,
-  SectionLoading,
   SectionMessage,
 } from './match-detail-shared';
 
@@ -24,7 +24,7 @@ export const MatchPreviewTab = memo(function MatchPreviewTab({
   homeLabel,
   awayLabel,
 }: PreviewTabProps) {
-  if (state.isLoading) return <SectionLoading />;
+  if (state.isLoading) return <MatchPreviewSkeleton />;
   if (state.error) return <SectionMessage text={state.error} />;
 
   const preview = state.data;

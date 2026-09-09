@@ -8,10 +8,11 @@ import { isMatchLive, matchHasStarted, supportsMatchWidgets } from '../match-wid
 
 /**
  * How many of the day's favorite matches are warmed. The requests are paced by
- * the provider and run one after another, so this is a budget, not a batch: it
- * is small enough to be finished long before the user taps into a match.
+ * the provider and run one after another, so this is a budget, not a batch:
+ * kept small so the queue is drained long before the user taps into a match,
+ * and so it never sits in front of a fetch the screen is waiting on.
  */
-export const PREFETCH_LIMIT = 6;
+export const PREFETCH_LIMIT = 3;
 
 /**
  * The matches worth warming, most useful first: a favorite team's, live ones
@@ -50,6 +51,9 @@ export function selectPrefetchFixtures(
  * Runs on tab focus and whenever the selection or one of its statuses changes
  * (a kickoff), not on every poll: repeat runs are cheap but not free, and the
  * per-section TTLs ({@link matchDetailTtl}) already serve the unchanged ones.
+ *
+ * `enabled` is the caller's way of holding it back until the day list itself
+ * has settled — these requests share the provider's pacing with the list's own.
  */
 export function useFavoriteMatchPrefetch(
   fixtures: readonly Fixture[],

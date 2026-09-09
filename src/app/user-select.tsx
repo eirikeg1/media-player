@@ -443,7 +443,7 @@ function EditUserModal({
 export default function UserSelectScreen() {
   // Store state
   const users = useUserStore((state) => state.users);
-  const currentUser = useUserStore((state) => state.currentUser);
+  const currentUserId = useUserStore((state) => state.currentUser?.id);
   const switchUser = useUserStore((state) => state.switchUser);
   const createUser = useUserStore((state) => state.createUser);
   const updateUser = useUserStore((state) => state.updateUser);
@@ -460,7 +460,7 @@ export default function UserSelectScreen() {
   // Event handlers
   const handleSelectUser = useCallback(
     async (userId: string) => {
-      if (userId === currentUser?.id) {
+      if (userId === currentUserId) {
         router.back();
         return;
       }
@@ -473,7 +473,7 @@ export default function UserSelectScreen() {
         Alert.alert('Error', 'Failed to switch user. Please try again.');
       }
     },
-    [currentUser?.id, switchUser]
+    [currentUserId, switchUser]
   );
 
   const handleCreateUser = useCallback(async () => {
@@ -530,14 +530,14 @@ export default function UserSelectScreen() {
 
   const handleDeleteUser = useCallback(async (userId: string) => {
     // If deleting current user, switch to another user first
-    if (userId === currentUser?.id && users.length > 1) {
+    if (userId === currentUserId && users.length > 1) {
       const otherUser = users.find(u => u.id !== userId);
       if (otherUser) {
         await switchUser(otherUser.id);
       }
     }
     await deleteUser(userId);
-  }, [deleteUser, currentUser?.id, users, switchUser]);
+  }, [deleteUser, currentUserId, users, switchUser]);
 
   const handleCancelEdit = useCallback(() => {
     setShowEditModal(false);
@@ -560,7 +560,7 @@ export default function UserSelectScreen() {
     <SafeAreaView className="flex-1 bg-white dark:bg-gray-950" edges={['top']}>
       <UserSelectionScreen
         users={users}
-        currentUserId={currentUser?.id}
+        currentUserId={currentUserId}
         onSelectUser={handleSelectUser}
         onAddUser={handleAddUserPress}
         onEditUser={handleEditUser}

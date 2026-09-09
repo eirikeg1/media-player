@@ -21,6 +21,8 @@ import { VideoCastingState, VideoErrorState } from './video-states';
 
 interface VideoPlayerProps {
   channel: Channel;
+  /** What to play; defaults to the channel's own URL (a catch-up window differs). */
+  streamUrl?: string;
   startPosition?: number;
   onBack?: () => void;
   onStopVideo?: () => void;
@@ -35,7 +37,7 @@ interface VideoPlayerProps {
 /**
  * Video player component with clean, modular state management architecture
  */
-export function VideoPlayer({ channel, startPosition, onBack, onStopVideo, onRegisterStopFunction, onNext, onPrevious, hasNavigation, fixture }: VideoPlayerProps) {
+export function VideoPlayer({ channel, streamUrl = channel.url, startPosition, onBack, onStopVideo, onRegisterStopFunction, onNext, onPrevious, hasNavigation, fixture }: VideoPlayerProps) {
   const {
     player,
     isLoading,
@@ -94,11 +96,22 @@ export function VideoPlayer({ channel, startPosition, onBack, onStopVideo, onReg
     [seekTo, playVideo, showControlsTemporarily],
   );
 
-  const { toggleCastPlayPause, isCastPlaying, resyncCastToLive } = useCastPlayback({ channel });
+  const isSessionCatchup = usePlaybackSessionStore((s) => s.session?.catchup != null);
+  const {
+    toggleCastPlayPause,
+    isCastPlaying,
+    resyncCastToLive,
+    castPosition,
+    castDuration,
+    seekCast,
+  } = useCastPlayback({ channel, streamUrl, isCatchup: isSessionCatchup });
   const isCasting = useVideoPlayerStore(s => s.isCasting);
-  // While casting the local player is unloaded, so its `isLive` is stale;
-  // the session's content type says whether the receiver plays a live stream.
-  const isSessionLive = usePlaybackSessionStore((s) => s.session?.contentType === 'live');
+  // While casting the local player is unloaded, so its `isLive` is stale; the
+  // session says what the receiver plays. A catch-up window is a finite
+  // recording, so it is never live even on a live channel.
+  const isSessionLive = usePlaybackSessionStore(
+    (s) => s.session?.contentType === 'live' && s.session.catchup == null
+  );
 
   // Tell the session which view holds the player: Android allows only one
   // attached VideoView per player, so the mini bar waits for the screen's
@@ -190,6 +203,12 @@ export function VideoPlayer({ channel, startPosition, onBack, onStopVideo, onReg
             onTogglePlayPause={toggleCastPlayPause}
             onClearTimeout={clearHideControlsTimeout}
             isLive={isSessionLive}
+            // The receiver owns the timeline while casting: a buffered stream
+            // reports a duration and gets a seek bar, a live one reports 0.
+            currentTime={castPosition}
+            duration={castDuration}
+            onSeekStart={clearHideControlsTimeout}
+            onSeekEnd={seekCast}
             fixture={liveFixture}
             onShowMatchInfo={widgetFixture ? showMatchInfo : undefined}
             onResync={isSessionLive ? resyncCastToLive : undefined}

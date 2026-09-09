@@ -1,43 +1,38 @@
 import { ConfirmDialog } from '@/components/ui/containers/modal/confirm-dialog';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
+import { saveSetting } from '@/features/user/save-setting';
 import { useUserStore } from '@/stores/user/user-store';
 import { isPrivateModeActive } from '@/types/user.types';
 import { memo, useCallback, useState } from 'react';
-import { Pressable, StyleSheet, Switch, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Switch, View } from 'react-native';
 
 const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 
 export const HistorySettings = memo(function HistorySettings() {
-  const currentUser = useUserStore((state) => state.currentUser);
-  const updateSettings = useUserStore((state) => state.updateSettings);
+  const userId = useUserStore((state) => state.currentUser?.id);
   const clearViewingHistory = useUserStore((state) => state.clearViewingHistory);
+  const privateModeExpiresAt = useUserStore(
+    (state) => state.currentUser?.settings?.privateModeExpiresAt,
+  );
 
-  const privateModeActive = isPrivateModeActive(currentUser?.settings);
+  const privateModeActive = isPrivateModeActive({ privateModeExpiresAt });
   const [showPrivateModeDialog, setShowPrivateModeDialog] = useState(false);
   const [showClearHistoryDialog, setShowClearHistoryDialog] = useState(false);
 
-  const handleTogglePrivateMode = useCallback(
-    (value: boolean) => {
-      if (!currentUser) return;
-
-      if (value) {
-        setShowPrivateModeDialog(true);
-      } else {
-        updateSettings(currentUser.id, {
-          privateModeExpiresAt: undefined,
-        });
-      }
-    },
-    [currentUser, updateSettings],
-  );
+  const handleTogglePrivateMode = useCallback((value: boolean) => {
+    if (value) {
+      setShowPrivateModeDialog(true);
+    } else {
+      void saveSetting({ privateModeExpiresAt: undefined }, 'Private Mode');
+    }
+  }, []);
 
   const handleClearHistory = useCallback(() => {
-    if (!currentUser) return;
     setShowClearHistoryDialog(true);
-  }, [currentUser]);
+  }, []);
 
-  if (!currentUser) {
+  if (!userId) {
     return null;
   }
 
@@ -82,13 +77,14 @@ export const HistorySettings = memo(function HistorySettings() {
             title: 'Enable',
             variant: 'primary',
             onPress: () => {
-              if (currentUser) {
-                updateSettings(currentUser.id, {
+              void saveSetting(
+                {
                   privateModeExpiresAt: new Date(
                     Date.now() + TWENTY_FOUR_HOURS_MS,
                   ).toISOString(),
-                });
-              }
+                },
+                'Private Mode',
+              );
               setShowPrivateModeDialog(false);
             },
           },
@@ -108,9 +104,13 @@ export const HistorySettings = memo(function HistorySettings() {
             title: 'Clear',
             variant: 'danger',
             onPress: () => {
-              if (currentUser) {
-                clearViewingHistory(currentUser.id);
-              }
+              clearViewingHistory(userId).catch((error: unknown) => {
+                console.error('[HistorySettings] Failed to clear history:', error);
+                Alert.alert(
+                  "Couldn't clear history",
+                  error instanceof Error ? error.message : 'Please try again.',
+                );
+              });
               setShowClearHistoryDialog(false);
             },
           },

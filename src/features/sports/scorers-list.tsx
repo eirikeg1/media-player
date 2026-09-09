@@ -4,7 +4,9 @@ import { GlassColors, THEME } from '@/lib/theme';
 import { Image } from 'expo-image';
 import type { Scorer, TopScorers } from 'expo-m3u-parser';
 import { memo } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+
+import { ScorersSkeleton } from './skeletons';
 
 interface ScorersListProps {
   scorers: TopScorers | null;
@@ -66,9 +68,7 @@ export const ScorersList = memo(function ScorersList({
   return (
     <View style={styles.container}>
       {isLoading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator />
-        </View>
+        <ScorersSkeleton />
       ) : error ? (
         <View style={styles.emptyContainer}>
           <ThemedText style={[styles.errorText, { color: destructiveColor }]}>{error}</ThemedText>
@@ -92,10 +92,6 @@ const styles = StyleSheet.create({
   container: {
     gap: 12,
     paddingHorizontal: 16,
-  },
-  loadingContainer: {
-    padding: 32,
-    alignItems: 'center',
   },
   emptyContainer: {
     padding: 32,

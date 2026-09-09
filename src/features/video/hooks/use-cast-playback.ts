@@ -13,8 +13,11 @@ import {
 
 import { resolveRedirects } from 'expo-m3u-parser';
 import { getChannelId } from '@/lib/channel-utils';
+import { usePlaybackSessionStore } from '@/stores/video/playback-session-store';
 import { useVideoPlayerStore } from '@/stores/video/player-store';
 import type { Channel } from '@/types/playlist.types';
+import { CONNECTION_RELEASE_DELAY_MS } from '../constants';
+import { parseXtreamUrl, type XtreamUrlInfo } from '../utils/xtream-url';
 
 /** Map a URL to its MIME content type based on extension. */
 function getContentType(url: string): string {
@@ -28,36 +31,14 @@ function getContentType(url: string): string {
 
 interface UseCastPlaybackProps {
   channel: Channel;
+  /** What to cast; defaults to the channel's own URL (a catch-up window differs). */
+  streamUrl?: string;
+  /**
+   * Whether `streamUrl` is a catch-up window. A window is a finite recording,
+   * so the receiver buffers and seeks it instead of treating it as live.
+   */
+  isCatchup: boolean;
 }
-
-interface XtreamUrlInfo {
-  serverUrl: string; // http://host:port
-  username: string;
-  password: string;
-  streamId: string;
-}
-
-/** Parse an Xtream Codes URL (http://host:port/username/password/stream_id) into its components. */
-function parseXtreamUrl(url: string): XtreamUrlInfo | null {
-  try {
-    const parsed = new URL(url);
-    const segments = parsed.pathname.split('/').filter(Boolean);
-    if (segments.length === 3 && !segments[2].includes('.')) {
-      return {
-        serverUrl: `${parsed.protocol}//${parsed.host}`,
-        username: segments[0],
-        password: segments[1],
-        streamId: segments[2],
-      };
-    }
-  } catch {
-    // Not a valid URL
-  }
-  return null;
-}
-
-/** Delay (ms) for Xtream servers to release the connection slot after player unload. */
-const CONNECTION_RELEASE_DELAY_MS = 2000;
 
 /** Query the Xtream API to check HLS support, return the HLS URL if available. */
 async function queryXtreamHlsUrl(info: XtreamUrlInfo): Promise<string | null> {
@@ -75,7 +56,7 @@ async function queryXtreamHlsUrl(info: XtreamUrlInfo): Promise<string | null> {
       [];
 
     if (formats.includes('m3u8')) {
-      return `${info.serverUrl}/live/${info.username}/${info.password}/${info.streamId}.m3u8`;
+      return info.hlsUrl;
     }
   } catch (error) {
     console.warn('[Cast] Xtream API call failed:', error);
@@ -85,13 +66,16 @@ async function queryXtreamHlsUrl(info: XtreamUrlInfo): Promise<string | null> {
   return null;
 }
 
-export function useCastPlayback({ channel }: UseCastPlaybackProps) {
+export function useCastPlayback({ channel, streamUrl = channel.url, isCatchup }: UseCastPlaybackProps) {
   const client = useRemoteMediaClient();
   const castState = useCastState();
   const mediaStatus = useMediaStatus();
   const didUnloadForCastRef = useRef(false);
-  const castLoadedChannelIdRef = useRef<string | null>(null);
+  // What the receiver is currently loaded with. Keyed by channel *and* URL, so
+  // switching the same channel between live and a catch-up window re-loads it.
+  const castLoadedTargetRef = useRef<string | null>(null);
   const loadSeqRef = useRef(0);
+  const castTarget = `${getChannelId(channel)}|${streamUrl}`;
 
   const isCastPlaying =
     mediaStatus?.playerState === MediaPlayerState.PLAYING ||
@@ -111,21 +95,21 @@ export function useCastPlayback({ channel }: UseCastPlaybackProps) {
   }, [client, isCastPlaying]);
 
   const castMedia = useCallback(
-    async (ch: Channel) => {
+    async (ch: Channel, url: string) => {
       if (!client) return;
 
-      // Claim this channel optimistically so concurrent auto-load effects don't re-fire,
+      // Claim this target optimistically so concurrent auto-load effects don't re-fire,
       // and bump the sequence so earlier in-flight loads abandon before calling loadMedia.
       const mySeq = ++loadSeqRef.current;
-      castLoadedChannelIdRef.current = getChannelId(ch);
+      castLoadedTargetRef.current = `${getChannelId(ch)}|${url}`;
 
       try {
         // 1. Try to parse as Xtream URL and query API for HLS support.
         //    This happens BEFORE player unload — the API call is a JSON request,
         //    not a stream, so it doesn't consume a connection slot.
-        let castUrl = ch.url;
-        let contentType = getContentType(ch.url);
-        const xtreamInfo = parseXtreamUrl(ch.url);
+        let castUrl = url;
+        let contentType = getContentType(url);
+        const xtreamInfo = parseXtreamUrl(url);
 
         if (xtreamInfo) {
           const hlsUrl = await queryXtreamHlsUrl(xtreamInfo);
@@ -163,13 +147,13 @@ export function useCastPlayback({ channel }: UseCastPlaybackProps) {
                 title: ch.name,
                 images: ch.tvg.logo ? [{ url: ch.tvg.logo }] : undefined,
               },
-              streamType: MediaStreamType.LIVE,
+              streamType: isCatchup ? MediaStreamType.BUFFERED : MediaStreamType.LIVE,
             },
           });
         } catch (error) {
           // Only clear the identity if we're still the latest attempt — a stale failure
           // must not wipe a newer successful load's claim.
-          if (mySeq === loadSeqRef.current) castLoadedChannelIdRef.current = null;
+          if (mySeq === loadSeqRef.current) castLoadedTargetRef.current = null;
           console.error('[Cast] loadMedia FAILED:', error);
           Alert.alert(
             'Cast Failed',
@@ -178,11 +162,11 @@ export function useCastPlayback({ channel }: UseCastPlaybackProps) {
           );
         }
       } catch (error) {
-        if (mySeq === loadSeqRef.current) castLoadedChannelIdRef.current = null;
+        if (mySeq === loadSeqRef.current) castLoadedTargetRef.current = null;
         console.warn('[Cast] castMedia setup failed:', error);
       }
     },
-    [client],
+    [client, isCatchup],
   );
 
   // Manage local player lifecycle across all cast state transitions.
@@ -191,50 +175,68 @@ export function useCastPlayback({ channel }: UseCastPlaybackProps) {
   useEffect(() => {
     const connected = castState === CastState.CONNECTED;
     useVideoPlayerStore.getState().setIsCasting(connected);
+    // The playback session owns the local player handle — reading it here (and
+    // not a mirrored copy) is what guarantees it is actually unloaded before
+    // the receiver claims the panel's only connection slot.
+    const localPlayer = usePlaybackSessionStore.getState().session?.player ?? null;
 
     if (castState === CastState.CONNECTING) {
-      const localPlayer = useVideoPlayerStore.getState().player;
-      if (localPlayer) {
-        localPlayer.replaceAsync(null);
-      }
+      localPlayer?.replaceAsync(null);
       didUnloadForCastRef.current = true;
     } else if (connected) {
       didUnloadForCastRef.current = true;
       // Unload local player — handles screen remount while already casting,
-      // where useVideoPlayer(url) creates a fresh player that would compete
-      // for the server stream slot.
-      const localPlayer = useVideoPlayerStore.getState().player;
-      if (localPlayer) {
-        localPlayer.replaceAsync(null);
-      }
+      // where a fresh session player would compete for the server stream slot.
+      localPlayer?.replaceAsync(null);
     } else if (didUnloadForCastRef.current) {
       // Cast ended or connection failed — restore local player
-      castLoadedChannelIdRef.current = null;
+      castLoadedTargetRef.current = null;
       didUnloadForCastRef.current = false;
-      const localPlayer = useVideoPlayerStore.getState().player;
-      if (localPlayer) {
-        localPlayer.replaceAsync(channel.url);
-      }
+      localPlayer?.replaceAsync(streamUrl);
     }
 
-  }, [castState, channel.url]);
+  }, [castState, streamUrl]);
 
-  // Auto-load channel when cast state is fully connected, or when the channel
-  // changes while already casting. Identity comparison ensures the receiver
-  // always plays what the component is currently bound to.
+  // Auto-load the stream when cast state is fully connected, or when what the
+  // component is bound to changes while already casting. Identity comparison
+  // ensures the receiver always plays that.
   useEffect(() => {
-    if (
-      client &&
-      castState === CastState.CONNECTED &&
-      getChannelId(channel) !== castLoadedChannelIdRef.current
-    ) {
-      castMedia(channel);
+    if (client && castState === CastState.CONNECTED && castTarget !== castLoadedTargetRef.current) {
+      castMedia(channel, streamUrl);
     }
-  }, [client, castState, channel, castMedia]);
+  }, [client, castState, channel, streamUrl, castTarget, castMedia]);
 
-  // Reload the current channel on the receiver, which reconnects it at the
+  // Reload the current stream on the receiver, which reconnects it at the
   // live edge (the cast counterpart of the local player's resyncToLive).
-  const resyncCastToLive = useCallback(() => castMedia(channel), [castMedia, channel]);
+  const resyncCastToLive = useCallback(
+    () => castMedia(channel, streamUrl),
+    [castMedia, channel, streamUrl]
+  );
 
-  return { castMedia, toggleCastPlayPause, isCastPlaying, resyncCastToLive };
+  const seekCast = useCallback(
+    async (position: number) => {
+      if (!client) return;
+      try {
+        await client.seek({ position });
+      } catch (error) {
+        console.warn('[Cast] seek failed:', error);
+      }
+    },
+    [client]
+  );
+
+  // The receiver's own timeline, driving the seek bar while casting. A live
+  // stream reports no duration, so the bar stays hidden for it.
+  const castPosition = mediaStatus?.streamPosition ?? 0;
+  const castDuration = mediaStatus?.mediaInfo?.streamDuration ?? 0;
+
+  return {
+    castMedia,
+    toggleCastPlayPause,
+    isCastPlaying,
+    resyncCastToLive,
+    castPosition,
+    castDuration,
+    seekCast,
+  };
 }

@@ -1,11 +1,6 @@
-import { useEffect } from 'react';
 import { StyleSheet, useColorScheme, View } from 'react-native';
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withTiming,
-} from 'react-native-reanimated';
+
+import { SkeletonBlock, skeletonColor, useSkeletonPulse } from '@/components/ui/display/skeleton';
 
 // Carousel layout constants (matching recently-watched-carousel.tsx)
 const CARD_SIZE = 160;
@@ -22,29 +17,17 @@ const ITEM_ASPECT_RATIO = 3 / 4;
 const DISCOVER_CARD_COUNT = 5;
 
 export function HomeSkeletonContent() {
-  const colorScheme = useColorScheme();
-  const placeholderColor = colorScheme === 'dark' ? '#2a2a2a' : '#e0e0e0';
-
-  const opacity = useSharedValue(0.3);
-
-  useEffect(() => {
-    opacity.value = withRepeat(withTiming(0.7, { duration: 600 }), -1, true);
-  }, [opacity]);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    opacity: opacity.value,
-  }));
+  const color = skeletonColor(useColorScheme() === 'dark');
+  const pulse = useSkeletonPulse();
 
   return (
     <View style={styles.container}>
       {/* Skeleton carousel */}
       <View style={styles.section}>
-        <Animated.View
-          style={[styles.titleBar, { backgroundColor: placeholderColor }, animatedStyle]}
-        />
+        <SkeletonBlock style={styles.titleBar} color={color} pulse={pulse} />
         <View style={styles.carouselRow}>
           {Array.from({ length: CAROUSEL_CARD_COUNT }).map((_, i) => (
-            <Animated.View
+            <SkeletonBlock
               key={i}
               style={[
                 styles.carouselCard,
@@ -53,40 +36,24 @@ export function HomeSkeletonContent() {
                   : i === 1
                     ? { width: CARD_SIZE - OVERLAP - STRIP_GAP - SCALE_OVERFLOW, marginLeft: STRIP_GAP + SCALE_OVERFLOW }
                     : { width: CARD_SIZE - OVERLAP - STRIP_GAP, marginLeft: STRIP_GAP },
-                { backgroundColor: placeholderColor },
-                animatedStyle,
               ]}
+              color={color}
+              pulse={pulse}
             />
           ))}
         </View>
-        <Animated.View
-          style={[styles.activeNameBar, { backgroundColor: placeholderColor }, animatedStyle]}
-        />
+        <SkeletonBlock style={styles.activeNameBar} color={color} pulse={pulse} />
       </View>
 
       {/* Skeleton discover rows */}
       {[0, 1].map((row) => (
         <View key={row} style={styles.section}>
-          <Animated.View
-            style={[styles.titleBar, { backgroundColor: placeholderColor }, animatedStyle]}
-          />
+          <SkeletonBlock style={styles.titleBar} color={color} pulse={pulse} />
           <View style={styles.discoverRow}>
             {Array.from({ length: DISCOVER_CARD_COUNT }).map((_, i) => (
               <View key={i} style={styles.discoverItem}>
-                <Animated.View
-                  style={[
-                    styles.discoverCard,
-                    { backgroundColor: placeholderColor },
-                    animatedStyle,
-                  ]}
-                />
-                <Animated.View
-                  style={[
-                    styles.discoverLabel,
-                    { backgroundColor: placeholderColor },
-                    animatedStyle,
-                  ]}
-                />
+                <SkeletonBlock style={styles.discoverCard} color={color} pulse={pulse} />
+                <SkeletonBlock style={styles.discoverLabel} color={color} pulse={pulse} />
               </View>
             ))}
           </View>

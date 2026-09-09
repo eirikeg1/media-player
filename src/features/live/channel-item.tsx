@@ -11,13 +11,12 @@ import { StyleSheet, TouchableOpacity, View } from 'react-native';
 
 interface ChannelItemProps {
   channel: Channel;
-  isFavorite: boolean;
   onPress: (channel: Channel) => void;
   currentProgramme?: EpgProgramme | null;
   testID?: string;
 }
 
-export function ChannelItem({ channel, isFavorite, onPress, currentProgramme, testID }: ChannelItemProps) {
+export function ChannelItem({ channel, onPress, currentProgramme, testID }: ChannelItemProps) {
   const [imageError, setImageError] = useState(false);
   const hasLogo = !!channel.tvg.logo && !imageError;
   const initial = channel.name.charAt(0).toUpperCase();
@@ -67,7 +66,6 @@ export function ChannelItem({ channel, isFavorite, onPress, currentProgramme, te
           channelId={channelId}
           channelName={channel.name}
           size={20}
-          initialIsFavorite={isFavorite}
         />
       </View>
     </View>

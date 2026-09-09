@@ -4,6 +4,7 @@ import { memo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import type { MatchDataState } from '../hooks/use-match-detail';
+import { MatchLineupsSkeleton } from '../skeletons';
 import {
   AWAY_COLOR,
   HOME_COLOR,
@@ -13,7 +14,6 @@ import {
   PlayerStatsSheet,
   RatingBadge,
   ratingColor,
-  SectionLoading,
   SectionMessage,
 } from './match-detail-shared';
 
@@ -43,7 +43,7 @@ export const MatchLineupsTab = memo(function MatchLineupsTab({
 }: LineupsTabProps) {
   const [selected, setSelected] = useState<SelectedPlayer | null>(null);
 
-  if (state.isLoading) return <SectionLoading />;
+  if (state.isLoading) return <MatchLineupsSkeleton compact={compact} />;
   if (state.error) return <SectionMessage text={state.error} />;
 
   const players = state.data;

@@ -1,4 +1,5 @@
 import type { VideoPlayer } from 'expo-video';
+import { memo } from 'react';
 import { View } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
 import type { SharedValue } from 'react-native-reanimated';
@@ -21,7 +22,7 @@ interface VideoGestureLayerProps {
   isGestureSeeking: SharedValue<boolean>;
 }
 
-export function VideoGestureLayer({
+function VideoGestureLayerComponent({
   player,
   currentTime,
   duration,
@@ -62,3 +63,9 @@ export function VideoGestureLayer({
     </GestureDetector>
   );
 }
+
+/**
+ * Memoised: `currentTime` ticks twice a second, and re-rendering the gesture
+ * layer for every tick is pure waste — the hook reads the time from a ref.
+ */
+export const VideoGestureLayer = memo(VideoGestureLayerComponent);

@@ -1,50 +1,28 @@
-import { useEffect } from 'react';
+import { SkeletonBlock, skeletonColor, useSkeletonPulse } from '@/components/ui/display/skeleton';
 import { StyleSheet, useColorScheme, View } from 'react-native';
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withTiming,
-} from 'react-native-reanimated';
 import { CHANNEL_COL_WIDTH, ROW_HEIGHT, SKELETON_ROW_PATTERNS, TIME_HEADER_HEIGHT } from './epg-constants';
 
 const SKELETON_ROWS = 10;
 
 export function EpgSkeleton() {
   const colorScheme = useColorScheme();
-  const placeholderColor = colorScheme === 'dark' ? '#2a2a2a' : '#e0e0e0';
-
-  const opacity = useSharedValue(0.3);
-
-  useEffect(() => {
-    opacity.value = withRepeat(withTiming(0.7, { duration: 600 }), -1, true);
-  }, [opacity]);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    opacity: opacity.value,
-  }));
+  const color = skeletonColor(colorScheme === 'dark');
+  const pulse = useSkeletonPulse();
 
   return (
     <View style={styles.container}>
       {/* Time header skeleton */}
       <View style={styles.headerRow}>
-        <Animated.View
-          style={[
-            styles.channelHeaderBlock,
-            { backgroundColor: placeholderColor },
-            animatedStyle,
-          ]}
+        <SkeletonBlock
+          width={CHANNEL_COL_WIDTH}
+          height={24}
+          color={color}
+          pulse={pulse}
+          style={styles.channelHeaderBlock}
         />
         <View style={styles.timeBlocks}>
           {[0, 1, 2, 3, 4].map((i) => (
-            <Animated.View
-              key={i}
-              style={[
-                styles.timeBlock,
-                { backgroundColor: placeholderColor },
-                animatedStyle,
-              ]}
-            />
+            <SkeletonBlock key={i} width={50} height={14} borderRadius={3} color={color} pulse={pulse} />
           ))}
         </View>
       </View>
@@ -53,23 +31,22 @@ export function EpgSkeleton() {
       {Array.from({ length: SKELETON_ROWS }, (_, rowIdx) => (
         <View key={rowIdx} style={styles.row}>
           {/* Channel column */}
-          <Animated.View
-            style={[
-              styles.channelBlock,
-              { backgroundColor: placeholderColor },
-              animatedStyle,
-            ]}
+          <SkeletonBlock
+            width={CHANNEL_COL_WIDTH - 8}
+            height={36}
+            color={color}
+            pulse={pulse}
+            style={styles.channelBlock}
           />
           {/* Programme blocks */}
           <View style={styles.programmeRow}>
             {SKELETON_ROW_PATTERNS[rowIdx % SKELETON_ROW_PATTERNS.length].map((width, blockIdx) => (
-              <Animated.View
+              <SkeletonBlock
                 key={blockIdx}
-                style={[
-                  styles.programmeBlock,
-                  { width, backgroundColor: placeholderColor },
-                  animatedStyle,
-                ]}
+                width={width}
+                height={ROW_HEIGHT - 12}
+                color={color}
+                pulse={pulse}
               />
             ))}
           </View>
@@ -90,9 +67,6 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   channelHeaderBlock: {
-    width: CHANNEL_COL_WIDTH,
-    height: 24,
-    borderRadius: 4,
     margin: 4,
   },
   timeBlocks: {
@@ -102,11 +76,6 @@ const styles = StyleSheet.create({
     gap: 16,
     paddingHorizontal: 8,
   },
-  timeBlock: {
-    width: 50,
-    height: 14,
-    borderRadius: 3,
-  },
   row: {
     flexDirection: 'row',
     height: ROW_HEIGHT,
@@ -114,9 +83,6 @@ const styles = StyleSheet.create({
     borderBottomColor: 'transparent',
   },
   channelBlock: {
-    width: CHANNEL_COL_WIDTH - 8,
-    height: 36,
-    borderRadius: 4,
     margin: 4,
     alignSelf: 'center',
   },
@@ -126,9 +92,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: 4,
-  },
-  programmeBlock: {
-    height: ROW_HEIGHT - 12,
-    borderRadius: 4,
   },
 });

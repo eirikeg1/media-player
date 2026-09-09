@@ -3,6 +3,25 @@ import type { Team } from 'expo-m3u-parser';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
 
+/**
+ * Whether two favorite lists are interchangeable for everything the UI derives
+ * from them — the id set that regroups the day, and the name/crest the team
+ * rows show. The backend returns them in a stable order.
+ */
+function sameTeams(a: readonly Team[], b: readonly Team[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every(
+      (team, index) =>
+        team.provider === b[index].provider &&
+        team.providerId === b[index].providerId &&
+        team.name === b[index].name &&
+        team.shortName === b[index].shortName &&
+        team.crestUrl === b[index].crestUrl
+    )
+  );
+}
+
 export function useFavoriteTeams() {
   const [teams, setTeams] = useState<Team[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -18,7 +37,9 @@ export function useFavoriteTeams() {
       const db = await getSportsDatabase();
       const result = await db.getFavoriteTeams();
       if (fetchId === fetchRef.current) {
-        setTeams(result);
+        // This runs on every tab focus. An unchanged list must keep its array
+        // identity: a new one regroups the whole day and re-renders every row.
+        setTeams((previous) => (sameTeams(previous, result) ? previous : result));
       }
     } catch (err) {
       if (fetchId === fetchRef.current) {

@@ -56,10 +56,11 @@ export const MatchWidgetOverlay = memo(function MatchWidgetOverlay({
   const [activeKey, setActiveKey] = useState(tabs[0]?.key);
   const [orientation, setOrientation] = useState<ContentOrientation>('landscape');
 
-  // The overlay stays mounted while hidden (so section caches survive), which
-  // means `activeKey`'s initial value can predate kickoff. Re-derive the
-  // default tab on each open — the fixture's status may have reordered the
-  // tabs since — without touching the user's selection while it is open.
+  // Hidden renders nothing, but the component stays mounted, so `activeKey`
+  // survives between opens and its initial value can predate kickoff.
+  // Re-derive the default tab on each open — the fixture's status may have
+  // reordered the tabs since — without touching the user's selection while it
+  // is open.
   const [wasVisible, setWasVisible] = useState(visible);
   if (visible !== wasVisible) {
     setWasVisible(visible);

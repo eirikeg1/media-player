@@ -5,9 +5,10 @@ import { GlassColors } from '@/lib/theme';
 import { Image } from 'expo-image';
 import type { Competition } from 'expo-m3u-parser';
 import { memo, useCallback, useMemo } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { groupCompetitions } from './competition-groups';
+import { CompetitionGridSkeleton } from './skeletons';
 
 interface CompetitionGridProps {
   competitions: Competition[];
@@ -76,11 +77,7 @@ export const CompetitionGrid = memo(function CompetitionGrid({
   );
 
   if (isLoading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator />
-      </View>
-    );
+    return <CompetitionGridSkeleton />;
   }
 
   const isAllSelected = selectedCompId === null;
@@ -127,10 +124,6 @@ export const CompetitionGrid = memo(function CompetitionGrid({
 const styles = StyleSheet.create({
   container: {
     gap: 8,
-  },
-  loadingContainer: {
-    padding: 32,
-    alignItems: 'center',
   },
   allChip: {
     paddingVertical: 10,

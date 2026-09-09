@@ -20,11 +20,11 @@ import { AnimatedSplashLoader } from '@/components/ui/display/animated-splash-lo
 import { useBackgroundRefresh } from '@/features/sports/background/use-background-refresh';
 import { PlaybackSessionHost } from '@/features/video/components/playback-session-host';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useDeferredStartupWork } from '@/hooks/use-deferred-startup-work';
 import { useEpgSync } from '@/hooks/use-epg-sync';
 import { usePlaylistInit } from '@/hooks/use-playlist-init';
 import { usePlaylistSync } from '@/hooks/use-playlist-sync';
 import { NAV_THEME } from '@/lib/theme';
-import { EpgService } from '@/services/epg-service';
 import { useAppReadyStore } from '@/stores/app';
 
 SplashScreen.preventAutoHideAsync();
@@ -44,19 +44,15 @@ export default function RootLayout() {
   // Keep the sports background refresh registered with the OS
   useBackgroundRefresh();
 
+  // Low-priority startup work, held back until the UI is on screen
+  useDeferredStartupWork();
+
   // Safety timeout: reveal the UI after 10s no matter what
   useEffect(() => {
     const timeout = setTimeout(() => {
       useAppReadyStore.getState().markReady();
     }, 10_000);
     return () => clearTimeout(timeout);
-  }, []);
-
-  // Clean up expired EPG programmes on startup
-  useEffect(() => {
-    EpgService.cleanupExpired().catch((err) => {
-      console.warn('[RootLayout] EPG cleanup failed:', err);
-    });
   }, []);
 
   return (
