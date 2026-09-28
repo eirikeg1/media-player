@@ -117,8 +117,10 @@ cannot run at all: no model loaded, or a zero-item request.
 
 ### Lifecycle (compute placement)
 
-- **First run**: the home page's read call finds no cached batch and generates
-  one synchronously — this happens behind the existing splash/loading screen.
+- **First run**: the read call finds no cached batch and generates one
+  synchronously. It is issued by the launch pre-fetch (`preFetchAll`'s home
+  slot), so it runs behind the loading screen and the home page renders the
+  batch it produced — the hook and the pre-fetch share one run.
 - **Every subsequent show**: the read returns the stored batch instantly; the
   app then fire-and-forgets a regeneration of the *next* batch (same pattern
   the random recommender used). Restarting the app or pull-to-refresh

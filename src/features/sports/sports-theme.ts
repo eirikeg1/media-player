@@ -1,9 +1,11 @@
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { THEME } from '@/lib/theme';
+import { THEME, TINT } from '@/lib/theme';
 
 /** Accent colours shared by the sports screens (theme-independent). */
 export const SPORTS_ACCENT = {
-  tint: '#007AFF',
+  // The app's own accent, so a change to the token travels here too. Note it is
+  // an `hsl(...)` string — `withAlpha` below takes `#RRGGBB` only.
+  tint: TINT,
   live: '#FF3B30',
   halftime: '#FF9500',
   favorite: '#FFB800',

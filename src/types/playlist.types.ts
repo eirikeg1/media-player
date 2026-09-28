@@ -50,6 +50,12 @@ export interface Playlist {
 
 /** Input data for creating a new playlist. */
 export interface CreatePlaylistInput {
+  /**
+   * Id to create the playlist under. Generated when omitted; a caller supplies
+   * one when it has to follow the import's progress, which is keyed by id and
+   * starts before the playlist row exists.
+   */
+  id?: string;
   name: string;
   url: string;
   epgUrl?: string;

@@ -2,8 +2,33 @@ import { TouchableOpacity } from 'react-native';
 import { useCallback, useState } from 'react';
 
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
+import { useHaptics } from '@/hooks/use-haptics';
 import { useUserStore } from '@/stores/user/user-store';
 
+
+/**
+ * Lookup sets memoised on the favourites array identity: the store replaces the
+ * array on every write, so one set is built per change and shared by every star
+ * on screen instead of each one scanning the array.
+ */
+const idSetCache = new WeakMap<readonly string[], ReadonlySet<string>>();
+
+function favoriteIdSet(ids: string[]): ReadonlySet<string> {
+  let set = idSetCache.get(ids);
+  if (!set) {
+    set = new Set(ids);
+    idSetCache.set(ids, set);
+  }
+  return set;
+}
+
+/**
+ * Whether `channelId` is favorited, as an O(1) store subscription — safe to call
+ * from every row of a long list.
+ */
+export function useIsFavoriteChannel(channelId: string): boolean {
+  return useUserStore((state) => favoriteIdSet(state.favoriteChannels).has(channelId));
+}
 
 interface FavoriteStarProps {
   channelId: string;
@@ -13,12 +38,13 @@ interface FavoriteStarProps {
 
 export function FavoriteStar({ channelId, channelName, size = 16 }: FavoriteStarProps) {
   const [isLoading, setIsLoading] = useState(false);
+  const haptics = useHaptics();
 
   const userId = useUserStore((state) => state.currentUser?.id);
   const toggleFavorite = useUserStore((state) => state.toggleFavorite);
   // `toggleFavorite` keeps this list in sync, so the store is the single source
   // of truth — no local copy to drift and no per-star database round-trip.
-  const isFavorite = useUserStore((state) => state.favoriteChannels.includes(channelId));
+  const isFavorite = useIsFavoriteChannel(channelId);
 
   const favoriteColor = '#FFD700';
 
@@ -26,6 +52,7 @@ export function FavoriteStar({ channelId, channelName, size = 16 }: FavoriteStar
     if (!userId || isLoading) return;
 
     setIsLoading(true);
+    haptics.selection();
     try {
       await toggleFavorite(userId, channelId);
     } catch (error) {
@@ -33,7 +60,7 @@ export function FavoriteStar({ channelId, channelName, size = 16 }: FavoriteStar
     } finally {
       setIsLoading(false);
     }
-  }, [userId, channelId, isLoading, toggleFavorite]);
+  }, [userId, channelId, isLoading, toggleFavorite, haptics]);
 
   if (!userId) return null;
 

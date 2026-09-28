@@ -2,17 +2,17 @@ import { ThemedText } from '@/components/ui/display/themed-text';
 import { parseEpisodeInfo } from '@/lib/series-utils';
 import type { Channel } from '@/types/playlist.types';
 import type { RecentlyWatchedItem } from '@/types/user.types';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Dimensions,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
-import Animated, { useAnimatedStyle, withTiming } from 'react-native-reanimated';
+import { memo, useCallback, useMemo, useRef, useState } from 'react';
+import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
+import Animated, {
+  Extrapolation,
+  interpolate,
+  runOnJS,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+  type SharedValue,
+} from 'react-native-reanimated';
 import { RecentlyWatchedCard } from './recently-watched-card';
 
 // Carousel layout constants
@@ -23,43 +23,65 @@ const PADDING_LEFT = 40;
 const ACTIVE_SCALE = 1.2;
 const SIZE_STEP = 6;
 const MIN_SCALE = 0.7;
-const SCALE_DURATION = 200;
 const SCROLL_THROTTLE = 16;
+
+/** Distance between two cards' snap positions, i.e. one index step of scroll. */
+const SNAP_INTERVAL = CARD_SIZE - OVERLAP;
+
+// The neighbours shrink by SIZE_STEP pixels per index of distance, down to
+// MIN_SCALE. Expressed as interpolation stops so the whole curve can be
+// evaluated on the UI thread from the scroll offset alone.
+const NEIGHBOUR_SCALE = (CARD_SIZE - SIZE_STEP) / CARD_SIZE;
+const MIN_SCALE_DISTANCE = (CARD_SIZE * (1 - MIN_SCALE)) / SIZE_STEP;
 
 interface RecentlyWatchedCarouselProps {
   items: RecentlyWatchedItem[];
   onItemPress: (item: RecentlyWatchedItem) => void;
 }
 
-/** Single card wrapper — handles overlap, scale animation, z-index */
-function OverlapCard({
-  index,
-  activeIndex,
-  totalItems,
-  children,
-  onPress,
-}: {
+interface CarouselCardProps {
+  item: RecentlyWatchedItem;
   index: number;
-  activeIndex: number;
-  totalItems: number;
-  children: React.ReactElement;
-  onPress: () => void;
-}) {
-  const distance = Math.abs(index - activeIndex);
-  const scale =
-    distance === 0
-      ? ACTIVE_SCALE
-      : Math.max((CARD_SIZE - distance * SIZE_STEP) / CARD_SIZE, MIN_SCALE);
+  /** Live scroll offset of the carousel, in pixels. */
+  scrollX: SharedValue<number>;
+  isActive: boolean;
+  zIndex: number;
+  onPress: (index: number, item: RecentlyWatchedItem) => void;
+}
 
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: withTiming(scale, { duration: SCALE_DURATION }) }],
-  }));
+/** Single card wrapper — handles overlap, scale animation, z-index. */
+const CarouselCard = memo(function CarouselCard({
+  item,
+  index,
+  scrollX,
+  isActive,
+  zIndex,
+  onPress,
+}: CarouselCardProps) {
+  // Scale is derived from the scroll offset on the UI thread. Driving it from
+  // React state instead meant a re-render of every card on every scroll frame,
+  // and a `withTiming` restarted from inside `useAnimatedStyle` on each of them.
+  const animatedStyle = useAnimatedStyle(() => {
+    const distance = Math.abs(index - scrollX.value / SNAP_INTERVAL);
+    return {
+      transform: [
+        {
+          scale: interpolate(
+            distance,
+            [0, 1, MIN_SCALE_DISTANCE],
+            [ACTIVE_SCALE, NEIGHBOUR_SCALE, MIN_SCALE],
+            Extrapolation.CLAMP
+          ),
+        },
+      ],
+    };
+  });
 
-  const zIndex = distance === 0 ? totalItems + 1 : totalItems - distance;
+  const handlePress = useCallback(() => onPress(index, item), [onPress, index, item]);
 
   return (
     <Pressable
-      onPress={onPress}
+      onPress={handlePress}
       style={[
         styles.cardPressable,
         {
@@ -69,63 +91,87 @@ function OverlapCard({
       ]}
     >
       <Animated.View style={[styles.cardAnimated, animatedStyle]}>
-        <View style={styles.cardInner}>{children}</View>
+        <View style={styles.cardInner}>
+          <RecentlyWatchedCard item={item} isActive={isActive} size={CARD_SIZE} />
+        </View>
       </Animated.View>
     </Pressable>
   );
+});
+
+/**
+ * Label for the focused card: the series name plus its season and episode when
+ * the episode title actually carries them.
+ *
+ * `parseEpisodeInfo` falls back to "S1 E<index + 1>" for titles it cannot parse,
+ * which for a single history row would be an invented episode number — so the
+ * suffix is only appended when the parse found a real pattern (recognisable by
+ * the episode title differing from the raw one).
+ */
+function activeCardLabel(item: RecentlyWatchedItem | undefined): string {
+  if (!item) return '';
+  if (!item.seriesName) return item.channelName;
+
+  const parsed = parseEpisodeInfo({ name: item.channelName } as Channel);
+  if (parsed.episodeTitle === item.channelName) return item.seriesName;
+
+  return `${item.seriesName} · S${parsed.season} E${parsed.episode}`;
 }
 
 export function RecentlyWatchedCarousel({ items, onItemPress }: RecentlyWatchedCarouselProps) {
-  const [windowWidth, setWindowWidth] = useState(Dimensions.get('window').width);
+  const { width: windowWidth } = useWindowDimensions();
   const [activeIndex, setActiveIndex] = useState(0);
-  const scrollViewRef = useRef<ScrollView>(null);
+  const scrollViewRef = useRef<Animated.ScrollView>(null);
+  const scrollX = useSharedValue(0);
 
-  const snapInterval = CARD_SIZE - OVERLAP;
+  // Read by callbacks that must stay referentially stable so the memoised cards
+  // aren't re-rendered by a new handler identity on every parent render.
+  const activeIndexRef = useRef(activeIndex);
+  activeIndexRef.current = activeIndex;
+  const itemCountRef = useRef(items.length);
+  itemCountRef.current = items.length;
 
-  useEffect(() => {
-    const subscription = Dimensions.addEventListener('change', ({ window }) => {
-      setWindowWidth(window.width);
-    });
-    return () => subscription?.remove();
+  /**
+   * Publish the settled index to React. Only the title, the progress bar and the
+   * z-order depend on it, none of which need a per-frame update — the scale
+   * animation reads the scroll offset directly instead.
+   */
+  const publishActiveIndex = useCallback((index: number) => {
+    if (index < 0 || index >= itemCountRef.current) return;
+    setActiveIndex(index);
   }, []);
 
-  const handleScroll = useCallback(
-    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const scrollPosition = event.nativeEvent.contentOffset.x;
-      const newIndex = Math.round(scrollPosition / snapInterval);
-      if (newIndex >= 0 && newIndex < items.length && newIndex !== activeIndex) {
-        setActiveIndex(newIndex);
-      }
+  const scrollHandler = useAnimatedScrollHandler(
+    {
+      onScroll: (event) => {
+        scrollX.value = event.contentOffset.x;
+      },
+      // A slow release settles without any momentum, so `onMomentumEnd` never
+      // fires and the focused card would stay whatever it was before the drag.
+      // Both handlers round to the same snap target, so publishing twice for a
+      // flick with momentum is idempotent.
+      onEndDrag: (event) => {
+        runOnJS(publishActiveIndex)(Math.round(event.contentOffset.x / SNAP_INTERVAL));
+      },
+      onMomentumEnd: (event) => {
+        runOnJS(publishActiveIndex)(Math.round(event.contentOffset.x / SNAP_INTERVAL));
+      },
     },
-    [activeIndex, items.length, snapInterval],
-  );
-
-  const handleMomentumScrollEnd = useCallback(
-    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const scrollPosition = event.nativeEvent.contentOffset.x;
-      const currentIndex = Math.round(scrollPosition / snapInterval);
-      const targetPosition = currentIndex * snapInterval;
-
-      scrollViewRef.current?.scrollTo({ x: targetPosition, animated: true });
-
-      if (currentIndex >= 0 && currentIndex < items.length && currentIndex !== activeIndex) {
-        setActiveIndex(currentIndex);
-      }
-    },
-    [activeIndex, items.length, snapInterval],
+    [publishActiveIndex]
   );
 
   const handleCardPress = useCallback(
     (index: number, item: RecentlyWatchedItem) => {
-      if (index !== activeIndex) {
-        const targetPosition = index * snapInterval;
-        scrollViewRef.current?.scrollTo({ x: targetPosition, animated: true });
+      // A tap on an off-centre card brings it into focus; a tap on the focused
+      // one opens it.
+      if (index !== activeIndexRef.current) {
+        scrollViewRef.current?.scrollTo({ x: index * SNAP_INTERVAL, animated: true });
         setActiveIndex(index);
-      } else {
-        onItemPress(item);
+        return;
       }
+      onItemPress(item);
     },
-    [activeIndex, snapInterval, onItemPress],
+    [onItemPress]
   );
 
   const contentContainerStyle = useMemo(
@@ -133,22 +179,14 @@ export function RecentlyWatchedCarousel({ items, onItemPress }: RecentlyWatchedC
       paddingLeft: PADDING_LEFT,
       paddingRight: windowWidth - CARD_SIZE - PADDING_LEFT,
     }),
-    [windowWidth],
+    [windowWidth]
   );
 
   if (items.length === 0) return null;
 
-  const activeItem = items[activeIndex];
-  const activeName = (() => {
-    if (!activeItem) return '';
-    if (activeItem.seriesName) {
-      const { season, episode } = parseEpisodeInfo(
-        { name: activeItem.channelName } as Channel,
-      );
-      return `${activeItem.seriesName} · S${season} E${episode}`;
-    }
-    return activeItem.channelName;
-  })();
+  // A refreshed history can be shorter than the index the last scroll settled on.
+  const focusedIndex = Math.min(activeIndex, items.length - 1);
+  const focusedLabel = activeCardLabel(items[focusedIndex]);
 
   return (
     <View style={styles.container}>
@@ -156,39 +194,38 @@ export function RecentlyWatchedCarousel({ items, onItemPress }: RecentlyWatchedC
         Continue Watching
       </ThemedText>
 
-      <ScrollView
+      <Animated.ScrollView
         ref={scrollViewRef}
         horizontal
         showsHorizontalScrollIndicator={false}
-        snapToInterval={snapInterval}
+        snapToInterval={SNAP_INTERVAL}
         decelerationRate={0.98}
         disableIntervalMomentum
-        onScroll={handleScroll}
-        onMomentumScrollEnd={handleMomentumScrollEnd}
+        onScroll={scrollHandler}
         scrollEventThrottle={SCROLL_THROTTLE}
         contentContainerStyle={contentContainerStyle}
         nestedScrollEnabled
       >
         {items.map((item, index) => (
-          <OverlapCard
+          <CarouselCard
             key={item.channelId}
+            item={item}
             index={index}
-            activeIndex={activeIndex}
-            totalItems={items.length}
-            onPress={() => handleCardPress(index, item)}
-          >
-            <RecentlyWatchedCard
-              item={item}
-              isActive={index === activeIndex}
-              size={CARD_SIZE}
-            />
-          </OverlapCard>
+            scrollX={scrollX}
+            isActive={index === focusedIndex}
+            zIndex={
+              index === focusedIndex
+                ? items.length + 1
+                : items.length - Math.abs(index - focusedIndex)
+            }
+            onPress={handleCardPress}
+          />
         ))}
-      </ScrollView>
+      </Animated.ScrollView>
 
-      {activeName ? (
+      {focusedLabel ? (
         <ThemedText style={styles.activeName} numberOfLines={1}>
-          {activeName}
+          {focusedLabel}
         </ThemedText>
       ) : null}
     </View>

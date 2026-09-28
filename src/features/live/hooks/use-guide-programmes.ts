@@ -1,11 +1,17 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+
 import { EpgService } from '@/services/epg-service';
 import type { Channel } from '@/types/playlist.types';
 import type { EpgProgramme } from 'expo-m3u-parser';
 
 interface UseGuideProgrammesReturn {
   programmesByChannel: Map<string, EpgProgramme[]>;
+  /** True only while the whole day is (re)loading — drives the skeleton. */
   isLoading: boolean;
+  /** True while any fetch is in flight, including an incremental page append. */
+  isFetching: boolean;
+  /** Drops everything and re-reads the selected day. */
+  refresh: () => void;
 }
 
 /**
@@ -20,6 +26,8 @@ export function useGuideProgrammes(
 ): UseGuideProgrammesReturn {
   const [programmesByChannel, setProgrammesByChannel] = useState<Map<string, EpgProgramme[]>>(new Map());
   const [isLoading, setIsLoading] = useState(false);
+  const [pendingFetches, setPendingFetches] = useState(0);
+  const [reloadToken, setReloadToken] = useState(0);
   const fetchGenerationRef = useRef(0);
   const fetchedIdsRef = useRef<Set<string>>(new Set());
 
@@ -40,16 +48,21 @@ export function useGuideProgrammes(
   // Stabilize date to just the day (ignore time component)
   const dateKey = `${selectedDate.getFullYear()}-${selectedDate.getMonth()}-${selectedDate.getDate()}`;
 
-  // Reset fetched IDs when date changes
-  const prevDateKeyRef = useRef(dateKey);
-  if (prevDateKeyRef.current !== dateKey) {
-    prevDateKeyRef.current = dateKey;
+  // Drop the previous day's programmes in the same render that resets the
+  // fetched ids — otherwise yesterday's blocks stay on screen, drawn at today's
+  // offsets, and the skeleton never gets a chance to show.
+  const [renderedDateKey, setRenderedDateKey] = useState(dateKey);
+  if (renderedDateKey !== dateKey) {
+    setRenderedDateKey(dateKey);
     fetchedIdsRef.current = new Set();
+    setProgrammesByChannel(new Map());
+    setIsLoading(true);
   }
 
   useEffect(() => {
     if (!enabled || stableChannelIds.length === 0) {
       setProgrammesByChannel(new Map());
+      setIsLoading(false);
       fetchedIdsRef.current = new Set();
       return;
     }
@@ -65,6 +78,7 @@ export function useGuideProgrammes(
       if (isFullFetch) {
         setIsLoading(true);
       }
+      setPendingFetches((count) => count + 1);
       try {
         // Compute day boundaries in Unix seconds
         const dayStart = new Date(selectedDate);
@@ -103,13 +117,12 @@ export function useGuideProgrammes(
         }
       } catch (err) {
         if (generation !== fetchGenerationRef.current) return;
-        if (__DEV__) {
-          console.warn('[useGuideProgrammes] Error:', err);
-        }
+        console.warn('[useGuideProgrammes] Failed to fetch programmes:', err);
         if (isFullFetch) {
           setProgrammesByChannel(new Map());
         }
       } finally {
+        setPendingFetches((count) => count - 1);
         if (generation === fetchGenerationRef.current) {
           setIsLoading(false);
         }
@@ -117,7 +130,15 @@ export function useGuideProgrammes(
     };
 
     fetchProgrammes();
-  }, [stableChannelIds, dateKey, enabled]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [stableChannelIds, dateKey, enabled, reloadToken]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return { programmesByChannel, isLoading };
+  const refresh = useCallback(() => {
+    fetchGenerationRef.current++;
+    fetchedIdsRef.current = new Set();
+    setProgrammesByChannel(new Map());
+    setIsLoading(true);
+    setReloadToken((token) => token + 1);
+  }, []);
+
+  return { programmesByChannel, isLoading, isFetching: pendingFetches > 0, refresh };
 }

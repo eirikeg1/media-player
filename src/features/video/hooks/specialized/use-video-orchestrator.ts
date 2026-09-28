@@ -1,51 +1,78 @@
-import { useVideoErrorStore } from '@/stores/video/error-store';
-import { buildVideoSource, usePlaybackSessionStore } from '@/stores/video/playback-session-store';
-import { useVideoPlayerStore } from '@/stores/video/player-store';
-import { useVideoUIStore } from '@/stores/video/ui-store';
-import type { Channel } from '@/types/playlist.types';
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getVideoErrorInfo } from '../../types/video-error.types';
+
+import { usePlaybackSessionStore } from '@/stores/video/playback-session-store';
+import { usePlaybackTimeStore } from '@/stores/video/playback-time-store';
+import { useVideoPlayerStore } from '@/stores/video/player-store';
+import { useVideoRetryStore } from '@/stores/video/retry-store';
+import { useVideoUIStore } from '@/stores/video/ui-store';
 import { useVideoControls } from './use-video-controls';
 import { useVideoErrorHandling } from './use-video-error-handling';
-import { useVideoNetwork } from './use-video-network';
+import { checkNetwork, useVideoNetwork } from './use-video-network';
 import { useVideoPlayerState } from './use-video-player-state';
 
 interface UseVideoOrchestratorProps {
-  channel: Channel;
   startPosition?: number;
-  onStopVideo?: () => void;
   onRegisterStopFunction?: (stopFn: () => void) => void;
 }
 
+/** How long after the first ready frame the controls pop up. */
+const READY_CONTROLS_DELAY_MS = 500;
+const READY_CONTROLS_VISIBLE_MS = 4000;
+
 export function useVideoOrchestrator({
-  channel,
-  startPosition,
-  onStopVideo,
+  startPosition = 0,
   onRegisterStopFunction,
 }: UseVideoOrchestratorProps) {
   const isUnmountedRef = useRef(false);
   const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const readyControlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasAppliedStartPositionRef = useRef(false);
+  // Whether this source has produced its first playable frame. `readyToPlay`
+  // fires again after every rebuffer, and treating those as a fresh start
+  // force-played a paused stream and popped the controls up mid-match.
+  const hasBeenReadyRef = useRef(false);
+  const startPositionRef = useRef(startPosition);
+  startPositionRef.current = startPosition;
 
   // Specialized hooks. Viewing-history tracking is NOT here — it lives in
   // PlaybackSessionHost so progress keeps recording while the session plays
   // in the mini bar after this screen unmounts.
   const playerState = useVideoPlayerState();
-  const errorHandling = useVideoErrorHandling();
+  const player = playerState.player;
+  const errorHandling = useVideoErrorHandling(player);
   const controls = useVideoControls();
   const network = useVideoNetwork();
+  const { setters } = playerState;
 
-  // Seek bar state
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [isLive, setIsLive] = useState(false);
+  // What the session is playing. Keyed on this (not `channel.url`) so a
+  // catch-up window and the live stream of the same channel are different
+  // streams to the screen, just as they are to the session.
+  const streamUrl = usePlaybackSessionStore((s) => s.session?.streamUrl ?? null);
+
+  // One definition of "live", shared by the gesture bottom zone, the resync
+  // button and the seek bar. `player.isLive` alone is false for the raw MPEG-TS
+  // most panels serve, which let a swipe seek a live stream to 0 and hid the
+  // resync button; the session knows better. A catch-up window is a finite
+  // recording, so it is never live even on a live channel.
+  const sessionIsLive = usePlaybackSessionStore(
+    (s) => s.session?.contentType === 'live' && s.session.catchup == null
+  );
+  const [playerIsLive, setPlayerIsLive] = useState(false);
+  const isLive = sessionIsLive || playerIsLive;
+
+  // Published once by the session host. A live stream has no timeline to show,
+  // so selecting a constant for it keeps the 1 Hz tick from re-rendering the
+  // player tree.
+  const currentTime = usePlaybackTimeStore((s) => (isLive ? 0 : s.currentTime));
+  const duration = usePlaybackTimeStore((s) => (isLive ? 0 : s.duration));
+  const isPlaying = usePlaybackTimeStore((s) => s.isPlaying);
 
   const seekTo = useCallback((time: number) => {
-    if (playerState.player) {
-      playerState.player.currentTime = time;
+    if (player) {
+      player.currentTime = time;
     }
-  }, [playerState.player]);
+  }, [player]);
 
   // Everything the long-lived native listeners and the focus effect need, kept
   // current without becoming an effect dependency. Their memoised identities
@@ -56,187 +83,164 @@ export function useVideoOrchestrator({
     errorActions: errorHandling.actions,
     controlActions: controls.actions,
     playerControls: playerState.controls,
-    setters: playerState.setters,
-    onStopVideo,
   };
   const latest = useRef(collaborators);
   latest.current = collaborators;
 
   // Only a new stream resets the screen. Depending on the error/UI actions
   // instead would make setting an error immediately clear it again, leaving
-  // the loading overlay up forever.
+  // the loading overlay up forever. The session's error is deliberately NOT
+  // cleared here: expanding onto a stream that failed while minimized has to
+  // keep showing it.
   useEffect(() => {
     hasAppliedStartPositionRef.current = false;
-    setCurrentTime(0);
-    setDuration(0);
-    setIsLive(false);
-    latest.current.setters.reset();
-    useVideoErrorStore.getState().clearError();
-    useVideoErrorStore.getState().resetRetryState();
+    hasBeenReadyRef.current = false;
+    setPlayerIsLive(false);
+    setters.reset();
+    useVideoRetryStore.getState().reset();
     useVideoUIStore.getState().reset();
-  }, [channel.url]);
+  }, [streamUrl, player, setters]);
 
-  // Enhanced stop function that coordinates all state
+  /**
+   * Reconnect the stream from scratch: the retry after an error, the resync of
+   * a live stream that has drifted or stalled, and the recovery of a player
+   * that was left unloaded are all this one operation. Reloading is what a live
+   * IPTV stream needs — it usually reports no seekable range, and a fresh load
+   * always lands at the live edge.
+   */
+  const reloadSource = useCallback(async () => {
+    hasBeenReadyRef.current = false;
+    setters.setIsLoading(true);
+    setters.setLoadingStage('connecting');
+    await usePlaybackSessionStore.getState().reloadSource();
+  }, [setters]);
+
   const stopVideo = useCallback(() => {
     playerState.controls.stopVideo();
     controls.actions.clearHideControlsTimeout();
-    onStopVideo?.();
-  }, [playerState.controls, controls.actions, onStopVideo]);
+  }, [playerState.controls, controls.actions]);
 
-  // Enhanced toggle with controls coordination
   const togglePlayPause = useCallback(() => {
     playerState.controls.togglePlayPause();
     controls.actions.scheduleHideControls();
   }, [playerState.controls, controls.actions]);
 
-  // Network-aware retry logic
+  // Network-aware retry: back off, then reload the source. Replaying (a seek to
+  // 0 on a player that never prepared) left the screen "Connecting…" forever.
   const retryPlayback = useCallback(async () => {
     if (!errorHandling.canRetry) return;
+    errorHandling.actions.startRetry();
 
-    if (!errorHandling.actions.startRetry()) return;
-
-    // Check network before retrying
-    const networkState = await network.actions.checkNetwork();
+    const networkState = await checkNetwork();
     if (!networkState.isConnected) {
-      const networkError = getVideoErrorInfo(new Error('No internet connection'), 0);
-      errorHandling.actions.handleError(networkError);
+      // Still counts as an attempt — leaving `isRetrying` set would disable the
+      // Try Again button for good.
+      errorHandling.actions.completeRetry();
+      // Worded so getVideoErrorInfo classifies it as the connection problem it
+      // is, instead of falling through to the generic "Playback Error".
+      errorHandling.actions.handleError(new Error('No network connection'));
       return;
     }
 
-    // Calculate delay and retry
     const delay = errorHandling.actions.getRetryDelay();
-
+    if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current);
     retryTimeoutRef.current = setTimeout(() => {
-      if (!isUnmountedRef.current) {
-        // Reset states for retry
-        errorHandling.actions.clearError();
-        playerState.setters.setIsLoading(true);
-        playerState.setters.setLoadingStage('connecting');
-        controls.actions.hideControls();
-        playerState.setters.setIsPlaying(false);
-
-        // Complete retry state update
-        errorHandling.actions.completeRetry();
-
-        // Trigger replay
-        playerState.controls.replayVideo();
-      }
+      retryTimeoutRef.current = null;
+      if (isUnmountedRef.current) return;
+      latest.current.controlActions.hideControls();
+      latest.current.errorActions.completeRetry();
+      void reloadSource();
     }, delay);
-  }, [
-    errorHandling.canRetry,
-    errorHandling.actions,
-    network.actions,
-    playerState.setters,
-    playerState.controls,
-    controls.actions,
-  ]);
+  }, [errorHandling.canRetry, errorHandling.actions, reloadSource]);
 
-  // Snap a live stream back to the live edge. Reloads the source rather than
-  // seeking: live IPTV streams usually report no seekable duration, and a
-  // fresh load always reconnects at the live edge (and recovers a stalled or
-  // drifted stream). The statusChange listener drives the loading overlay off
-  // and auto-plays once the reloaded stream is ready.
-  const resyncToLive = useCallback(async () => {
-    const player = playerState.player;
-    if (!player) return;
-    playerState.setters.setIsLoading(true);
-    playerState.setters.setLoadingStage('connecting');
-    try {
-      // Reload what the session is actually playing: a catch-up window has its
-      // own archive URL, and reloading `channel.url` would drop the viewer out
-      // of the archive and onto the live stream.
-      const session = usePlaybackSessionStore.getState().session;
-      await player.replaceAsync(buildVideoSource(session?.channel ?? channel, session?.streamUrl));
-    } catch (error) {
-      console.warn('Error resyncing to live:', error);
-      playerState.setters.setIsLoading(false);
-      errorHandling.actions.handleError(
-        getVideoErrorInfo(error instanceof Error ? error : new Error(String(error)), 0)
-      );
-    }
-  }, [playerState.player, playerState.setters, errorHandling.actions, channel]);
-
-  // Player status change handler. Subscribes once per player: the callbacks
-  // reach everything else through `latest`, so a controls toggle or an error
-  // never tears the native listeners down mid-stream.
-  const player = playerState.player;
+  // Player status. Subscribes once per player: the callbacks reach everything
+  // else through `latest`, so a controls toggle or an error never tears the
+  // native listeners down mid-stream. Errors are NOT handled here — the session
+  // host records those on the session, which is the only place that still
+  // exists when the stream fails while minimized.
   useEffect(() => {
     if (!player) return;
 
-    const statusSubscription = player.addListener('statusChange', ({ status, error }) => {
-      const { setters, errorActions, playerControls, controlActions } = latest.current;
+    const statusSubscription = player.addListener('statusChange', ({ status }) => {
+      const { errorActions, playerControls, controlActions } = latest.current;
 
       if (status === 'loading') {
         setters.setLoadingStage('buffering');
-        setters.setLoadingProgress(undefined);
-      } else if (status === 'readyToPlay') {
-        setters.setIsLoading(false);
-        errorActions.onRetrySuccess();
-
-        // Detect live stream vs finite content
-        setIsLive(player.isLive);
-        const d = player.duration;
-        if (isFinite(d) && d > 0) {
-          setDuration(d);
-        }
-
-        if (startPosition && startPosition > 0 && !hasAppliedStartPositionRef.current) {
-          hasAppliedStartPositionRef.current = true;
-          player.currentTime = startPosition;
-        }
-
-        if (!useVideoPlayerStore.getState().isCasting) {
-          playerControls.playVideo();
-        }
-
-        // Use a shorter timeout initially, then switch to temporary showing
-        setTimeout(() => {
-          if (!isUnmountedRef.current) {
-            controlActions.showControlsTemporarily(4000);
-          }
-        }, 500);
-      } else if (status === 'error' || error) {
-        setters.setIsLoading(false);
-        errorActions.handleError(error);
+        return;
       }
-    });
+      if (status !== 'readyToPlay') return;
 
-    const playingSubscription = player.addListener('playingChange', ({ isPlaying }) => {
-      latest.current.setters.setIsPlaying(isPlaying);
-    });
+      setters.setIsLoading(false);
+      setPlayerIsLive(player.isLive);
 
-    const timeUpdateSubscription = player.addListener('timeUpdate', ({ currentTime: time }) => {
-      setCurrentTime(time);
-      // Update duration if it becomes available after initial readyToPlay
-      const d = player.duration;
-      if (isFinite(d) && d > 0) {
-        setDuration(d);
+      // Everything below belongs to the first ready frame of this source only.
+      if (hasBeenReadyRef.current) return;
+      hasBeenReadyRef.current = true;
+      errorActions.onRetrySuccess();
+
+      if (startPositionRef.current > 0 && !hasAppliedStartPositionRef.current) {
+        hasAppliedStartPositionRef.current = true;
+        player.currentTime = startPositionRef.current;
       }
+
+      if (!useVideoPlayerStore.getState().isCasting) {
+        playerControls.playVideo();
+      }
+
+      readyControlsTimeoutRef.current = setTimeout(() => {
+        readyControlsTimeoutRef.current = null;
+        if (!isUnmountedRef.current) {
+          controlActions.showControlsTemporarily(READY_CONTROLS_VISIBLE_MS);
+        }
+      }, READY_CONTROLS_DELAY_MS);
     });
 
-    return () => {
-      statusSubscription?.remove();
-      playingSubscription?.remove();
-      timeUpdateSubscription?.remove();
-    };
-  }, [player, startPosition]);
+    return () => statusSubscription.remove();
+  }, [player, setters]);
 
-  // Adopt an already-running player (expanding from the mini bar): its
-  // statusChange event won't re-fire for a player that is already ready, so
-  // read the current state synchronously instead of waiting on the listener.
-  // A freshly started session's player is still sourceless here, so this is a
-  // no-op for it and the listener above drives the load.
+  // Adopt a player that is already settled (expanding from the mini bar, or a
+  // stream that finished loading before this screen mounted): `statusChange`
+  // will not re-fire for it, so mirror its current status once.
   useEffect(() => {
-    if (!player || player.status !== 'readyToPlay') return;
-    playerState.setters.setIsLoading(false);
-    playerState.setters.setIsPlaying(player.playing);
-    setIsLive(player.isLive);
-    setCurrentTime(player.currentTime);
-    const d = player.duration;
-    if (isFinite(d) && d > 0) {
-      setDuration(d);
+    if (!player) return;
+
+    if (player.status === 'readyToPlay') {
+      hasBeenReadyRef.current = true;
+      setters.setIsLoading(false);
+      setPlayerIsLive(player.isLive);
+      return;
     }
-  }, [player, playerState.setters]);
+    if (player.status === 'error') {
+      // The session already carries the error (recorded by the host); all this
+      // screen has to do is stop pretending it is still connecting.
+      setters.setIsLoading(false);
+      return;
+    }
+    // Idle with a source already attached means the player was unloaded — by a
+    // cast takeover, for instance. A brand-new session is idle too, but its
+    // source is still on its way, and reloading would fight for the panel's
+    // only connection.
+    if (player.status === 'idle' && usePlaybackSessionStore.getState().session?.sourceAttached) {
+      void reloadSource();
+    }
+  }, [player, setters, reloadSource]);
+
+  // The host records errors even while minimized, so the screen can find one
+  // already set when it mounts, or arrive while it is showing the overlay.
+  useEffect(() => {
+    if (errorHandling.error) setters.setIsLoading(false);
+  }, [errorHandling.error, setters]);
+
+  // A stream that died with the connection down recovers by itself the moment
+  // the connection is back, instead of waiting for a Try Again press.
+  const wasConnectedRef = useRef(network.isConnected);
+  useEffect(() => {
+    const restored = network.isConnected && !wasConnectedRef.current;
+    wasConnectedRef.current = network.isConnected;
+    if (!restored) return;
+    if (!usePlaybackSessionStore.getState().session?.error) return;
+    void reloadSource();
+  }, [network.isConnected, reloadSource]);
 
   // Register stop function
   useEffect(() => {
@@ -259,7 +263,6 @@ export function useVideoOrchestrator({
         } catch (error) {
           console.warn('Error pausing video on focus loss:', error);
         }
-        latest.current.onStopVideo?.();
       };
     }, [player])
   );
@@ -273,7 +276,11 @@ export function useVideoOrchestrator({
         clearTimeout(retryTimeoutRef.current);
         retryTimeoutRef.current = null;
       }
-      useVideoErrorStore.getState().reset();
+      if (readyControlsTimeoutRef.current) {
+        clearTimeout(readyControlsTimeoutRef.current);
+        readyControlsTimeoutRef.current = null;
+      }
+      useVideoRetryStore.getState().reset();
       useVideoUIStore.getState().reset();
       // Only clears `isCasting` — the session owns the player and outlives
       // this screen (minimized into the mini bar). The cast branch of the
@@ -292,11 +299,10 @@ export function useVideoOrchestrator({
 
   return {
     // Player state
-    player: playerState.player,
+    player,
     isLoading: playerState.isLoading,
     loadingStage: playerState.loadingStage,
-    loadingProgress: playerState.loadingProgress,
-    isPlaying: playerState.isPlaying,
+    isPlaying,
 
     // Seek bar state
     currentTime,
@@ -311,9 +317,6 @@ export function useVideoOrchestrator({
     // UI state
     showControls: controls.showControls,
 
-    // Network state
-    networkState: network.networkState,
-
     // Actions
     togglePlayPause,
     stopVideo,
@@ -321,7 +324,7 @@ export function useVideoOrchestrator({
     pauseVideo: playerState.controls.pauseVideo,
     seekTo,
     retryPlayback,
-    resyncToLive,
+    resyncToLive: reloadSource,
     showControlsTemporarily: controls.actions.showControlsTemporarily,
     clearHideControlsTimeout: controls.actions.clearHideControlsTimeout,
     toggleControls: controls.actions.toggleControls,

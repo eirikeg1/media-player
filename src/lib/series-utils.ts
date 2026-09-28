@@ -63,6 +63,36 @@ export function stripEpisodeInfo(input: string): string {
 }
 
 /**
+ * The series a channel belongs to, derived from its title.
+ *
+ * Always the channel's own `name`: `tvgName` is optional and frequently the
+ * bare series name already, so deriving from it disagrees with the series names
+ * the Rust import (and `getWatchedContent`) group episodes under.
+ */
+export function getSeriesNameForChannel(channel: Channel): string {
+  return stripEpisodeInfo(channel.name);
+}
+
+/**
+ * Order episodes for playback: by season, then episode, then original position.
+ *
+ * The parse is done once per channel (Schwartzian transform) and each channel's
+ * index is handed to `parseEpisodeInfo`, so titles without a recognisable
+ * pattern keep their incoming order instead of all collapsing onto S1E1.
+ */
+export function sortEpisodes(channels: Channel[]): ParsedEpisode[] {
+  return channels
+    .map((channel, index) => ({ index, parsed: parseEpisodeInfo(channel, index) }))
+    .sort(
+      (a, b) =>
+        a.parsed.season - b.parsed.season ||
+        a.parsed.episode - b.parsed.episode ||
+        a.index - b.index,
+    )
+    .map((entry) => entry.parsed);
+}
+
+/**
  * Group channels into seasons, sorted by episode number within each season.
  */
 export function groupEpisodesBySeason(channels: Channel[]): Map<number, ParsedEpisode[]> {

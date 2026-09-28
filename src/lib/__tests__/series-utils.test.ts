@@ -1,4 +1,10 @@
-import { stripEpisodeInfo, parseEpisodeInfo, groupEpisodesBySeason } from '../series-utils';
+import {
+  getSeriesNameForChannel,
+  groupEpisodesBySeason,
+  parseEpisodeInfo,
+  sortEpisodes,
+  stripEpisodeInfo,
+} from '../series-utils';
 import type { Channel } from '@/types/playlist.types';
 
 function makeChannel(name: string): Channel {
@@ -69,6 +75,62 @@ describe('parseEpisodeInfo', () => {
   it('returns episode title stripped of pattern', () => {
     const result = parseEpisodeInfo(makeChannel('Show S01E01 Pilot'));
     expect(result.episodeTitle).toBe('Show  Pilot');
+  });
+});
+
+describe('getSeriesNameForChannel', () => {
+  it('derives the series name from the channel title', () => {
+    expect(getSeriesNameForChannel(makeChannel('Breaking Bad S01E01'))).toBe('Breaking Bad');
+  });
+
+  it('ignores tvgName, which may name the series differently', () => {
+    const channel = { ...makeChannel('Breaking Bad S01E01'), tvg: { name: 'BB (2008)' } };
+    expect(getSeriesNameForChannel(channel)).toBe('Breaking Bad');
+  });
+});
+
+describe('sortEpisodes', () => {
+  it('orders by season then episode', () => {
+    const sorted = sortEpisodes([
+      makeChannel('Show S02E01'),
+      makeChannel('Show S01E02'),
+      makeChannel('Show S01E01'),
+    ]);
+
+    expect(sorted.map((episode) => episode.channel.name)).toEqual([
+      'Show S01E01',
+      'Show S01E02',
+      'Show S02E01',
+    ]);
+  });
+
+  it('keeps the incoming order of titles with no recognisable pattern', () => {
+    // Without the index these all parse as S01E01 and the order becomes
+    // whatever the sort happens to do.
+    const sorted = sortEpisodes([
+      makeChannel('Pilot'),
+      makeChannel('The Reveal'),
+      makeChannel('Finale'),
+    ]);
+
+    expect(sorted.map((episode) => episode.channel.name)).toEqual([
+      'Pilot',
+      'The Reveal',
+      'Finale',
+    ]);
+    expect(sorted.map((episode) => episode.episode)).toEqual([1, 2, 3]);
+  });
+
+  it('is stable for duplicate season/episode numbers', () => {
+    const sorted = sortEpisodes([
+      makeChannel('Show S01E01 (1080p)'),
+      makeChannel('Show S01E01 (720p)'),
+    ]);
+
+    expect(sorted.map((episode) => episode.channel.name)).toEqual([
+      'Show S01E01 (1080p)',
+      'Show S01E01 (720p)',
+    ]);
   });
 });
 

@@ -40,7 +40,7 @@ function useSportsSkeletonTheme(): SportsSkeletonTheme {
 }
 
 /**
- * Block colour on the match sheet's fixed dark card. The shared `FAINT` (10%
+ * Block colour on the match surface's fixed dark card. The shared `FAINT` (10%
  * white) all but vanishes once the pulse dips to 0.3, so blocks use a stronger
  * fixed grey instead.
  */
@@ -69,8 +69,12 @@ function TextLine({ width, height = 10, line = TEXT_LINE, color, pulse, style }:
 // Matches list (matches-list.tsx / league-header.tsx / match-row.tsx)
 // =====================================================================
 
-/** Fixtures per league section, matching a typical day's grouping. */
-const MATCH_SECTION_ROWS = [3, 2];
+/**
+ * Fixtures per league section, matching a typical day's grouping. Exported so
+ * the test asserts the layout this describes rather than a number copied out
+ * of it, which stayed "right" through every change to the shape.
+ */
+export const MATCH_SECTION_ROWS = [3, 2];
 
 /** Name-bar widths cycled through the team lines so rows don't look stamped. */
 const TEAM_NAME_WIDTHS = [132, 104, 118, 96];
@@ -172,8 +176,35 @@ export function MatchesListSkeleton() {
 }
 
 // =====================================================================
-// Competition sheet (standings-table.tsx / scorers-list.tsx)
+// Competition surface (league-detail.tsx / standings-table.tsx / scorers-list.tsx)
 // =====================================================================
+
+/** Fixtures a competition typically has on one day (see {@link MATCH_SECTION_ROWS}). */
+export const LEAGUE_DAY_ROWS = 4;
+
+/**
+ * A competition's fixtures for the selected day: one card of rows, rendered
+ * into the competition surface's scroll content, which supplies the padding.
+ */
+export function LeagueMatchesSkeleton() {
+  const theme = useSportsSkeletonTheme();
+
+  return (
+    <View
+      testID="league-matches-skeleton"
+      style={[styles.matchCard, { backgroundColor: theme.palette.card }]}
+    >
+      {Array.from({ length: LEAGUE_DAY_ROWS }, (_, index) => (
+        <MatchRowSkeleton
+          key={index}
+          theme={theme}
+          showDivider={index < LEAGUE_DAY_ROWS - 1}
+          seed={index}
+        />
+      ))}
+    </View>
+  );
+}
 
 const STANDINGS_ROWS = 10;
 /** P, W, D, L, GD, Pts — the numeric columns of a standings row. */
@@ -339,14 +370,14 @@ export function TeamListSkeleton() {
 }
 
 // =====================================================================
-// Team sheet (team-sheet.tsx)
+// Team surface (team-detail.tsx)
 // =====================================================================
 
-/** Fixtures per day section of a team's schedule. */
-const TEAM_SCHEDULE_SECTION_ROWS = [2, 3];
+/** Fixtures per day section of a team's schedule (see {@link MATCH_SECTION_ROWS}). */
+export const TEAM_SCHEDULE_SECTION_ROWS = [2, 3];
 
 /**
- * A team's upcoming fixtures, grouped by day. Rendered into the team sheet's
+ * A team's upcoming fixtures, grouped by day. Rendered into the team surface's
  * scroll content, which supplies the top padding.
  */
 export function TeamScheduleSkeleton() {
@@ -380,7 +411,7 @@ export function TeamScheduleSkeleton() {
 }
 
 // =====================================================================
-// Match sheet tabs — the fixed dark card (match-detail/*)
+// Match detail tabs — the fixed dark card (match-detail/*)
 // =====================================================================
 
 const STAT_ROWS = 8;
@@ -680,7 +711,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  // matches-list.tsx / team-sheet.tsx grouped rows
+  // matches-list.tsx / team-detail.tsx grouped rows
   matchCard: {
     marginHorizontal: 16,
     borderRadius: 12,
@@ -820,7 +851,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
 
-  // team-sheet.tsx
+  // team-detail.tsx
   teamScheduleSection: {
     paddingTop: 8,
   },

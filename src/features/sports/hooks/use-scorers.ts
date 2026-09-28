@@ -1,44 +1,23 @@
-import { getSportsDatabase } from '@/services/sports-service';
-import type { TopScorers } from 'expo-m3u-parser';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import type { SportsDatabase, TopScorers } from 'expo-m3u-parser';
 
-export function useScorers(competitionId: number | null) {
-  const [scorers, setScorers] = useState<TopScorers | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const fetchRef = useRef(0);
+import { useLazyCompetitionData, type CompetitionDataState } from './use-competition-data';
 
-  const refresh = useCallback(async () => {
-    if (competitionId === null) {
-      setScorers(null);
-      return;
-    }
+const NO_SCORERS = null;
 
-    const fetchId = ++fetchRef.current;
-    setIsLoading(true);
-    setError(null);
+const fetchScorers = (db: SportsDatabase, id: number, ttlSecs: number) =>
+  db.getScorers(id, ttlSecs);
 
-    try {
-      const db = await getSportsDatabase();
-      const result = await db.getScorers(competitionId, undefined, undefined, 21600);
-      if (fetchId === fetchRef.current) {
-        setScorers(result);
-      }
-    } catch (err) {
-      if (fetchId === fetchRef.current) {
-        setError(err instanceof Error ? err.message : 'Failed to load scorers');
-        console.error('[useScorers] Error:', err);
-      }
-    } finally {
-      if (fetchId === fetchRef.current) {
-        setIsLoading(false);
-      }
-    }
-  }, [competitionId]);
+export interface ScorersState extends Omit<CompetitionDataState<TopScorers | null>, 'data'> {
+  scorers: TopScorers | null;
+}
 
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
-
-  return { scorers, isLoading, error, refresh };
+/** A competition's top scorers, loaded when its tab is on screen. */
+export function useScorers(competitionId: number | null, enabled: boolean): ScorersState {
+  const { data, ...rest } = useLazyCompetitionData<TopScorers | null>(
+    competitionId,
+    enabled,
+    fetchScorers,
+    NO_SCORERS
+  );
+  return { scorers: data, ...rest };
 }

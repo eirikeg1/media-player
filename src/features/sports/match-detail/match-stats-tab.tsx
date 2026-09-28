@@ -1,8 +1,8 @@
 import type { MatchStatistics, MomentumPoint } from 'expo-m3u-parser';
 import { memo } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
-import type { MatchDataState } from '../hooks/use-match-detail';
+import type { MatchSectionState } from '../hooks/use-match-detail';
 import { MatchStatsSkeleton } from '../skeletons';
 import {
   AWAY_COLOR,
@@ -11,20 +11,25 @@ import {
   HOME_COLOR,
   MUTED,
   SectionMessage,
+  StaleNotice,
+  TabScroller,
 } from './match-detail-shared';
 
 const MOMENTUM_HEIGHT = 72;
 
 interface StatsTabProps {
-  state: MatchDataState<MatchStatistics>;
+  state: MatchSectionState<MatchStatistics>;
   homeLabel: string;
   awayLabel: string;
+  /** False when the host already owns a vertical scroller (the match surface). */
+  scrollable?: boolean;
 }
 
 export const MatchStatsTab = memo(function MatchStatsTab({
   state,
   homeLabel,
   awayLabel,
+  scrollable = true,
 }: StatsTabProps) {
   if (state.isLoading) return <MatchStatsSkeleton />;
   if (state.error) return <SectionMessage text={state.error} />;
@@ -36,7 +41,8 @@ export const MatchStatsTab = memo(function MatchStatsTab({
     stats.facts.venue || stats.facts.referee || stats.facts.attendance || stats.facts.round;
 
   return (
-    <ScrollView style={styles.fill} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    <TabScroller scrollable={scrollable} contentStyle={styles.content}>
+      <StaleNotice meta={stats} onRetry={state.refresh} />
       {hasFacts && <MatchFactsStrip facts={stats.facts} />}
 
       {stats.momentum.length > 0 && (
@@ -71,7 +77,7 @@ export const MatchStatsTab = memo(function MatchStatsTab({
           </View>
         ))
       )}
-    </ScrollView>
+    </TabScroller>
   );
 });
 
@@ -150,9 +156,6 @@ function MomentumGraph({ points }: { points: MomentumPoint[] }) {
 }
 
 const styles = StyleSheet.create({
-  fill: {
-    flex: 1,
-  },
   content: {
     padding: 16,
     gap: 20,

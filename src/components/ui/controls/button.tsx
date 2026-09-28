@@ -1,6 +1,6 @@
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { GlassColors } from '@/lib/theme';
+import { GlassColors, TINT } from '@/lib/theme';
 import { memo } from 'react';
 import { StyleSheet, TextStyle, TouchableOpacity, ViewStyle } from 'react-native';
 import { StyleProp } from 'react-native/Libraries/StyleSheet/StyleSheet';
@@ -97,7 +97,7 @@ export const Button = memo(function Button({
     switch (variant) {
       case 'primary':
         return {
-          backgroundColor: '#007AFF',
+          backgroundColor: TINT,
           textColor: '#FFFFFF',
           iconColor: '#FFFFFF',
         };
@@ -121,7 +121,7 @@ export const Button = memo(function Button({
         };
       default:
         return {
-          backgroundColor: '#007AFF',
+          backgroundColor: TINT,
           textColor: '#FFFFFF',
           iconColor: '#FFFFFF',
         };

@@ -5,7 +5,6 @@ import {
   getTimeElapsed,
   extractDomain,
   extractCleanUrl,
-  isValidUrl,
 } from '../playlist-utils';
 
 describe('generatePlaylistId', () => {
@@ -90,23 +89,5 @@ describe('extractCleanUrl', () => {
 
   it('returns original string for malformed input', () => {
     expect(extractCleanUrl('bad')).toBe('bad');
-  });
-});
-
-describe('isValidUrl', () => {
-  it('accepts http URLs', () => {
-    expect(isValidUrl('http://example.com')).toBe(true);
-  });
-
-  it('accepts https URLs', () => {
-    expect(isValidUrl('https://example.com')).toBe(true);
-  });
-
-  it('rejects ftp URLs', () => {
-    expect(isValidUrl('ftp://example.com')).toBe(false);
-  });
-
-  it('rejects non-URLs', () => {
-    expect(isValidUrl('not a url')).toBe(false);
   });
 });

@@ -1,5 +1,7 @@
 import type { Fixture } from 'expo-m3u-parser';
 
+import { fixtureStatusKind } from './fixture-status';
+
 /**
  * The match clock, derived on-device.
  *
@@ -7,23 +9,19 @@ import type { Fixture } from 'expo-m3u-parser';
  * where that period sits on the 90-minute clock (`periodStart`,
  * `periodInitialSecs`, `periodMaxSecs`), which the backend persists on the
  * fixture. Ticking those forward against the device clock gives a live minute
- * without a single extra request — the list already re-renders on its ~60s
- * poll, which is all the granularity a minute counter needs.
+ * without a single extra request; `now` is passed in so the surfaces that show
+ * it can advance it on their own tick (see `useLiveTick`) rather than waiting
+ * for the ~60s fixture poll.
  *
  * Returns `null` when no minute can be shown (not in play, or a row cached
  * before the clock was persisted), so callers fall back to their usual label.
  */
 export function liveMinuteLabel(fixture: Fixture, now: Date): string | null {
-  switch (fixture.status.toUpperCase()) {
+  switch (fixtureStatusKind(fixture)) {
     // Halftime has no running clock — SofaScore sends no `initial`/`max` for it.
-    case 'PAUSED':
-    case 'HALFTIME':
+    case 'halftime':
       return 'HT';
-    // `IN_PROGRESS` is what the backend emits (FixtureStatus::to_str); the
-    // others are accepted defensively, matching `isMatchLive`.
-    case 'IN_PROGRESS':
-    case 'IN_PLAY':
-    case 'LIVE':
+    case 'live':
       return inPlayMinute(fixture, now);
     default:
       return null;

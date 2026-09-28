@@ -5,8 +5,10 @@ interface AppReadyState {
   // loader is allowed to fade out, revealing the UI underneath.
   isReady: boolean;
 
-  // Signal that startup is complete. Idempotent — safe to call from multiple
-  // readiness sources (home content ready, redirect, init error, safety timeout).
+  // Signal that startup is complete. Idempotent — safe to call from every
+  // readiness source: the landing screen reporting itself populated (see
+  // `features/launch/landing-readiness`), the redirect to user-select, an init
+  // error, and the root layout's safety timeout.
   markReady: () => void;
 }
 

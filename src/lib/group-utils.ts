@@ -1,5 +1,4 @@
 import type { GroupCount } from 'expo-m3u-parser';
-import type { Channel } from '@/types/playlist.types';
 
 export const FAVORITES_GROUP_SENTINEL = '__favorites__';
 
@@ -97,39 +96,19 @@ export function processRawGroupCounts(groupCounts: GroupCount[]): GroupOption[] 
 
 /**
  * Intersect favorite groups with groups available for the current content type.
- * Returns matched group names, or undefined if no favorites match (shows all content).
+ *
+ * Always returns the matched names, so an empty result means "none of your
+ * favorite groups exist here" — a real filter that matches nothing. Callers must
+ * keep that distinct from `undefined`, which means "no group filter at all".
  */
 export function getEffectiveFavoriteGroups(
   favoriteGroups: string[],
   availableGroups: GroupOption[],
-): string[] | undefined {
+): string[] {
   const availableNames = new Set(
     availableGroups
       .filter((g) => g.name !== '' && g.name !== FAVORITES_GROUP_SENTINEL)
       .map((g) => g.name),
   );
-  const matched = favoriteGroups.filter((g) => availableNames.has(g));
-  return matched.length > 0 ? matched : undefined;
-}
-
-/**
- * Calculate available channel groups from a list of channels
- * Includes an "All Channels" option at the top
- */
-export function calculateChannelGroups(channels: Channel[]): GroupOption[] {
-  const groupMap = new Map<string, number>();
-
-  channels.forEach((channel) => {
-    const groupTitle = channel.group.title || 'Uncategorized';
-    groupMap.set(groupTitle, (groupMap.get(groupTitle) || 0) + 1);
-  });
-
-  const groupList = Array.from(groupMap.entries())
-    .map(([name, channelCount]) => ({ name, channelCount }))
-    .sort((a, b) => a.name.localeCompare(b.name));
-
-  return [
-    { name: '', channelCount: channels.length },
-    ...groupList,
-  ];
+  return favoriteGroups.filter((g) => availableNames.has(g));
 }

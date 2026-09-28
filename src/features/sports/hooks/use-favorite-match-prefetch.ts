@@ -44,7 +44,7 @@ export function selectPrefetchFixtures(
  *
  * Fire-and-forget by design: nothing is returned, nothing is rendered from it,
  * and every failure is swallowed — a warm cache is an optimisation, and the
- * match sheet fetches for itself regardless. The score is fetched for every
+ * match surface fetches for itself regardless. The score is fetched for every
  * selected match and the statistics only once it has kicked off, since before
  * that they are empty.
  *

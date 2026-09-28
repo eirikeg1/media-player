@@ -1,12 +1,13 @@
 import { useCallback, useMemo, type ReactElement } from 'react';
-import { Dimensions, RefreshControl, StyleSheet, View } from 'react-native';
+import { RefreshControl, StyleSheet, View, useWindowDimensions } from 'react-native';
 import Animated, { useAnimatedRef, useAnimatedStyle } from 'react-native-reanimated';
 import { FlashList, type ListRenderItem } from '@shopify/flash-list';
 
 import { ThemedView } from '@/components/ui/display/themed-view';
+import { useChromeInsets } from '@/hooks/use-chrome-insets';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { HEADER_BACKGROUND } from '@/lib/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
@@ -25,7 +26,11 @@ interface InfiniteParallaxGridProps<T> {
   renderItem: ListRenderItem<T>;
   keyExtractor: (item: T, index: number) => string;
   headerImage: ReactElement;
-  headerBackgroundColor: { dark: string; light: string };
+  /**
+   * Fill behind {@link headerImage}. Defaults to {@link HEADER_BACKGROUND} — only
+   * pass this for a header whose image genuinely needs a different backdrop.
+   */
+  headerBackgroundColor?: { dark: string; light: string };
   columns?: number;
   onEndReached?: () => void;
   onEndReachedThreshold?: number;
@@ -43,7 +48,7 @@ export default function InfiniteParallaxGrid<T>({
   renderItem,
   keyExtractor,
   headerImage,
-  headerBackgroundColor,
+  headerBackgroundColor = HEADER_BACKGROUND,
   columns = DEFAULT_COLUMNS,
   onEndReached,
   onEndReachedThreshold = 0.1,
@@ -59,7 +64,7 @@ export default function InfiniteParallaxGrid<T>({
   const tintColor = useThemeColor({}, 'tint');
   const colorScheme = useColorScheme() ?? 'light';
   const insets = useSafeAreaInsets();
-  const tabBarHeight = useBottomTabBarHeight();
+  const chromeInsets = useChromeInsets();
 
   // Arrow color (dark arrow for light theme, theme color for dark theme)
   const refreshArrowColor = colorScheme === 'dark' ? tintColor : '#3d4560';
@@ -73,7 +78,7 @@ export default function InfiniteParallaxGrid<T>({
   }, [scrollRef]);
 
   // Calculate item size for grid layout
-  const { width: screenWidth } = Dimensions.get('window');
+  const { width: screenWidth } = useWindowDimensions();
   const itemWidth = (screenWidth - padding * 2 - gap * (columns - 1)) / columns;
 
   const backdropAnimatedStyle = useAnimatedStyle(() => {
@@ -92,25 +97,28 @@ export default function InfiniteParallaxGrid<T>({
     [ListHeaderComponentAfterParallax, padding]
   );
 
-  const wrappedRenderItem: ListRenderItem<T> = (info) => {
-    const { index } = info;
-    const renderedItem = renderItem(info);
+  // One style object per column instead of a fresh one per rendered cell.
+  const columnStyles = useMemo(
+    () =>
+      Array.from({ length: columns }, (_, column) => ({
+        width: itemWidth,
+        marginRight: column === columns - 1 ? 0 : gap,
+        marginBottom: gap,
+      })),
+    [columns, itemWidth, gap]
+  );
 
-    return (
-      <ThemedView
-        style={[
-          styles.gridItem,
-          {
-            width: itemWidth,
-            marginRight: (index + 1) % columns === 0 ? 0 : gap,
-            marginBottom: gap,
-          },
-        ]}
-      >
-        {renderedItem}
-      </ThemedView>
-    );
-  };
+  const wrappedRenderItem = useCallback<ListRenderItem<T>>(
+    (info) => (
+      <ThemedView style={columnStyles[info.index % columns]}>{renderItem(info)}</ThemedView>
+    ),
+    [columnStyles, columns, renderItem]
+  );
+
+  const contentContainerStyle = useMemo(
+    () => ({ paddingHorizontal: padding, paddingBottom: padding + chromeInsets.bottom }),
+    [padding, chromeInsets.bottom]
+  );
 
   return (
     <ThemedView style={[parallaxStyles.container, { backgroundColor, paddingTop: insets.top }]}>
@@ -137,10 +145,7 @@ export default function InfiniteParallaxGrid<T>({
         ListFooterComponent={ListFooterComponent}
         onEndReached={onEndReached}
         onEndReachedThreshold={onEndReachedThreshold}
-        contentContainerStyle={{
-          paddingHorizontal: padding,
-          paddingBottom: padding + tabBarHeight,
-        }}
+        contentContainerStyle={contentContainerStyle}
         keyboardShouldPersistTaps="handled"
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
@@ -168,8 +173,5 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-  },
-  gridItem: {
-    // Dynamic width and margins applied inline
   },
 });

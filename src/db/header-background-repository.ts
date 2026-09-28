@@ -2,7 +2,7 @@ import type { PageId } from '@/config/header-backgrounds';
 import type { UserHeaderSelection, UserUploadedBackground } from '@/types/theme.types';
 import { randomUUID } from 'expo-crypto';
 import { File } from 'expo-file-system';
-import { executeQuery, executeQuerySingle, executeStatement } from './sqlite-client';
+import { executeQuery, executeQuerySingle, executeStatement, executeTransaction } from './sqlite-client';
 
 // ── Row types ──
 
@@ -116,6 +116,22 @@ class HeaderBackgroundRepository {
     return rows.map(rowToUploaded);
   }
 
+  /**
+   * Every upload a user may display: their own, plus the uploads of users who
+   * share theirs. One query for the whole pool, so hydrating the header
+   * selections at boot does not fan out per page.
+   */
+  async getAvailableUploads(userId: string): Promise<UserUploadedBackground[]> {
+    const rows = await executeQuery<UploadedRow>(
+      `SELECT ub.* FROM user_uploaded_backgrounds ub
+       LEFT JOIN user_settings us ON ub.userId = us.userId
+       WHERE ub.userId = ? OR us.shareUploadedBackgrounds = 1
+       ORDER BY ub.createdAt DESC`,
+      [userId],
+    );
+    return rows.map(rowToUploaded);
+  }
+
   /** Delete an uploaded image from pool + filesystem */
   async deleteUploadedImage(id: string): Promise<void> {
     // Get the file URI before deleting the record
@@ -123,29 +139,27 @@ class HeaderBackgroundRepository {
       'SELECT * FROM user_uploaded_backgrounds WHERE id = ?',
       [id],
     );
+    if (!row) return;
 
-    if (row) {
-      // Remove any selections referencing this upload
-      await executeStatement(
+    // One transaction: an upload must never survive as a dangling selection,
+    // and a selection must never point at an upload that is gone.
+    await executeTransaction(async (tx) => {
+      await tx.runAsync(
         "DELETE FROM user_header_selections WHERE type = 'uploaded' AND value = ?",
         [id],
       );
+      await tx.runAsync('DELETE FROM user_uploaded_backgrounds WHERE id = ?', [id]);
+    });
 
-      // Delete the DB record
-      await executeStatement(
-        'DELETE FROM user_uploaded_backgrounds WHERE id = ?',
-        [id],
-      );
-
-      // Delete the file
-      try {
-        const file = new File(row.fileUri);
-        if (file.exists) {
-          file.delete();
-        }
-      } catch (error) {
-        console.warn('[HeaderBackgroundRepository] Could not delete file:', row.fileUri, error);
+    // Filesystem work stays outside the transaction; a leftover file is
+    // harmless, a committed-but-unreferenced row is not.
+    try {
+      const file = new File(row.fileUri);
+      if (file.exists) {
+        file.delete();
       }
+    } catch (error) {
+      console.warn('[HeaderBackgroundRepository] Could not delete file:', row.fileUri, error);
     }
   }
 }

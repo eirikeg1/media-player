@@ -9,6 +9,40 @@
  */
 export const CONNECTION_RELEASE_DELAY_MS = 2000;
 
+/**
+ * How often the session player reports its position. One second is all the
+ * seek bar and the viewing-history throttle need; the events cross the bridge
+ * for the whole app (see `usePlaybackTimeStore`), so twice that was pure cost.
+ */
+export const TIME_UPDATE_INTERVAL_SECONDS = 1;
+
+/**
+ * The player chrome is always drawn on top of video, so it keeps one fixed
+ * palette in both themes. Running these through `useThemeColor` with the same
+ * value for light and dark only hid that — and the values that *did* follow the
+ * theme (icons) turned near-black on a dark scrim in light mode.
+ */
+export const VIDEO_COLORS = {
+  /** Letterboxing behind the video surface. */
+  background: '#000',
+  /** Scrim under the controls overlay. */
+  overlay: 'rgba(0, 0, 0, 0.3)',
+  /** Pill/round button background. */
+  button: 'rgba(0, 0, 0, 0.6)',
+  /** Full-surface scrim for the loading and error states. */
+  scrim: 'rgba(0, 0, 0, 0.8)',
+  /** Primary text and icons. */
+  text: '#fff',
+  /** Secondary text (channel name, error message). */
+  subtitle: '#b0b8cc',
+  /** Tertiary text (error suggestion). */
+  hint: '#c8cdd8',
+  /** Retry / action button on a scrim. */
+  actionButton: 'rgba(255, 255, 255, 0.2)',
+  /** The live indicator dot. */
+  live: '#FF3B30',
+} as const;
+
 export const VIDEO_CONSTANTS = {
   // Timeouts
   CONTROLS_HIDE_TIMEOUT: 3000,

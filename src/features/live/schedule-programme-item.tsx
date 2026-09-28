@@ -36,6 +36,10 @@ export function ScheduleProgrammeItem({ programme, isCurrent }: ScheduleProgramm
       onPress={() => hasDescription && setExpanded(!expanded)}
       activeOpacity={hasDescription ? 0.7 : 1}
       disabled={!hasDescription}
+      accessibilityRole="button"
+      accessibilityLabel={programme.title}
+      accessibilityHint={hasDescription ? 'Show programme description' : undefined}
+      accessibilityState={{ expanded, disabled: !hasDescription }}
     >
       <View style={styles.timeColumn}>
         <ThemedText style={styles.timeText}>{formatTime(programme.start)}</ThemedText>

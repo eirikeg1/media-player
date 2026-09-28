@@ -1,6 +1,8 @@
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
+import { getInitials } from '@/features/user/get-initials';
+import { useThemeColor } from '@/hooks/use-theme-color';
 import { useUserStore } from '@/stores/user/user-store';
 import { router } from 'expo-router';
 import { memo, useCallback } from 'react';
@@ -11,6 +13,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
  */
 export const UserSettings = memo(function UserSettings() {
   const username = useUserStore((state) => state.currentUser?.username);
+  const tintColor = useThemeColor({}, 'tint');
 
   const handleSwitchUser = useCallback(() => {
     // Navigate to the user selection screen
@@ -36,18 +39,11 @@ export const UserSettings = memo(function UserSettings() {
           accessibilityRole="button"
         >
           <View style={styles.userCard}>
-            <View style={[styles.avatar, { backgroundColor: '#007AFF' }]}>
-              <ThemedText style={styles.avatarText}>
-                {username
-                  .split(' ')
-                  .map((n) => n[0])
-                  .join('')
-                  .toUpperCase()
-                  .slice(0, 2)}
-              </ThemedText>
+            <View style={[styles.avatar, { backgroundColor: tintColor }]}>
+              <ThemedText style={styles.avatarText}>{getInitials(username)}</ThemedText>
             </View>
             <ThemedText style={styles.username}>{username}</ThemedText>
-            <IconSymbol name="person.2" size={28} color="#007AFF" />
+            <IconSymbol name="person.2" size={28} color={tintColor} />
           </View>
         </Pressable>
       </View>

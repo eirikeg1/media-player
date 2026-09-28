@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { AppState, type NativeEventSubscription } from 'react-native';
 
 // ---------------------------------------------------------------------------
 // Singleton 60-second timer shared by all subscribers.
@@ -10,6 +11,7 @@ type Listener = () => void;
 const listeners = new Set<Listener>();
 let currentSeconds = Math.floor(Date.now() / 1000);
 let intervalId: ReturnType<typeof setInterval> | null = null;
+let appStateSubscription: NativeEventSubscription | null = null;
 
 function tick() {
   currentSeconds = Math.floor(Date.now() / 1000);
@@ -25,15 +27,25 @@ function subscribe(listener: Listener): () => void {
   if (listeners.size === 1) {
     currentSeconds = Math.floor(Date.now() / 1000);
     intervalId = setInterval(tick, 60_000);
+    // Background timers are throttled or suspended, so by the time the app is
+    // foregrounded the clock can be arbitrarily far behind. Resync immediately
+    // instead of showing a stale "now" until the next interval fires.
+    appStateSubscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') tick();
+    });
   }
 
   return () => {
     listeners.delete(listener);
 
     // Stop the interval when the last subscriber unmounts
-    if (listeners.size === 0 && intervalId !== null) {
-      clearInterval(intervalId);
-      intervalId = null;
+    if (listeners.size === 0) {
+      if (intervalId !== null) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+      appStateSubscription?.remove();
+      appStateSubscription = null;
     }
   };
 }

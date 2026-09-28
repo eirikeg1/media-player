@@ -2,6 +2,7 @@ import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
 import { saveSetting } from '@/features/user/save-setting';
 import { useUserStore } from '@/stores/user/user-store';
+import { SWITCH_TRACK, TINT } from '@/lib/theme';
 import { memo, useCallback } from 'react';
 import { StyleSheet, Switch, View } from 'react-native';
 
@@ -47,7 +48,7 @@ export const AppPreferences = memo(function AppPreferences() {
           <Switch
             value={showHomeTab}
             onValueChange={handleToggleHomeTab}
-            trackColor={{ false: '#767577', true: '#007AFF' }}
+            trackColor={{ false: SWITCH_TRACK, true: TINT }}
             accessibilityLabel="Show Home tab"
           />
         </View>
@@ -59,7 +60,7 @@ export const AppPreferences = memo(function AppPreferences() {
           <Switch
             value={showLiveTab}
             onValueChange={handleToggleLiveTab}
-            trackColor={{ false: '#767577', true: '#007AFF' }}
+            trackColor={{ false: SWITCH_TRACK, true: TINT }}
             accessibilityLabel="Show Live tab"
           />
         </View>
@@ -71,7 +72,7 @@ export const AppPreferences = memo(function AppPreferences() {
           <Switch
             value={showVideosTab}
             onValueChange={handleToggleVideosTab}
-            trackColor={{ false: '#767577', true: '#007AFF' }}
+            trackColor={{ false: SWITCH_TRACK, true: TINT }}
             accessibilityLabel="Show Videos tab"
           />
         </View>
@@ -83,7 +84,7 @@ export const AppPreferences = memo(function AppPreferences() {
           <Switch
             value={showSportsTab}
             onValueChange={handleToggleSportsTab}
-            trackColor={{ false: '#767577', true: '#007AFF' }}
+            trackColor={{ false: SWITCH_TRACK, true: TINT }}
             accessibilityLabel="Show Sports tab"
           />
         </View>

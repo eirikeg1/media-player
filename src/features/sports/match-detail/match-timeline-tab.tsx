@@ -1,16 +1,18 @@
 import type { MatchIncident, MatchTimeline } from 'expo-m3u-parser';
 import { memo } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
-import type { MatchDataState } from '../hooks/use-match-detail';
+import type { MatchSectionState } from '../hooks/use-match-detail';
 import { MatchTimelineSkeleton } from '../skeletons';
-import { FAINT, MUTED, SectionMessage } from './match-detail-shared';
+import { FAINT, MUTED, SectionMessage, StaleNotice, TabScroller } from './match-detail-shared';
 
 interface TimelineTabProps {
-  state: MatchDataState<MatchTimeline>;
+  state: MatchSectionState<MatchTimeline>;
   /** Landscape: cap the timeline width and centre it so incident rows stay
    * legible instead of stretching the two rails across the full card. */
   compact?: boolean;
+  /** False when the host already owns a vertical scroller (the match surface). */
+  scrollable?: boolean;
 }
 
 // Incident types we render; everything else (injury-time notes, etc.) is noise.
@@ -19,6 +21,7 @@ const RENDERED = new Set(['goal', 'card', 'substitution', 'varDecision']);
 export const MatchTimelineTab = memo(function MatchTimelineTab({
   state,
   compact = false,
+  scrollable = true,
 }: TimelineTabProps) {
   if (state.isLoading) return <MatchTimelineSkeleton compact={compact} />;
   if (state.error) return <SectionMessage text={state.error} />;
@@ -38,11 +41,11 @@ export const MatchTimelineTab = memo(function MatchTimelineTab({
   // Incidents arrive newest-first (the provider passes SofaScore's order
   // through) — the freshest events are what people check for.
   return (
-    <ScrollView
-      style={styles.fill}
-      contentContainerStyle={[styles.content, compact && styles.contentCompact]}
-      showsVerticalScrollIndicator={false}
+    <TabScroller
+      scrollable={scrollable}
+      contentStyle={[styles.content, compact && styles.contentCompact]}
     >
+      <StaleNotice meta={timeline} onRetry={state.refresh} />
       {incidents.map((incident, index) =>
         incident.type === 'period' ? (
           <PeriodMarker key={`p-${index}`} incident={incident} />
@@ -50,7 +53,7 @@ export const MatchTimelineTab = memo(function MatchTimelineTab({
           <IncidentRow key={`i-${index}`} incident={incident} />
         )
       )}
-    </ScrollView>
+    </TabScroller>
   );
 });
 
@@ -160,7 +163,7 @@ function incidentGlyph(incident: MatchIncident): string {
   }
 }
 
-function cardGlyph(detail?: string): string {
+function cardGlyph(detail?: string | null): string {
   // Coloured squares render distinctly on the dark card without an icon font.
   // A second yellow shows the red it results in; the row text carries the
   // "(second yellow)" detail.
@@ -184,9 +187,6 @@ function formatMinute(incident: MatchIncident): string {
 }
 
 const styles = StyleSheet.create({
-  fill: {
-    flex: 1,
-  },
   content: {
     padding: 16,
     paddingBottom: 28,

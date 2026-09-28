@@ -1,8 +1,11 @@
+import { formatTime } from '@/lib/format-time';
 import { Image } from 'expo-image';
-import type { PlayerEntry } from 'expo-m3u-parser';
-import { useState } from 'react';
+import type { MatchDetailMeta, PlayerEntry } from 'expo-m3u-parser';
+import { useState, type ReactNode } from 'react';
 import {
+  Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -17,6 +20,15 @@ import {
  * and a single home/away accent pair is reused across every tab for instant
  * visual association.
  */
+
+/**
+ * The surface every match-detail tab is drawn on.
+ *
+ * The tabs themselves are fixed-dark — their rating ramps, pitch and momentum
+ * graph are built for one background — so both hosts paint it: the player
+ * overlay's card and the match surface's body, whose chrome around it is themed.
+ */
+export const DETAIL_BACKGROUND = '#141417';
 
 export const HOME_COLOR = '#4C8DFF';
 export const AWAY_COLOR = '#FF8A3D';
@@ -44,6 +56,74 @@ export function formColor(result: string): string {
     default:
       return MUTED;
   }
+}
+
+/**
+ * A tab body's scroll container.
+ *
+ * The tabs are hosted in two places. The player overlay gives them a
+ * fixed-height card and expects each to scroll itself; the match surface is one
+ * long scrolling page and owns the only scroller. Nesting two vertical
+ * scrollers inside one another makes the inner one swallow the gesture and
+ * collapses it to a single screenful, so when the host already scrolls this
+ * lays the content out as a plain view and lets the page grow.
+ */
+export function TabScroller({
+  scrollable,
+  contentStyle,
+  children,
+}: {
+  scrollable: boolean;
+  contentStyle?: StyleProp<ViewStyle>;
+  children: ReactNode;
+}) {
+  if (!scrollable) return <View style={contentStyle}>{children}</View>;
+  return (
+    <ScrollView
+      style={styles.tabFill}
+      contentContainerStyle={contentStyle}
+      showsVerticalScrollIndicator={false}
+    >
+      {children}
+    </ScrollView>
+  );
+}
+
+/**
+ * "as of 20:41 · Retry" — what a section shows when the native side answered it
+ * from cache because the provider refused.
+ *
+ * The payload underneath is real, just old, so this is a line above it rather
+ * than an error state: hiding a whole half's statistics because the last
+ * refresh failed would be a worse answer than the ones from a minute ago. It
+ * gates itself on `meta.stale` so every tab renders it the same single way.
+ */
+export function StaleNotice({
+  meta,
+  onRetry,
+}: {
+  meta: MatchDetailMeta | undefined;
+  onRetry: () => void;
+}) {
+  if (!meta?.stale) return null;
+  // A section the provider has never answered has no time to name; saying so
+  // beats dressing the epoch up as a fetch at 01:00.
+  const asOf = meta.fetchedAt > 0 ? `as of ${formatTime(meta.fetchedAt)}` : 'not up to date';
+
+  return (
+    <View style={styles.staleRow}>
+      <Text style={styles.staleText}>{asOf}</Text>
+      <Text style={styles.staleText}>·</Text>
+      <TouchableOpacity
+        onPress={onRetry}
+        accessibilityRole="button"
+        accessibilityLabel="Retry loading this section"
+        hitSlop={8}
+      >
+        <Text style={styles.staleRetry}>Retry</Text>
+      </TouchableOpacity>
+    </View>
+  );
 }
 
 export function SectionMessage({ text }: { text: string }) {
@@ -155,6 +235,21 @@ export function ComparisonBar({
 }
 
 const styles = StyleSheet.create({
+  staleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  staleText: {
+    color: MUTED,
+    fontSize: 11,
+  },
+  staleRetry: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
   stateBox: {
     paddingVertical: 48,
     alignItems: 'center',
@@ -251,6 +346,9 @@ const styles = StyleSheet.create({
   },
   comparisonFill: {
     borderRadius: 3,
+  },
+  tabFill: {
+    flex: 1,
   },
 });
 
@@ -358,19 +456,33 @@ export function playerInitials(name: string): string {
 }
 
 /**
+ * How the player card is placed over its host.
+ *
+ * - `overlay`: absolutely filling the tab. Right for the player overlay, whose
+ *   card has a fixed height and is counter-rotated in portrait — the card has to
+ *   rotate with it.
+ * - `modal`: a screen-level modal. Right for the match surface, where the tab is
+ *   a section of one long scrolling page: an absolute overlay there is measured
+ *   against the whole scroll content, so it lands wherever the page happens to
+ *   be scrolled rather than in front of the reader.
+ */
+export type PlayerSheetPresentation = 'overlay' | 'modal';
+
+/**
  * A dismissible card with a player's headshot and full per-match stat grid,
- * opened by tapping a player. Rendered as an absolute overlay so it floats above
- * whichever tab opened it (and rotates with the card in portrait).
+ * opened by tapping a player.
  */
 export function PlayerStatsSheet({
   player,
   teamLabel,
   accent,
+  presentation = 'overlay',
   onClose,
 }: {
   player: PlayerEntry;
   teamLabel: string;
   accent: string;
+  presentation?: PlayerSheetPresentation;
   onClose: () => void;
 }) {
   const [imageFailed, setImageFailed] = useState(false);
@@ -379,7 +491,7 @@ export function PlayerStatsSheet({
   // line carries only the position.
   const meta = player.position ?? '';
 
-  return (
+  const card = (
     <View style={sheetStyles.overlay}>
       <Pressable style={sheetStyles.backdrop} onPress={onClose} accessibilityLabel="Close player" />
       <View style={sheetStyles.card}>
@@ -433,6 +545,13 @@ export function PlayerStatsSheet({
         )}
       </View>
     </View>
+  );
+
+  if (presentation === 'overlay') return card;
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      {card}
+    </Modal>
   );
 }
 

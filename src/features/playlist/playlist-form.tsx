@@ -1,15 +1,18 @@
 import { Dropdown, type DropdownOption } from '@/components/ui/controls/inputs/dropdown';
 import { Input } from '@/components/ui/controls/inputs/input';
 import { Textarea } from '@/components/ui/controls/inputs/textarea';
+import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { GlassColors } from '@/lib/theme';
-import { useImportProgressStore } from '@/stores/playlist/import-progress-store';
+import { generatePlaylistId } from '@/lib/playlist-utils';
+import { GlassColors, TINT } from '@/lib/theme';
+import { Spinner } from '@/components/ui/display/state';
+import { useImportProgress } from '@/stores/playlist/import-progress-store';
 import { usePlaylistStore } from '@/stores/playlist/playlist-store';
 import type { Playlist } from '@/types/playlist.types';
 import { memo, useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Switch, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Switch, TouchableOpacity, View } from 'react-native';
 import { ImportProgressBar } from './import-progress-bar';
 
 const SYNC_INTERVAL_OPTIONS: DropdownOption<number>[] = [
@@ -52,7 +55,12 @@ export const PlaylistForm = memo(function PlaylistForm({ onSuccess, onCancel, pl
 
   const addPlaylist = usePlaylistStore((state) => state.addPlaylist);
   const updatePlaylist = usePlaylistStore((state) => state.updatePlaylist);
-  const phaseLabel = useImportProgressStore((s) => s.phaseLabel);
+  // The id whose import this form is showing: the playlist being edited, or the
+  // one this form generated for the playlist it is adding. Never another
+  // playlist's — a background sync must not appear as this form's progress.
+  const [addedPlaylistId, setAddedPlaylistId] = useState(generatePlaylistId);
+  const importedPlaylistId = playlist?.id ?? addedPlaylistId;
+  const phaseLabel = useImportProgress(importedPlaylistId)?.phaseLabel;
 
   useEffect(() => {
     if (playlist) {
@@ -114,6 +122,7 @@ export const PlaylistForm = memo(function PlaylistForm({ onSuccess, onCancel, pl
         console.log('[PlaylistForm] Playlist updated successfully');
       } else {
         await addPlaylist({
+          id: addedPlaylistId,
           name: name.trim(),
           url: url.trim(),
           epgUrl: trimmedEpgUrl,
@@ -131,6 +140,8 @@ export const PlaylistForm = memo(function PlaylistForm({ onSuccess, onCancel, pl
         setUsername('');
         setPassword('');
         setUseCredentials(false);
+        // The id is spent: the next playlist added from this form needs its own.
+        setAddedPlaylistId(generatePlaylistId());
       }
 
       onSuccess?.();
@@ -143,13 +154,14 @@ export const PlaylistForm = memo(function PlaylistForm({ onSuccess, onCancel, pl
       setIsSubmitting(false);
       console.log('[PlaylistForm] Submit completed');
     }
-  }, [name, url, epgUrl, syncInterval, epgSyncInterval, useCredentials, username, password, addPlaylist, updatePlaylist, onSuccess, isEditing, playlist]);
+  }, [name, url, epgUrl, syncInterval, epgSyncInterval, useCredentials, username, password, addedPlaylistId, addPlaylist, updatePlaylist, onSuccess, isEditing, playlist]);
 
   return (
     <ThemedView style={styles.container}>
       {error && (
-        <View style={styles.errorContainer}>
-          <ThemedText style={styles.errorText}>⚠️ {error}</ThemedText>
+        <View style={[styles.errorBanner, { backgroundColor: isDark ? '#4a1a1a' : '#fee' }]}>
+          <IconSymbol name="exclamationmark.triangle" size={20} color="#c33" />
+          <ThemedText style={styles.errorText}>{error}</ThemedText>
         </View>
       )}
 
@@ -158,15 +170,19 @@ export const PlaylistForm = memo(function PlaylistForm({ onSuccess, onCancel, pl
           backgroundColor: isDark ? GlassColors.dark.surface : GlassColors.light.surface,
         }]}>
           <View style={styles.loadingHeader}>
-            <ActivityIndicator size="small" color="#007AFF" />
+            <Spinner />
             <ThemedText style={styles.loadingText}>
-              {phaseLabel || 'Preparing import...'}
+              {phaseLabel ?? 'Saving playlist...'}
             </ThemedText>
           </View>
-          <ImportProgressBar showAlways />
-          <ThemedText style={styles.loadingHelpText}>
-            Please do not close the app during import.
-          </ThemedText>
+          <ImportProgressBar playlistId={importedPlaylistId} />
+          {/* An edit that changes neither URL nor credentials only writes
+              metadata — there is no download to warn about. */}
+          {phaseLabel !== undefined && (
+            <ThemedText style={styles.loadingHelpText}>
+              Please do not close the app during import.
+            </ThemedText>
+          )}
         </View>
       )}
 
@@ -343,7 +359,7 @@ export const PlaylistForm = memo(function PlaylistForm({ onSuccess, onCancel, pl
           accessibilityState={{ disabled: isSubmitting }}
         >
           {isSubmitting ? (
-            <ActivityIndicator color="#fff" accessibilityLabel="Loading" />
+            <Spinner color="#fff" />
           ) : (
             <ThemedText style={styles.submitButtonText}>
               {isEditing ? 'Update Playlist' : 'Add Playlist'}
@@ -381,18 +397,18 @@ const styles = StyleSheet.create({
   switchLabelContainer: {
     flex: 1,
   },
-  errorContainer: {
-    backgroundColor: '#fee',
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
     borderRadius: 8,
-    padding: 12,
+    padding: 16,
     marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#fcc',
   },
   errorText: {
+    flex: 1,
     color: '#c33',
     fontSize: 14,
-    fontWeight: '600',
   },
   loadingContainer: {
     padding: 16,
@@ -408,7 +424,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 14,
-    color: '#007AFF',
+    color: TINT,
   },
   loadingHelpText: {
     fontSize: 12,
@@ -434,7 +450,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   submitButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: TINT,
   },
   submitButtonDisabled: {
     opacity: 0.6,

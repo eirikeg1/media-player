@@ -18,13 +18,19 @@ import { MatchTimelineTab } from './match-timeline-tab';
 interface MatchDetailContentProps {
   fixture: Fixture;
   /** The active tab; `null` keeps the section caches mounted while the host
-   * shows a tab of its own (e.g. the Watch tab of the match sheet). */
+   * shows a tab of its own (e.g. the Watch tab of the match surface). */
   activeKey: MatchTabKind | null;
   homeLabel: string;
   awayLabel: string;
   /** Landscape layout: tabs that benefit from the wider card render their
    * content in a denser, horizontally-compact arrangement. */
   compact?: boolean;
+  /**
+   * Whether each tab scrolls itself. False when the host is already one long
+   * scrolling page (the match surface): two vertical scrollers inside one another
+   * fight over the gesture and cap the content at a single screenful.
+   */
+  scrollable?: boolean;
 }
 
 /**
@@ -38,6 +44,7 @@ export const MatchDetailContent = memo(function MatchDetailContent({
   homeLabel,
   awayLabel,
   compact = false,
+  scrollable = true,
 }: MatchDetailContentProps) {
   const eventId = fixture.providerId;
   // While the match is live the active section silently refreshes every minute;
@@ -73,15 +80,35 @@ export const MatchDetailContent = memo(function MatchDetailContent({
 
   switch (activeKey) {
     case 'stats':
-      return <MatchStatsTab state={statistics} homeLabel={homeLabel} awayLabel={awayLabel} />;
+      return (
+        <MatchStatsTab
+          state={statistics}
+          homeLabel={homeLabel}
+          awayLabel={awayLabel}
+          scrollable={scrollable}
+        />
+      );
     case 'lineups':
       return (
-        <MatchLineupsTab state={players} homeLabel={homeLabel} awayLabel={awayLabel} compact={compact} />
+        <MatchLineupsTab
+          state={players}
+          homeLabel={homeLabel}
+          awayLabel={awayLabel}
+          compact={compact}
+          scrollable={scrollable}
+        />
       );
     case 'timeline':
-      return <MatchTimelineTab state={timeline} compact={compact} />;
+      return <MatchTimelineTab state={timeline} compact={compact} scrollable={scrollable} />;
     case 'preview':
-      return <MatchPreviewTab state={preview} homeLabel={homeLabel} awayLabel={awayLabel} />;
+      return (
+        <MatchPreviewTab
+          state={preview}
+          homeLabel={homeLabel}
+          awayLabel={awayLabel}
+          scrollable={scrollable}
+        />
+      );
     case null:
       return null;
     default:

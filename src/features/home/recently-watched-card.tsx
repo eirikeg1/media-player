@@ -1,7 +1,8 @@
 import { THEME } from '@/lib/theme';
+import { isInProgress } from '@/lib/viewing-progress';
 import type { RecentlyWatchedItem } from '@/types/user.types';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { Image, StyleSheet, Text, useColorScheme, View } from 'react-native';
 
 interface RecentlyWatchedCardProps {
@@ -10,22 +11,26 @@ interface RecentlyWatchedCardProps {
   size: number;
 }
 
-export function RecentlyWatchedCard({ item, isActive, size }: RecentlyWatchedCardProps) {
+export const RecentlyWatchedCard = memo(function RecentlyWatchedCard({
+  item,
+  isActive,
+  size,
+}: RecentlyWatchedCardProps) {
   const colorScheme = useColorScheme() ?? 'dark';
-  const [imageError, setImageError] = useState(false);
+  // Keyed by URL rather than a boolean, so a recycled card showing a different
+  // poster starts out trusting it again.
+  const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
   const imageUrl = item.seriesPoster ?? item.tvgLogo;
-  const hasLogo = !!imageUrl && !imageError;
+  const hasLogo = !!imageUrl && failedImageUrl !== imageUrl;
   const initial = (item.seriesName ?? item.channelName).charAt(0).toUpperCase();
 
-  const showProgress =
-    item.lastPosition != null &&
-    item.lastPosition > 0 &&
-    item.totalDuration != null &&
-    item.totalDuration > 0 &&
-    item.lastPosition < item.totalDuration * 0.9;
-
+  const lastPosition = item.lastPosition ?? 0;
+  const totalDuration = item.totalDuration ?? 0;
+  // The bar needs a known duration to have a width, so an in-progress title that
+  // never reported one simply shows none.
+  const showProgress = totalDuration > 0 && isInProgress(lastPosition, totalDuration);
   const progressPercent = showProgress
-    ? Math.min((item.lastPosition! / item.totalDuration!) * 100, 100)
+    ? Math.min((lastPosition / totalDuration) * 100, 100)
     : 0;
 
   return (
@@ -35,7 +40,7 @@ export function RecentlyWatchedCard({ item, isActive, size }: RecentlyWatchedCar
           source={{ uri: imageUrl }}
           style={styles.poster}
           resizeMode="cover"
-          onError={() => setImageError(true)}
+          onError={() => setFailedImageUrl(imageUrl)}
         />
       ) : (
         <View style={[styles.poster, styles.fallbackPoster]}>
@@ -60,7 +65,7 @@ export function RecentlyWatchedCard({ item, isActive, size }: RecentlyWatchedCar
       )}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   imageWrapper: {

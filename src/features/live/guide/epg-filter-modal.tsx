@@ -3,6 +3,7 @@ import { ModalHeader } from '@/components/ui/containers/modal/modal-header';
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { SWITCH_TRACK, TINT } from '@/lib/theme';
 import { ScrollView, StyleSheet, Switch, TouchableOpacity, View } from 'react-native';
 
 interface EpgFilterModalProps {
@@ -39,7 +40,7 @@ export function EpgFilterModal({
             <Switch
               value={hideEmptyChannels}
               onValueChange={onHideEmptyChannelsChange}
-              trackColor={{ false: '#767577', true: '#007AFF' }}
+              trackColor={{ false: SWITCH_TRACK, true: TINT }}
               accessibilityLabel="Hide channels without programmes"
             />
           </View>
@@ -54,6 +55,9 @@ export function EpgFilterModal({
                 style={styles.categoryRow}
                 activeOpacity={0.7}
                 onPress={() => onSelectCategory(null)}
+                accessibilityRole="button"
+                accessibilityLabel="Show all categories"
+                accessibilityState={{ selected: selectedCategory === null }}
               >
                 <ThemedText style={styles.categoryText}>All</ThemedText>
                 {selectedCategory === null && (
@@ -68,6 +72,9 @@ export function EpgFilterModal({
                   style={styles.categoryRow}
                   activeOpacity={0.7}
                   onPress={() => onSelectCategory(category === selectedCategory ? null : category)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Show ${category} programmes`}
+                  accessibilityState={{ selected: selectedCategory === category }}
                 >
                   <ThemedText
                     numberOfLines={1}

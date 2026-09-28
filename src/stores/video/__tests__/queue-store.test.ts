@@ -1,6 +1,7 @@
 /**
  * Tests for the playback queue store — pure queue navigation logic.
  */
+import { getChannelId } from '@/lib/channel-utils';
 import { usePlaybackQueueStore } from '@/stores/video/queue-store';
 import { makeChannel } from '@/test/factories';
 import { resetStores } from '@/test/helpers';
@@ -20,6 +21,7 @@ describe('initial state', () => {
     const state = usePlaybackQueueStore.getState();
     expect(state.channels).toEqual([]);
     expect(state.currentIndex).toBe(-1);
+    expect(state.staged).toBeNull();
   });
 
   it('goNext and goPrevious return null on an empty queue', () => {
@@ -42,6 +44,42 @@ describe('setQueue', () => {
     usePlaybackQueueStore.getState().setQueue(items, 0);
 
     expect(usePlaybackQueueStore.getState().channels).toBe(items);
+  });
+});
+
+describe('stageQueue / takeStagedQueue', () => {
+  const idOf = (channel: (typeof items)[number]) => getChannelId(channel);
+
+  it("hands the launching screen's queue over exactly once", () => {
+    usePlaybackQueueStore.getState().stageQueue(idOf(items[2]), items, 2);
+
+    expect(usePlaybackQueueStore.getState().takeStagedQueue(idOf(items[2]))).toEqual({
+      channels: items,
+      index: 2,
+    });
+    // Consumed: a later launch that stages nothing must not pick this up.
+    expect(usePlaybackQueueStore.getState().takeStagedQueue(idOf(items[2]))).toBeNull();
+  });
+
+  it('does not become the live queue until a session adopts it', () => {
+    usePlaybackQueueStore.getState().stageQueue(idOf(items[1]), items, 1);
+
+    expect(usePlaybackQueueStore.getState().channels).toEqual([]);
+    expect(usePlaybackQueueStore.getState().currentIndex).toBe(-1);
+  });
+
+  it('is null when nothing was staged', () => {
+    expect(usePlaybackQueueStore.getState().takeStagedQueue('anything')).toBeNull();
+  });
+
+  it('discards a stage left behind by a channel that never started', () => {
+    // The Live grid stages as it opens a channel's detail sheet; backing out of
+    // that sheet and playing something else must not inherit the grid's queue.
+    usePlaybackQueueStore.getState().stageQueue(idOf(items[0]), items, 0);
+
+    expect(usePlaybackQueueStore.getState().takeStagedQueue(idOf(items[2]))).toBeNull();
+    // Discarded, not merely skipped: it cannot surface on a later launch either.
+    expect(usePlaybackQueueStore.getState().staged).toBeNull();
   });
 });
 
@@ -100,13 +138,15 @@ describe('goPrevious', () => {
 });
 
 describe('reset', () => {
-  it('restores the initial empty state', () => {
+  it('restores the initial empty state, staged handover included', () => {
     usePlaybackQueueStore.getState().setQueue(items, 2);
+    usePlaybackQueueStore.getState().stageQueue(getChannelId(items[0]), items, 0);
 
     usePlaybackQueueStore.getState().reset();
 
     const state = usePlaybackQueueStore.getState();
     expect(state.channels).toEqual([]);
     expect(state.currentIndex).toBe(-1);
+    expect(state.staged).toBeNull();
   });
 });

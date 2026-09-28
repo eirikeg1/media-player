@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useCallback, useState, useEffect, useMemo, useRef } from 'react';
 import { RustChannelService } from '@/services/rust-channel-service';
 import { useFirstPageCacheStore } from '@/stores/cache';
 import { FAVORITES_GROUP_SENTINEL, processRawGroupCounts, type GroupOption } from '@/lib/group-utils';
@@ -35,9 +35,13 @@ export function useGroups(
   favoriteGroups?: string[],
   excludeAdult?: boolean,
 ) {
-  const [groups, setGroups] = useState<GroupOption[]>([]);
+  // Only the playlist's own group counts are fetched and cached; the Favorites
+  // entry is derived from them below.
+  const [fetchedGroups, setFetchedGroups] = useState<GroupOption[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Bumped by `retry()` to re-run the fetch effect with the same inputs. */
+  const [attempt, setAttempt] = useState(0);
 
   // Stabilize favoriteGroups reference — only update when contents actually change
   const favoriteGroupsRef = useRef(favoriteGroups);
@@ -51,41 +55,40 @@ export function useGroups(
 
   useEffect(() => {
     if (!playlistId) {
-      setGroups([]);
+      setFetchedGroups([]);
       return;
     }
 
+    const id = playlistId;
     let cancelled = false;
 
-    // Check cache for instant display
-    const groupContentType = (contentType || 'live') as 'live' | 'movie' | 'series';
-    const cached = useFirstPageCacheStore.getState().getCachedGroups(playlistId!, groupContentType);
-    const cachedExcludeAdult = useFirstPageCacheStore.getState().getExcludeAdult(playlistId!);
-    if (cached && cachedExcludeAdult === excludeAdult) {
-      const withFavorites = addFavoritesEntry(cached, stableFavoriteGroups);
-      setGroups(withFavorites);
+    // Check cache for instant display. A slot cached under a different adult
+    // filter reads as a miss, so this can only ever show matching counts.
+    const groupContentType = contentType ?? 'live';
+    const cached = useFirstPageCacheStore.getState().getCachedGroups(id, groupContentType, excludeAdult);
+    if (cached) {
+      setFetchedGroups(cached);
       // Still fetch in background but skip loading spinner
     }
 
     async function fetchGroups() {
       // Only show loading if we don't have cached data
-      if (!cached || cachedExcludeAdult !== excludeAdult) {
+      if (!cached) {
         setIsLoading(true);
       }
       setError(null);
 
       try {
-        const groupCounts = await RustChannelService.getGroupsWithCountsByPlaylist(playlistId!, contentType, excludeAdult);
+        const groupCounts = await RustChannelService.getGroupsWithCountsByPlaylist(id, contentType, excludeAdult);
 
         if (cancelled) return;
 
         const processed = processRawGroupCounts(groupCounts);
 
         // Write back to cache
-        useFirstPageCacheStore.getState().setCachedGroups(playlistId!, groupContentType, processed);
+        useFirstPageCacheStore.getState().setCachedGroups(id, groupContentType, processed, excludeAdult);
 
-        const result = addFavoritesEntry(processed, stableFavoriteGroups);
-        setGroups(result);
+        setFetchedGroups(processed);
       } catch (err) {
         if (cancelled) return;
 
@@ -93,8 +96,8 @@ export function useGroups(
         console.error('[useGroups] Error:', message);
         setError(message);
         // Only clear groups if we didn't have cached data
-        if (!cached || cachedExcludeAdult !== excludeAdult) {
-          setGroups([]);
+        if (!cached) {
+          setFetchedGroups([]);
         }
       } finally {
         if (!cancelled) {
@@ -103,12 +106,21 @@ export function useGroups(
       }
     }
 
-    fetchGroups();
+    void fetchGroups();
 
     return () => {
       cancelled = true;
     };
-  }, [playlistId, contentType, stableFavoriteGroups, excludeAdult]);
+  }, [playlistId, contentType, excludeAdult, attempt]);
 
-  return { groups, isLoading, error };
+  const retry = useCallback(() => setAttempt((previous) => previous + 1), []);
+
+  // Favourite groups are user state, not playlist data: toggling one re-derives
+  // the Favorites entry here instead of re-fetching every group count.
+  const groups = useMemo(
+    () => addFavoritesEntry(fetchedGroups, stableFavoriteGroups),
+    [fetchedGroups, stableFavoriteGroups],
+  );
+
+  return { groups, isLoading, error, retry };
 }

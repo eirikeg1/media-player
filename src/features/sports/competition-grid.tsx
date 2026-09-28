@@ -1,3 +1,4 @@
+import { ErrorState } from '@/components/ui/display/state';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useThemeColor } from '@/hooks/use-theme-color';
@@ -15,6 +16,10 @@ interface CompetitionGridProps {
   selectedCompId: number | null;
   onSelect: (id: number | null) => void;
   isLoading: boolean;
+  /** Why the list could not be loaded, or null. */
+  error?: string | null;
+  /** Retries the load; required for `error` to be actionable. */
+  onRetry?: () => void;
 }
 
 const COLUMNS = 3;
@@ -26,6 +31,8 @@ export const CompetitionGrid = memo(function CompetitionGrid({
   selectedCompId,
   onSelect,
   isLoading,
+  error,
+  onRetry,
 }: CompetitionGridProps) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
@@ -78,6 +85,12 @@ export const CompetitionGrid = memo(function CompetitionGrid({
 
   if (isLoading) {
     return <CompetitionGridSkeleton />;
+  }
+
+  // Only when the load produced nothing: a failed refresh behind a list that is
+  // already on screen leaves the user with the competitions they had.
+  if (error && competitions.length === 0) {
+    return <ErrorState inline message={error} onRetry={onRetry} />;
   }
 
   const isAllSelected = selectedCompId === null;

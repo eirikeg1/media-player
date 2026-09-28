@@ -62,7 +62,32 @@ function parsePreference(value: unknown): SportsBackgroundRefresh | null {
   };
 }
 
-async function read(): Promise<PersistedState> {
+/**
+ * What the file holds, once it has been read.
+ *
+ * The file API is synchronous on the JS thread, so every read used to block it
+ * — and this state is read on launch, on every settings write and on every
+ * wake. One copy in memory means the file is touched once per process for
+ * reading; writes still go through, since the file is the whole point.
+ */
+let cached: PersistedState | null = null;
+
+/**
+ * Serialises every access. Storing one field is a read-modify-write of a shared
+ * file: two of them interleaved (the settings screen saving a preference while
+ * the task records its run) would each write the other's field back to the
+ * value it had before, silently losing one of the two updates.
+ */
+let tail: Promise<unknown> = Promise.resolve();
+
+function serialize<T>(task: () => Promise<T>): Promise<T> {
+  const run = tail.then(task, task);
+  // The chain must survive a rejection, or every later access rejects with it.
+  tail = run.catch(() => undefined);
+  return run;
+}
+
+async function readFile(): Promise<PersistedState> {
   try {
     const file = stateFile();
     if (!file.exists) return EMPTY_STATE;
@@ -80,12 +105,24 @@ async function read(): Promise<PersistedState> {
   }
 }
 
+async function read(): Promise<PersistedState> {
+  cached ??= await readFile();
+  return cached;
+}
+
 /**
- * Read-modify-write, so storing one field never drops the other: the settings
- * screen writes the preference and the task writes the last run.
+ * Read-modify-write, so storing one field never drops the other.
+ *
+ * Merged onto what is on *disk*, not onto the cached copy: an OS wake runs the
+ * refresh task in its own process, which writes `lastRunAt` there. Merging onto
+ * a cache read before that wake would write the task's run back to the value
+ * this process last saw, and the task would then re-run far too early.
  */
 async function update(patch: Partial<PersistedState>): Promise<void> {
-  const next: PersistedState = { ...(await read()), ...patch };
+  const next: PersistedState = { ...(await readFile()), ...patch };
+  // Memory first: a failed write must not leave this process disagreeing with
+  // itself about a preference the user already changed.
+  cached = next;
   try {
     // `write` creates the file when it is missing; the document directory the
     // databases live in is always there.
@@ -97,15 +134,15 @@ async function update(patch: Partial<PersistedState>): Promise<void> {
 
 export const refreshStateStore: RefreshStateStore = {
   async getLastRunAt() {
-    return (await read()).lastRunAt;
+    return serialize(async () => (await read()).lastRunAt);
   },
   async setLastRunAt(ts: number) {
-    await update({ lastRunAt: ts });
+    await serialize(() => update({ lastRunAt: ts }));
   },
   async getPreference() {
-    return (await read()).preference;
+    return serialize(async () => (await read()).preference);
   },
   async setPreference(pref: SportsBackgroundRefresh) {
-    await update({ preference: pref });
+    await serialize(() => update({ preference: pref }));
   },
 };

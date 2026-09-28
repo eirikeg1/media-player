@@ -1,5 +1,4 @@
 import { ThemeProvider } from '@react-navigation/native';
-import { PortalHost } from '@rn-primitives/portal';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
@@ -14,15 +13,17 @@ import '../global.css';
 // registered task name.
 import '@/features/sports/background/expo-scheduler';
 
-import { useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { AnimatedSplashLoader } from '@/components/ui/display/animated-splash-loader';
+import { waitForSportsWarm } from '@/features/sports/background/foreground-refresh';
 import { useBackgroundRefresh } from '@/features/sports/background/use-background-refresh';
+import { MiniPlayerBar } from '@/features/video/components/mini-player-bar';
 import { PlaybackSessionHost } from '@/features/video/components/playback-session-host';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useDeferredStartupWork } from '@/hooks/use-deferred-startup-work';
 import { useEpgSync } from '@/hooks/use-epg-sync';
-import { usePlaylistInit } from '@/hooks/use-playlist-init';
+import { runInit, usePlaylistInit } from '@/hooks/use-playlist-init';
 import { usePlaylistSync } from '@/hooks/use-playlist-sync';
 import { NAV_THEME } from '@/lib/theme';
 import { useAppReadyStore } from '@/stores/app';
@@ -31,6 +32,11 @@ SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
+
+  // The splash overlay animates an infinite loop, so it has to leave the tree
+  // once it has faded rather than render null in place.
+  const [splashVisible, setSplashVisible] = useState(true);
+  const hideSplash = useCallback(() => setSplashVisible(false), []);
 
   // Initialize playlists and users on app load
   usePlaylistInit();
@@ -47,10 +53,20 @@ export default function RootLayout() {
   // Low-priority startup work, held back until the UI is on screen
   useDeferredStartupWork();
 
-  // Safety timeout: reveal the UI after 10s no matter what
+  // Safety net for a start-up that never reaches a screen: reveal the UI once
+  // initialization has settled. Revealing while it is still running would show
+  // screens with no users, no playlists and no favourites — and hide the error
+  // screen the failure path renders — so a slow boot keeps the splash instead.
+  //
+  // Today's sports schedule is started by the same sequence and joined here
+  // rather than awaited inside it: the loading screen is already up, so a few
+  // more seconds of it cost nothing, and `waitForSportsWarm` caps the wait so a
+  // provider that is down can never hold the UI back.
   useEffect(() => {
     const timeout = setTimeout(() => {
-      useAppReadyStore.getState().markReady();
+      void runInit()
+        .then(() => waitForSportsWarm())
+        .finally(() => useAppReadyStore.getState().markReady());
     }, 10_000);
     return () => clearTimeout(timeout);
   }, []);
@@ -63,7 +79,17 @@ export default function RootLayout() {
             <Stack.Screen name="index" />
             <Stack.Screen name="user-select" />
             <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="modal" options={{ presentation: 'modal', headerShown: true, title: 'Modal' }} />
+            {/* Detail surfaces (movie, series, channel, match…) are presented
+                over the tab they were opened from, which keeps the grid mounted
+                with its scroll position behind them — and, unlike the React
+                Native `Modal`s they replace, keeps them in router history, so
+                the player pushed from inside one comes back here. The group's
+                own stack cannot carry this option: its first screen has nothing
+                behind it to be presented over. */}
+            <Stack.Screen
+              name="(detail)"
+              options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+            />
             <Stack.Screen
               name="video-player"
               options={{
@@ -74,11 +100,16 @@ export default function RootLayout() {
             />
           </Stack>
           <StatusBar style="auto" />
-          <PortalHost />
+          {/* Above the whole stack rather than inside the tab bar: minimizing
+              the player leaves you on whatever route launched it — a detail
+              sheet as often as a tab — and the bar has to stay reachable there.
+              It docks itself on top of the tab bar while the tabs are on
+              screen (see `useTabBarStore`). */}
+          <MiniPlayerBar />
           {/* Session-scoped bookkeeping (viewing history) that must survive
               the video screen unmounting into the mini player bar. */}
           <PlaybackSessionHost />
-          <AnimatedSplashLoader />
+          {splashVisible && <AnimatedSplashLoader onFadeComplete={hideSplash} />}
         </GestureHandlerRootView>
       </SafeAreaProvider>
     </ThemeProvider>

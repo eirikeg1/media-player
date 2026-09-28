@@ -1,10 +1,21 @@
 import { closeDatabase, getDatabase } from '@/db/sqlite-client';
 import { runMigrations } from '@/db/migrations';
+import { __resetSportsCacheEpoch } from '@/features/sports/sports-cache-epoch';
 import {
   __captureDatabaseTemplate,
   __hasDatabaseTemplate,
 } from '@/test/fakes/expo-sqlite-fake';
 import { __resetM3uFake } from '@/test/fakes/m3u-database-fake';
+
+/**
+ * Return the sports cache epoch to its launch value.
+ *
+ * The epoch is module state that outlives a test: a suite that invalidates the
+ * caches would otherwise leave every epoch-keyed cache in the next one starting
+ * out as a miss. Included in {@link resetTestDatabases}; export it for the
+ * sports suites that have no database to reset.
+ */
+export { __resetSportsCacheEpoch as resetSportsCacheEpoch };
 
 /**
  * Give the current test a fresh, fully migrated app database (iptv.db fake)
@@ -17,6 +28,7 @@ import { __resetM3uFake } from '@/test/fakes/m3u-database-fake';
  */
 export async function resetTestDatabases(): Promise<void> {
   __resetM3uFake();
+  __resetSportsCacheEpoch();
   await closeDatabase();
   if (!__hasDatabaseTemplate()) {
     await runMigrations();

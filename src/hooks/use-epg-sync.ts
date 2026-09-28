@@ -1,18 +1,10 @@
-import { useEffect } from 'react';
-import { usePlaylistStore } from '@/stores/playlist/playlist-store';
-import { epgSyncScheduler } from '@/services/epg-sync-scheduler';
+import { epgSyncScheduler } from '@/services/periodic-sync-scheduler';
+import { useSyncScheduler } from './use-sync-scheduler';
 
 /**
  * Starts the EPG sync scheduler once playlists are initialized.
  * Call once in the root layout.
  */
 export function useEpgSync() {
-  const isInitialized = usePlaylistStore((s) => s.isInitialized);
-
-  useEffect(() => {
-    if (!isInitialized) return;
-
-    epgSyncScheduler.start();
-    return () => epgSyncScheduler.stop();
-  }, [isInitialized]);
+  useSyncScheduler(epgSyncScheduler);
 }

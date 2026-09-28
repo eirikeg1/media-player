@@ -2,12 +2,28 @@ import { ConfirmDialog } from '@/components/ui/containers/modal/confirm-dialog';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
 import { saveSetting } from '@/features/user/save-setting';
+import { useHaptics } from '@/hooks/use-haptics';
+import { useNowSeconds } from '@/hooks/use-now-seconds';
 import { useUserStore } from '@/stores/user/user-store';
-import { isPrivateModeActive } from '@/types/user.types';
+import { SWITCH_TRACK, TINT } from '@/lib/theme';
 import { memo, useCallback, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Switch, View } from 'react-native';
 
 const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+
+/** When private mode stops, as a short local time (or null once it has). */
+function formatExpiry(expiresAt: string | undefined, nowSeconds: number): string | null {
+  if (!expiresAt) return null;
+  const expiry = new Date(expiresAt);
+  const expiryMs = expiry.getTime();
+  if (Number.isNaN(expiryMs) || expiryMs <= nowSeconds * 1000) return null;
+
+  return expiry.toLocaleString(undefined, {
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
 
 export const HistorySettings = memo(function HistorySettings() {
   const userId = useUserStore((state) => state.currentUser?.id);
@@ -16,7 +32,13 @@ export const HistorySettings = memo(function HistorySettings() {
     (state) => state.currentUser?.settings?.privateModeExpiresAt,
   );
 
-  const privateModeActive = isPrivateModeActive({ privateModeExpiresAt });
+  // Private mode expires on its own; without a tick the switch would keep
+  // claiming it is on long after viewing history started being recorded again.
+  const haptics = useHaptics();
+  const nowSeconds = useNowSeconds();
+  const expiryLabel = formatExpiry(privateModeExpiresAt, nowSeconds);
+  const privateModeActive = expiryLabel !== null;
+
   const [showPrivateModeDialog, setShowPrivateModeDialog] = useState(false);
   const [showClearHistoryDialog, setShowClearHistoryDialog] = useState(false);
 
@@ -29,8 +51,9 @@ export const HistorySettings = memo(function HistorySettings() {
   }, []);
 
   const handleClearHistory = useCallback(() => {
+    haptics.warning();
     setShowClearHistoryDialog(true);
-  }, []);
+  }, [haptics]);
 
   if (!userId) {
     return null;
@@ -46,16 +69,24 @@ export const HistorySettings = memo(function HistorySettings() {
         <View style={styles.preferenceRow}>
           <View style={styles.labelContainer}>
             <ThemedText style={styles.label}>Private Mode</ThemedText>
+            {expiryLabel && (
+              <ThemedText style={styles.subLabel}>Until {expiryLabel}</ThemedText>
+            )}
           </View>
           <Switch
             value={privateModeActive}
             onValueChange={handleTogglePrivateMode}
-            trackColor={{ false: '#767577', true: '#007AFF' }}
+            trackColor={{ false: SWITCH_TRACK, true: TINT }}
             accessibilityLabel="Toggle private mode"
           />
         </View>
 
-        <Pressable style={styles.preferenceRow} onPress={handleClearHistory}>
+        <Pressable
+          style={styles.preferenceRow}
+          onPress={handleClearHistory}
+          accessibilityRole="button"
+          accessibilityLabel="Clear viewing history"
+        >
           <View style={styles.labelContainer}>
             <ThemedText style={[styles.label, styles.destructiveLabel]}>
               Clear History
@@ -76,8 +107,8 @@ export const HistorySettings = memo(function HistorySettings() {
           {
             title: 'Enable',
             variant: 'primary',
-            onPress: () => {
-              void saveSetting(
+            onPress: async () => {
+              await saveSetting(
                 {
                   privateModeExpiresAt: new Date(
                     Date.now() + TWENTY_FOUR_HOURS_MS,
@@ -103,14 +134,16 @@ export const HistorySettings = memo(function HistorySettings() {
           {
             title: 'Clear',
             variant: 'danger',
-            onPress: () => {
-              clearViewingHistory(userId).catch((error: unknown) => {
+            onPress: async () => {
+              try {
+                await clearViewingHistory(userId);
+              } catch (error) {
                 console.error('[HistorySettings] Failed to clear history:', error);
                 Alert.alert(
                   "Couldn't clear history",
                   error instanceof Error ? error.message : 'Please try again.',
                 );
-              });
+              }
               setShowClearHistoryDialog(false);
             },
           },
@@ -146,6 +179,10 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 16,
     fontWeight: '500',
+  },
+  subLabel: {
+    fontSize: 13,
+    opacity: 0.6,
   },
   destructiveLabel: {
     color: '#FF3B30',

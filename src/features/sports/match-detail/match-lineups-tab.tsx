@@ -1,9 +1,9 @@
 import { Image } from 'expo-image';
 import type { MatchPlayers, PlayerEntry, TeamLineup } from 'expo-m3u-parser';
 import { memo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-import type { MatchDataState } from '../hooks/use-match-detail';
+import type { MatchSectionState } from '../hooks/use-match-detail';
 import { MatchLineupsSkeleton } from '../skeletons';
 import {
   AWAY_COLOR,
@@ -15,6 +15,8 @@ import {
   RatingBadge,
   ratingColor,
   SectionMessage,
+  StaleNotice,
+  TabScroller,
 } from './match-detail-shared';
 
 interface SelectedPlayer {
@@ -27,12 +29,14 @@ const PITCH_GREEN = '#1f7a40';
 const LINE_COLOR = 'rgba(255, 255, 255, 0.25)';
 
 interface LineupsTabProps {
-  state: MatchDataState<MatchPlayers>;
+  state: MatchSectionState<MatchPlayers>;
   homeLabel: string;
   awayLabel: string;
   /** Landscape lays the pitch out horizontally (home left → away right) to use
    * the wide card; portrait stacks the teams vertically (home top → away bottom). */
   compact?: boolean;
+  /** False when the host already owns a vertical scroller (the match surface). */
+  scrollable?: boolean;
 }
 
 export const MatchLineupsTab = memo(function MatchLineupsTab({
@@ -40,6 +44,7 @@ export const MatchLineupsTab = memo(function MatchLineupsTab({
   homeLabel,
   awayLabel,
   compact = false,
+  scrollable = true,
 }: LineupsTabProps) {
   const [selected, setSelected] = useState<SelectedPlayer | null>(null);
 
@@ -57,12 +62,9 @@ export const MatchLineupsTab = memo(function MatchLineupsTab({
   const motm = bestPlayer(players, homeLabel, awayLabel);
 
   return (
-    <View style={styles.fill}>
-      <ScrollView
-        style={styles.fill}
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
+    <View style={scrollable ? styles.fill : undefined}>
+      <TabScroller scrollable={scrollable} contentStyle={styles.content}>
+        <StaleNotice meta={players} onRetry={state.refresh} />
         {motm && (
           <PlayerOfTheMatch
             best={motm}
@@ -90,12 +92,15 @@ export const MatchLineupsTab = memo(function MatchLineupsTab({
           awayLabel={awayLabel}
           onSelect={onSelect}
         />
-      </ScrollView>
+      </TabScroller>
       {selected && (
         <PlayerStatsSheet
           player={selected.player}
           teamLabel={selected.label}
           accent={selected.accent}
+          // Inside the match surface's own scroller an absolute overlay is placed
+          // against the whole page, so the card goes into a modal instead.
+          presentation={scrollable ? 'overlay' : 'modal'}
           onClose={() => setSelected(null)}
         />
       )}
@@ -186,7 +191,7 @@ function TeamTag({
   align = 'left',
 }: {
   label: string;
-  formation?: string;
+  formation?: string | null;
   accent: string;
   align?: 'left' | 'right';
 }) {

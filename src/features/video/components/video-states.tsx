@@ -2,81 +2,26 @@ import { TouchableOpacity, View } from 'react-native';
 
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
-import { useThemeColor } from '@/hooks/use-theme-color';
-import type { Channel } from '@/types/playlist.types';
-import { VIDEO_CONSTANTS } from '../constants';
+import { VIDEO_COLORS, VIDEO_CONSTANTS } from '../constants';
 import type { VideoError } from '../types/video-error.types';
 
-interface VideoLoadingStateProps {
-  channel: Channel;
-}
-
-export function VideoLoadingState({ channel }: VideoLoadingStateProps) {
-  const iconColor = useThemeColor({}, 'icon');
-  const overlayBackground = useThemeColor({ light: 'rgba(0, 0, 0, 0.8)', dark: 'rgba(0, 0, 0, 0.8)' }, 'background');
-  const titleColor = useThemeColor({ light: '#fff', dark: '#fff' }, 'background');
-  const subtitleColor = useThemeColor({ light: '#b0b8cc', dark: '#b0b8cc' }, 'background');
-
-  return (
-    <View
-      className="absolute inset-0 justify-center items-center"
-      style={{
-        backgroundColor: overlayBackground,
-        padding: VIDEO_CONSTANTS.STATE_CONTAINER_PADDING,
-      }}
-    >
-      <IconSymbol name="tv" size={VIDEO_CONSTANTS.STATE_ICON_SIZE} color={iconColor} />
-      <ThemedText
-        style={{
-          fontSize: VIDEO_CONSTANTS.LOADING_TITLE_SIZE,
-          fontWeight: '600',
-          marginTop: VIDEO_CONSTANTS.STATE_TITLE_MARGIN_TOP,
-          marginBottom: VIDEO_CONSTANTS.STATE_TITLE_MARGIN_BOTTOM,
-          color: titleColor,
-          textAlign: 'center',
-        }}
-      >
-        Loading Channel
-      </ThemedText>
-      <ThemedText
-        type="subtitle"
-        style={{
-          fontSize: VIDEO_CONSTANTS.SUBTITLE_SIZE,
-          color: subtitleColor,
-          textAlign: 'center',
-          lineHeight: VIDEO_CONSTANTS.SUBTITLE_LINE_HEIGHT,
-        }}
-      >
-        {channel.name}
-      </ThemedText>
-    </View>
-  );
-}
-
-interface VideoCastingStateProps {
-  channel: Channel;
-}
-
-export function VideoCastingState(_props: VideoCastingStateProps) {
-  const overlayBackground = useThemeColor({ light: 'rgba(0, 0, 0, 0.8)', dark: 'rgba(0, 0, 0, 0.8)' }, 'background');
-  const titleColor = useThemeColor({ light: '#fff', dark: '#fff' }, 'background');
-
+export function VideoCastingState() {
   return (
     <View
       className="absolute inset-0 justify-start items-center"
       style={{
-        backgroundColor: overlayBackground,
+        backgroundColor: VIDEO_COLORS.scrim,
         paddingTop: 60,
       }}
     >
       <View className="absolute inset-0 justify-center items-center" pointerEvents="none">
-        <IconSymbol name="airplayvideo" size={200} color="#fff" style={{ opacity: 0.08 }} />
+        <IconSymbol name="airplayvideo" size={200} color={VIDEO_COLORS.text} style={{ opacity: 0.08 }} />
       </View>
       <ThemedText
         style={{
           fontSize: VIDEO_CONSTANTS.LOADING_TITLE_SIZE,
           fontWeight: '600',
-          color: titleColor,
+          color: VIDEO_COLORS.text,
           textAlign: 'center',
         }}
       >
@@ -87,30 +32,27 @@ export function VideoCastingState(_props: VideoCastingStateProps) {
 }
 
 interface VideoErrorStateProps {
-  channel: Channel;
   error: VideoError;
   onRetry: () => void;
+  /** Always offered: the error card covers the controls, so this is the only way out. */
+  onBack?: () => void;
   isRetrying?: boolean;
 }
 
-export function VideoErrorState({ error, onRetry, isRetrying = false }: VideoErrorStateProps) {
-  const iconColor = useThemeColor({}, 'icon');
-  const overlayBackground = useThemeColor({ light: 'rgba(0, 0, 0, 0.8)', dark: 'rgba(0, 0, 0, 0.8)' }, 'background');
-  const titleColor = useThemeColor({ light: '#fff', dark: '#fff' }, 'background');
-  const subtitleColor = useThemeColor({ light: '#b0b8cc', dark: '#b0b8cc' }, 'background');
-  const suggestionColor = useThemeColor({ light: '#c8cdd8', dark: '#c8cdd8' }, 'background');
-  const retryButtonBackground = useThemeColor({ light: 'rgba(255, 255, 255, 0.2)', dark: 'rgba(255, 255, 255, 0.2)' }, 'background');
-  const retryButtonText = useThemeColor({ light: '#fff', dark: '#fff' }, 'background');
-
+export function VideoErrorState({ error, onRetry, onBack, isRetrying = false }: VideoErrorStateProps) {
   return (
     <View
       className="absolute inset-0 justify-center items-center"
       style={{
-        backgroundColor: overlayBackground,
+        backgroundColor: VIDEO_COLORS.scrim,
         padding: VIDEO_CONSTANTS.STATE_CONTAINER_PADDING,
       }}
     >
-      <IconSymbol name="exclamationmark.triangle" size={VIDEO_CONSTANTS.STATE_ICON_SIZE} color={iconColor} />
+      <IconSymbol
+        name="exclamationmark.triangle"
+        size={VIDEO_CONSTANTS.STATE_ICON_SIZE}
+        color={VIDEO_COLORS.text}
+      />
 
       <ThemedText
         style={{
@@ -118,7 +60,7 @@ export function VideoErrorState({ error, onRetry, isRetrying = false }: VideoErr
           fontWeight: '600',
           marginTop: VIDEO_CONSTANTS.STATE_TITLE_MARGIN_TOP,
           marginBottom: VIDEO_CONSTANTS.STATE_TITLE_MARGIN_BOTTOM,
-          color: titleColor,
+          color: VIDEO_COLORS.text,
           textAlign: 'center',
         }}
       >
@@ -129,7 +71,7 @@ export function VideoErrorState({ error, onRetry, isRetrying = false }: VideoErr
         type="subtitle"
         style={{
           fontSize: VIDEO_CONSTANTS.SUBTITLE_SIZE,
-          color: subtitleColor,
+          color: VIDEO_COLORS.subtitle,
           textAlign: 'center',
           lineHeight: VIDEO_CONSTANTS.SUBTITLE_LINE_HEIGHT,
           marginBottom: 12,
@@ -141,7 +83,7 @@ export function VideoErrorState({ error, onRetry, isRetrying = false }: VideoErr
       <ThemedText
         style={{
           fontSize: 12,
-          color: suggestionColor,
+          color: VIDEO_COLORS.hint,
           textAlign: 'center',
           lineHeight: 16,
           marginBottom: VIDEO_CONSTANTS.ERROR_RETRY_MARGIN_BOTTOM,
@@ -151,31 +93,60 @@ export function VideoErrorState({ error, onRetry, isRetrying = false }: VideoErr
         {error.suggestion}
       </ThemedText>
 
-      {error.canRetry && (
-        <TouchableOpacity
-          style={{
-            backgroundColor: retryButtonBackground,
-            paddingHorizontal: VIDEO_CONSTANTS.RETRY_BUTTON_PADDING_HORIZONTAL,
-            paddingVertical: VIDEO_CONSTANTS.RETRY_BUTTON_PADDING_VERTICAL,
-            borderRadius: VIDEO_CONSTANTS.BACK_BUTTON_BORDER_RADIUS,
-            opacity: isRetrying ? 0.6 : 1,
-          }}
-          onPress={onRetry}
-          disabled={isRetrying}
-          accessibilityRole="button"
-          accessibilityLabel="Retry playback"
-        >
-          <ThemedText
-            style={{
-              fontSize: VIDEO_CONSTANTS.RETRY_BUTTON_TEXT_SIZE,
-              fontWeight: '600',
-              color: retryButtonText,
-            }}
-          >
-            {isRetrying ? 'Retrying...' : 'Try Again'}
-          </ThemedText>
-        </TouchableOpacity>
-      )}
+      <View className="flex-row items-center" style={{ gap: 12 }}>
+        {onBack && (
+          <VideoStateButton label="Go Back" onPress={onBack} accessibilityLabel="Go back" />
+        )}
+        {error.canRetry && (
+          <VideoStateButton
+            label={isRetrying ? 'Retrying...' : 'Try Again'}
+            onPress={onRetry}
+            disabled={isRetrying}
+            accessibilityLabel="Retry playback"
+          />
+        )}
+      </View>
     </View>
+  );
+}
+
+interface VideoStateButtonProps {
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+  accessibilityLabel: string;
+}
+
+/** The pill button the error and unavailable states offer their ways out with. */
+export function VideoStateButton({
+  label,
+  onPress,
+  disabled = false,
+  accessibilityLabel,
+}: VideoStateButtonProps) {
+  return (
+    <TouchableOpacity
+      style={{
+        backgroundColor: VIDEO_COLORS.actionButton,
+        paddingHorizontal: VIDEO_CONSTANTS.RETRY_BUTTON_PADDING_HORIZONTAL,
+        paddingVertical: VIDEO_CONSTANTS.RETRY_BUTTON_PADDING_VERTICAL,
+        borderRadius: VIDEO_CONSTANTS.BACK_BUTTON_BORDER_RADIUS,
+        opacity: disabled ? 0.6 : 1,
+      }}
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+    >
+      <ThemedText
+        style={{
+          fontSize: VIDEO_CONSTANTS.RETRY_BUTTON_TEXT_SIZE,
+          fontWeight: '600',
+          color: VIDEO_COLORS.text,
+        }}
+      >
+        {label}
+      </ThemedText>
+    </TouchableOpacity>
   );
 }

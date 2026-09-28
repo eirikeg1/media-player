@@ -1,6 +1,6 @@
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { GlassColors } from '@/lib/theme';
+import { GlassColors, TINT } from '@/lib/theme';
 
 /**
  * Selection state colors for interactive components like buttons, cards, etc.
@@ -11,7 +11,7 @@ export function useSelectionColors() {
   const isDark = colorScheme === 'dark';
   const glass = isDark ? GlassColors.dark : GlassColors.light;
 
-  const selectedBackground = useThemeColor({ light: '#007AFF', dark: '#3b82f6' }, 'tint');
+  const selectedBackground = useThemeColor({ light: TINT, dark: '#3b82f6' }, 'tint');
   const unselectedBackground = glass.surface;
   const selectedBorder = selectedBackground;
   const unselectedBorder = glass.border;

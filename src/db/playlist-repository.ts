@@ -34,6 +34,25 @@ interface PlaylistRow {
 }
 
 /**
+ * Parse a stored timestamp, falling back to the epoch.
+ *
+ * An unparseable value used to become an `Invalid Date`, whose NaN timestamp
+ * silently failed every "is it time to sync?" comparison, so the playlist never
+ * synced again. The epoch reads as "infinitely stale" instead, which triggers a
+ * sync that rewrites the bad value.
+ */
+function parseTimestamp(value: string, column: string, playlistId: string): Date {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    console.warn(
+      `[SQLitePlaylistRepository] Invalid ${column} on playlist ${playlistId}: ${value}`,
+    );
+    return new Date(0);
+  }
+  return parsed;
+}
+
+/**
  * SQLite implementation of playlist repository
  */
 class SQLitePlaylistRepository implements IPlaylistRepository {
@@ -50,10 +69,14 @@ class SQLitePlaylistRepository implements IPlaylistRepository {
       syncInterval: row.syncInterval ?? undefined,
       epgSyncInterval: row.epgSyncInterval ?? undefined,
       createdByUserId: row.createdByUserId || undefined,
-      createdAt: new Date(row.createdAt),
-      updatedAt: new Date(row.updatedAt),
-      lastFetchedAt: row.lastFetchedAt ? new Date(row.lastFetchedAt) : undefined,
-      lastEpgFetchedAt: row.lastEpgFetchedAt ? new Date(row.lastEpgFetchedAt) : undefined,
+      createdAt: parseTimestamp(row.createdAt, 'createdAt', row.id),
+      updatedAt: parseTimestamp(row.updatedAt, 'updatedAt', row.id),
+      lastFetchedAt: row.lastFetchedAt
+        ? parseTimestamp(row.lastFetchedAt, 'lastFetchedAt', row.id)
+        : undefined,
+      lastEpgFetchedAt: row.lastEpgFetchedAt
+        ? parseTimestamp(row.lastEpgFetchedAt, 'lastEpgFetchedAt', row.id)
+        : undefined,
     };
 
     if (row.username && row.password) {
@@ -160,48 +183,66 @@ class SQLitePlaylistRepository implements IPlaylistRepository {
       throw new Error(`Playlist with id ${id} not found`);
     }
 
-    const updated: Playlist = {
-      ...existing,
-      ...updates,
-      updatedAt: new Date(),
+    // Only the patched columns are written: a full-row write would resurrect the
+    // values read above, undoing whatever another writer changed in between (a
+    // background sync recording channelCount while the EPG job records
+    // lastEpgFetchedAt, for instance).
+    const assignments = ['updatedAt = ?'];
+    const params: (string | number | null)[] = [new Date().toISOString()];
+    const assign = (column: string, value: string | number | null) => {
+      assignments.push(`${column} = ?`);
+      params.push(value);
     };
 
-    // Only update playlist metadata - channels are managed by Rust
+    // Required columns are only touched when the patch carries a real value;
+    // for the nullable ones a present key with `undefined` clears the column.
+    if (updates.name !== undefined) assign('name', updates.name);
+    if (updates.url !== undefined) assign('url', updates.url);
+    if ('epgUrl' in updates) assign('epgUrl', updates.epgUrl ?? null);
+    if ('credentials' in updates) {
+      assign('username', updates.credentials?.username || null);
+      assign('password', updates.credentials?.password || null);
+    }
+    if ('channelCount' in updates) assign('channelCount', updates.channelCount ?? null);
+    if ('syncInterval' in updates) assign('syncInterval', updates.syncInterval ?? null);
+    if ('epgSyncInterval' in updates) assign('epgSyncInterval', updates.epgSyncInterval ?? null);
+    if ('lastFetchedAt' in updates) {
+      assign('lastFetchedAt', updates.lastFetchedAt?.toISOString() ?? null);
+    }
+    if ('lastEpgFetchedAt' in updates) {
+      assign('lastEpgFetchedAt', updates.lastEpgFetchedAt?.toISOString() ?? null);
+    }
+
     await executeStatement(
-      `UPDATE playlists
-       SET name = ?, url = ?, epgUrl = ?, username = ?, password = ?, channelCount = ?, syncInterval = ?, epgSyncInterval = ?, updatedAt = ?, lastFetchedAt = ?, lastEpgFetchedAt = ?
-       WHERE id = ?`,
-      [
-        updated.name,
-        updated.url,
-        updated.epgUrl || null,
-        updated.credentials?.username || null,
-        updated.credentials?.password || null,
-        updated.channelCount || null,
-        updated.syncInterval ?? null,
-        updated.epgSyncInterval ?? null,
-        updated.updatedAt.toISOString(),
-        updated.lastFetchedAt?.toISOString() || null,
-        updated.lastEpgFetchedAt?.toISOString() || null,
-        id,
-      ]
+      `UPDATE playlists SET ${assignments.join(', ')} WHERE id = ?`,
+      [...params, id]
     );
 
+    // Re-read rather than returning the patched snapshot: the row may also carry
+    // another writer's change, and the caller puts this straight into the store.
+    const written = await this.getById(id);
+    if (!written) {
+      throw new Error(`Playlist with id ${id} disappeared while being updated`);
+    }
+
     console.log('[SQLitePlaylistRepository] Playlist updated successfully');
-    return updated;
+    return written;
   }
 
+  /**
+   * Delete a playlist. Idempotent: a row that is already gone is the state the
+   * caller asked for, so a repeated (or racing) delete is not an error.
+   */
   async delete(id: string): Promise<void> {
     console.log('[SQLitePlaylistRepository] delete called:', id);
 
     const result = await executeStatement('DELETE FROM playlists WHERE id = ?', [id]);
 
-    if (result.changes === 0) {
-      console.error('[SQLitePlaylistRepository] Playlist not found:', id);
-      throw new Error(`Playlist with id ${id} not found`);
-    }
-
-    console.log('[SQLitePlaylistRepository] Playlist deleted successfully');
+    console.log(
+      result.changes === 0
+        ? '[SQLitePlaylistRepository] Playlist was already deleted'
+        : '[SQLitePlaylistRepository] Playlist deleted successfully'
+    );
   }
 
 }

@@ -1,8 +1,8 @@
 import type { H2H, MatchPreview, TeamForm } from 'expo-m3u-parser';
 import { memo } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
-import type { MatchDataState } from '../hooks/use-match-detail';
+import type { MatchSectionState } from '../hooks/use-match-detail';
 import { MatchPreviewSkeleton } from '../skeletons';
 import {
   AWAY_COLOR,
@@ -11,18 +11,23 @@ import {
   HOME_COLOR,
   MUTED,
   SectionMessage,
+  StaleNotice,
+  TabScroller,
 } from './match-detail-shared';
 
 interface PreviewTabProps {
-  state: MatchDataState<MatchPreview>;
+  state: MatchSectionState<MatchPreview>;
   homeLabel: string;
   awayLabel: string;
+  /** False when the host already owns a vertical scroller (the match surface). */
+  scrollable?: boolean;
 }
 
 export const MatchPreviewTab = memo(function MatchPreviewTab({
   state,
   homeLabel,
   awayLabel,
+  scrollable = true,
 }: PreviewTabProps) {
   if (state.isLoading) return <MatchPreviewSkeleton />;
   if (state.error) return <SectionMessage text={state.error} />;
@@ -33,7 +38,8 @@ export const MatchPreviewTab = memo(function MatchPreviewTab({
   }
 
   return (
-    <ScrollView style={styles.fill} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    <TabScroller scrollable={scrollable} contentStyle={styles.content}>
+      <StaleNotice meta={preview} onRetry={state.refresh} />
       {preview.h2h && (
         <View style={styles.block}>
           <Text style={styles.blockTitle}>Head to head</Text>
@@ -51,7 +57,7 @@ export const MatchPreviewTab = memo(function MatchPreviewTab({
           </View>
         </View>
       )}
-    </ScrollView>
+    </TabScroller>
   );
 });
 
@@ -115,7 +121,7 @@ function FormColumn({
   align = 'left',
 }: {
   label: string;
-  form?: TeamForm;
+  form?: TeamForm | null;
   accent: string;
   align?: 'left' | 'right';
 }) {
@@ -154,9 +160,6 @@ function alignItems(align: 'left' | 'center' | 'right') {
 }
 
 const styles = StyleSheet.create({
-  fill: {
-    flex: 1,
-  },
   content: {
     padding: 16,
     gap: 22,

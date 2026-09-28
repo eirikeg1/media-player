@@ -1,15 +1,17 @@
 import { ModalHeader } from '@/components/ui/containers/modal/modal-header';
+import { Button } from '@/components/ui/controls/button';
 import { Input } from '@/components/ui/controls/inputs/input';
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
+import { ErrorState } from '@/components/ui/display/state';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { GlassColors } from '@/lib/theme';
 import { Image } from 'expo-image';
-import type { Team, TeamSearchResult } from 'expo-m3u-parser';
+import type { Team } from 'expo-m3u-parser';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, Modal, Pressable, StyleSheet, View } from 'react-native';
+import { Alert, FlatList, Modal, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CompetitionGrid } from './competition-grid';
@@ -17,23 +19,25 @@ import { useAllCompetitionTeams } from './hooks/use-all-competition-teams';
 import { useCompetitionTeams } from './hooks/use-competition-teams';
 import { useCompetitions } from './hooks/use-competitions';
 import { TeamListSkeleton } from './skeletons';
+import { sportsErrorMessage } from './sports-errors';
 import { teamKey } from './utils';
-
-function searchResultToTeam(result: TeamSearchResult): Team {
-  return {
-    providerId: result.providerId,
-    provider: result.provider,
-    name: result.name,
-    shortName: result.shortName,
-    tla: result.tla,
-    crestUrl: result.crestUrl,
-  };
-}
 
 interface ManageFavoritesModalProps {
   onClose: () => void;
   favoriteTeams: Team[];
-  onToggleFavorite: (team: Team, isFavorite: boolean) => void;
+  /**
+   * Persists the change. Must reject when the write fails: the checkmark is
+   * already on screen, and this modal is the only place that can take it back.
+   */
+  onToggleFavorite: (team: Team, isFavorite: boolean) => Promise<void>;
+}
+
+/** Add or remove one key, leaving the original set alone. */
+function withKey(keys: ReadonlySet<string>, key: string, present: boolean): Set<string> {
+  const next = new Set(keys);
+  if (present) next.add(key);
+  else next.delete(key);
+  return next;
 }
 
 export const ManageFavoritesModal = memo(function ManageFavoritesModal({
@@ -46,7 +50,12 @@ export const ManageFavoritesModal = memo(function ManageFavoritesModal({
   const tintColor = useThemeColor({}, 'tint');
   const insets = useSafeAreaInsets();
 
-  const { competitions, isLoading: isLoadingCompetitions } = useCompetitions();
+  const {
+    competitions,
+    isLoading: isLoadingCompetitions,
+    error: competitionsError,
+    retry: retryCompetitions,
+  } = useCompetitions();
   const [selectedCompId, setSelectedCompId] = useState<number | null>(null);
   const [filterText, setFilterText] = useState('');
 
@@ -71,17 +80,29 @@ export const ManageFavoritesModal = memo(function ManageFavoritesModal({
     }
   }, [selectedCompId, favoritedKeys]);
 
-  const { teams: competitionTeams, isLoading: isLoadingTeams } =
-    useCompetitionTeams(selectedCompId);
-  const { teams: allTeams, isLoading: isLoadingAll } = useAllCompetitionTeams();
+  const {
+    teams: competitionTeams,
+    isLoading: isLoadingTeams,
+    error: competitionTeamsError,
+    retry: retryCompetitionTeams,
+  } = useCompetitionTeams(selectedCompId);
+  const {
+    teams: allTeams,
+    isLoading: isLoadingAll,
+    isRefreshing: isRefreshingAll,
+    error: allTeamsError,
+    refresh: refreshAllTeams,
+  } = useAllCompetitionTeams();
+
+  // Whichever list the picker is currently showing decides both states.
+  const isLoadingList = selectedCompId !== null ? isLoadingTeams : isLoadingAll;
+  const listError = selectedCompId !== null ? competitionTeamsError : allTeamsError;
+  const retryList = selectedCompId !== null ? retryCompetitionTeams : refreshAllTeams;
 
   // Display list: "All" shows all cached competition teams, competition selected shows its teams
   // Favorites are sorted to top using the snapshot (not live favoritedKeys) to avoid re-sorting on toggle
   const displayList = useMemo(() => {
-    const source: Team[] =
-      selectedCompId === null
-        ? allTeams.map(searchResultToTeam)
-        : competitionTeams.map(searchResultToTeam);
+    const source: Team[] = selectedCompId === null ? allTeams : competitionTeams;
 
     const filter = filterText.trim().toLowerCase();
     const filtered = filter
@@ -106,17 +127,17 @@ export const ManageFavoritesModal = memo(function ManageFavoritesModal({
       const key = teamKey(team.provider, team.providerId);
       const newIsFavorite = !favoritedKeys.has(key);
 
-      setFavoritedKeys((prev) => {
-        const next = new Set(prev);
-        if (newIsFavorite) {
-          next.add(key);
-        } else {
-          next.delete(key);
-        }
-        return next;
-      });
+      // Optimistic: the checkmark answers the tap immediately, and is put back
+      // — with a reason — if the write turns out to have failed.
+      setFavoritedKeys((prev) => withKey(prev, key, newIsFavorite));
 
-      onToggleFavorite(team, newIsFavorite);
+      onToggleFavorite(team, newIsFavorite).catch((err: unknown) => {
+        setFavoritedKeys((prev) => withKey(prev, key, !newIsFavorite));
+        Alert.alert(
+          newIsFavorite ? "Couldn't add favorite" : "Couldn't remove favorite",
+          sportsErrorMessage(err, 'Please try again.')
+        );
+      });
     },
     [onToggleFavorite, favoritedKeys]
   );
@@ -133,6 +154,11 @@ export const ManageFavoritesModal = memo(function ManageFavoritesModal({
       return (
         <Pressable
           onPress={() => handleToggle(item)}
+          accessibilityRole="button"
+          accessibilityLabel={
+            isFavorite ? `Unfollow ${item.name}` : `Follow ${item.name}`
+          }
+          accessibilityState={{ selected: isFavorite }}
           style={[
             styles.resultRow,
             { borderBottomColor: isDark ? GlassColors.dark.border : GlassColors.light.border },
@@ -170,11 +196,7 @@ export const ManageFavoritesModal = memo(function ManageFavoritesModal({
 
         <View style={styles.listWrapper}>
           <FlatList
-            data={
-              (selectedCompId !== null ? isLoadingTeams : isLoadingAll)
-                ? []
-                : displayList
-            }
+            data={isLoadingList ? [] : displayList}
             renderItem={renderItem}
             keyExtractor={keyExtractor}
             style={styles.resultsList}
@@ -189,19 +211,46 @@ export const ManageFavoritesModal = memo(function ManageFavoritesModal({
                   selectedCompId={selectedCompId}
                   onSelect={handleSelectCompetition}
                   isLoading={isLoadingCompetitions}
+                  error={competitionsError}
+                  onRetry={retryCompetitions}
                 />
-                <View style={styles.inputWrapper}>
-                  <Input
-                    value={filterText}
-                    onChangeText={setFilterText}
-                    placeholder="Filter teams..."
-                  />
+                <View style={styles.filterRow}>
+                  <View style={styles.inputWrapper}>
+                    <Input
+                      value={filterText}
+                      onChangeText={setFilterText}
+                      placeholder="Filter teams..."
+                    />
+                  </View>
+                  {/* The team sweep is minutes of paced provider requests, so it
+                      is not run just because this modal was opened; asking for
+                      teams that aren't listed yet is an explicit action. */}
+                  {selectedCompId === null && (
+                    <Button
+                      title={isRefreshingAll ? 'Refreshing…' : 'Refresh'}
+                      variant="secondary"
+                      size="small"
+                      icon="arrow.clockwise"
+                      disabled={isRefreshingAll}
+                      onPress={refreshAllTeams}
+                      accessibilityLabel="Refresh the team list from the provider"
+                    />
+                  )}
                 </View>
+                {/* The list below still has teams to show, so the failure is a
+                    line under the filter rather than a screen of its own. */}
+                {listError && displayList.length > 0 ? (
+                  <ErrorState inline message={listError} onRetry={retryList} />
+                ) : null}
               </View>
             }
             ListEmptyComponent={
-              (selectedCompId !== null ? isLoadingTeams : isLoadingAll) ? (
+              isLoadingList ? (
                 <TeamListSkeleton />
+              ) : listError ? (
+                // Nothing on screen and nothing explaining why: an empty picker
+                // is indistinguishable from a provider that knows no teams.
+                <ErrorState inline message={listError} onRetry={retryList} />
               ) : (
                 <View style={styles.emptyContainer}>
                   <ThemedText style={styles.emptyText}>
@@ -231,7 +280,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     zIndex: 1,
   },
+  filterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   inputWrapper: {
+    flex: 1,
     height: 44,
   },
   listWrapper: {

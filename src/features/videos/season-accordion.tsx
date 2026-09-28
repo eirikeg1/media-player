@@ -4,6 +4,7 @@ import { ThemedView } from '@/components/ui/display/themed-view';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { GlassColors } from '@/lib/theme';
+import { getChannelId } from '@/lib/channel-utils';
 import type { ParsedEpisode } from '@/lib/series-utils';
 import type { Channel } from '@/types/playlist.types';
 import { useState } from 'react';
@@ -53,7 +54,9 @@ export function SeasonAccordion({
         <ThemedView style={styles.episodeList}>
           {episodes.map((ep) => (
             <TouchableOpacity
-              key={`${ep.season}-${ep.episode}`}
+              // By channel id, not by season/episode: playlists routinely carry
+              // two files for the same episode, and duplicate keys drop one row.
+              key={getChannelId(ep.channel)}
               style={[styles.episodeRow, { borderBottomColor: borderColor }]}
               onPress={() => onEpisodePress(ep.channel)}
               activeOpacity={0.7}

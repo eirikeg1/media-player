@@ -11,12 +11,14 @@ import { userRepository } from '@/db/user-repository';
 import { usePersonalizedContent } from '@/features/home/hooks/use-personalized-content';
 import { ensureRecommendationModelLoaded } from '@/services/recommendation-model';
 import { getRustDatabase } from '@/services/rust-channel-service';
+import { HOME_CACHE_FRESH_MS, useFirstPageCacheStore, type HomeSliceKey } from '@/stores/cache';
 import { usePlaylistStore } from '@/stores/playlist/playlist-store';
 import { useUserStore } from '@/stores/user/user-store';
-import { makeRustChannel } from '@/test/factories';
+import { makeChannel, makeRustChannel } from '@/test/factories';
 import { Database as M3uDatabaseFake } from '@/test/fakes/m3u-database-fake';
 import { resetStores, resetTestDatabases } from '@/test/helpers';
-import { renderHook, waitFor } from '@testing-library/react-native';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
+import type { Channel } from '@/types/playlist.types';
 import type { User } from '@/types/user.types';
 
 jest.mock('@/services/recommendation-model', () => ({
@@ -72,7 +74,7 @@ async function watch(
 
 beforeEach(async () => {
   await resetTestDatabases();
-  resetStores(useUserStore, usePlaylistStore);
+  resetStores(useUserStore, usePlaylistStore, useFirstPageCacheStore);
   modelLoaded.mockResolvedValue(true);
 
   db = (await getRustDatabase()) as unknown as FakeDb;
@@ -226,5 +228,127 @@ describe('usePersonalizedContent', () => {
     expect(result.current.movies).toEqual([]);
     expect(result.current.series).toEqual([]);
     expect(result.current.mode).toBe('random');
+  });
+});
+
+describe('serving the launch pre-fetch', () => {
+  /** The key the pre-fetch writes the discover rows under. */
+  function cacheKey(overrides: Partial<HomeSliceKey> = {}): HomeSliceKey {
+    return { playlistId: PLAYLIST_ID, userId: user.id, excludeAdult: false, limit: LIMIT, ...overrides };
+  }
+
+  /** A pre-fetched batch, distinguishable from anything the catalogue holds. */
+  const CACHED_BATCH = {
+    movies: [makeChannel({ name: 'Cached Movie' })],
+    series: [],
+    mode: 'personalized' as const,
+  };
+
+  /** Render while recording every frame the discover rows were ever handed. */
+  async function renderRecordingFrames() {
+    const frames: { movies: Channel[]; isLoading: boolean }[] = [];
+    const { result } = await renderHook(() => {
+      const state = usePersonalizedContent(LIMIT);
+      frames.push({ movies: state.movies, isLoading: state.isLoading });
+      return state;
+    });
+    return { result, frames };
+  }
+
+  it('renders the pre-fetched batch on the first frame, without reloading it', async () => {
+    useFirstPageCacheStore.getState().setCachedHomeContent(cacheKey(), CACHED_BATCH);
+    const getMovies = jest.spyOn(db, 'getPersonalizedMovieRecommendations');
+
+    const { result, frames } = await renderRecordingFrames();
+
+    expect(result.current.movies.map((movie) => movie.name)).toEqual(['Cached Movie']);
+    expect(result.current.mode).toBe('personalized');
+    expect(frames.some((frame) => frame.isLoading)).toBe(false);
+    // The pre-fetch *was* this session's first read; repeating it on mount
+    // would regenerate a batch for rows already on screen.
+    expect(getMovies).not.toHaveBeenCalled();
+  });
+
+  it('refreshes an older batch behind the rows, still without a loading frame', async () => {
+    useFirstPageCacheStore.getState().setCachedHomeContent(cacheKey(), CACHED_BATCH);
+    // Past the freshness window: this suite runs on the real clock, so the
+    // slice is aged by moving the clock rather than by waiting a minute.
+    const writtenAt = Date.now();
+    jest.spyOn(Date, 'now').mockReturnValue(writtenAt + HOME_CACHE_FRESH_MS + 1);
+
+    const { result, frames } = await renderRecordingFrames();
+
+    expect(frames[0].movies.map((movie) => movie.name)).toEqual(['Cached Movie']);
+    await waitFor(() =>
+      expect(result.current.movies.map((movie) => movie.name)).toEqual(['Blade Runner', 'Arrival'])
+    );
+    expect(frames.some((frame) => frame.isLoading)).toBe(false);
+    // …and the refreshed batch replaces the slice for the next mount.
+    expect(
+      useFirstPageCacheStore.getState().getCachedHomeContent(cacheKey())?.value.movies
+    ).toEqual(result.current.movies);
+  });
+
+  it('reloads on a pull-to-refresh inside the freshness window', async () => {
+    useFirstPageCacheStore.getState().setCachedHomeContent(cacheKey(), CACHED_BATCH);
+    const getMovies = jest.spyOn(db, 'getPersonalizedMovieRecommendations');
+    const regenerateMovies = jest.spyOn(db, 'regeneratePersonalizedMovieRecommendations');
+
+    const { result } = await renderRecordingFrames();
+    // Mounting behind a fresh slice stands on it; only the pull replaces it.
+    expect(getMovies).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await result.current.refresh();
+    });
+
+    expect(getMovies).toHaveBeenCalledTimes(1);
+    expect(result.current.movies.map((movie) => movie.name)).toEqual(['Blade Runner', 'Arrival']);
+    // …and the next batch is precomputed again, as every read does.
+    await waitFor(() => expect(regenerateMovies).toHaveBeenCalledTimes(1));
+  });
+
+  it('drops the cached batch the moment a refresh asks for a new one', async () => {
+    useFirstPageCacheStore.getState().setCachedHomeContent(cacheKey(), CACHED_BATCH);
+
+    const { result } = await renderRecordingFrames();
+
+    const refreshed = result.current.refresh();
+
+    // Before the load has had a chance to land: a mount while the refresh is
+    // still running — or after the user left the page, superseding it — must
+    // load rather than serve back the very batch the refresh was replacing.
+    expect(useFirstPageCacheStore.getState().getCachedHomeContent(cacheKey())).toBeNull();
+
+    await act(async () => {
+      await refreshed;
+    });
+    expect(result.current.movies.map((movie) => movie.name)).toEqual(['Blade Runner', 'Arrival']);
+    expect(
+      useFirstPageCacheStore.getState().getCachedHomeContent(cacheKey())?.value.movies
+    ).toEqual(result.current.movies);
+  });
+
+  it('loads for itself when the cached batch belongs to another user', async () => {
+    useFirstPageCacheStore
+      .getState()
+      .setCachedHomeContent(cacheKey({ userId: 'someone-else' }), CACHED_BATCH);
+
+    const { result, frames } = await renderRecordingFrames();
+
+    expect(frames[0].isLoading).toBe(true);
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.movies.map((movie) => movie.name)).toEqual(['Blade Runner', 'Arrival']);
+  });
+
+  it('loads for itself after the playlist was invalidated', async () => {
+    useFirstPageCacheStore.getState().setCachedHomeContent(cacheKey(), CACHED_BATCH);
+    useFirstPageCacheStore.getState().invalidatePlaylist(PLAYLIST_ID);
+
+    const { result, frames } = await renderRecordingFrames();
+
+    expect(frames[0].isLoading).toBe(true);
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.movies.map((movie) => movie.name)).toEqual(['Blade Runner', 'Arrival']);
   });
 });

@@ -1,8 +1,9 @@
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { getChannelId } from '@/lib/channel-utils';
 import type { Channel } from '@/types/playlist.types';
 import type { EpgProgramme } from 'expo-m3u-parser';
 import React, { useCallback, useEffect, useMemo } from 'react';
-import { StyleSheet, useColorScheme, View } from 'react-native';
+import { RefreshControl, StyleSheet, useColorScheme, View } from 'react-native';
 import Animated, {
   type SharedValue,
   useAnimatedScrollHandler,
@@ -24,6 +25,8 @@ interface EpgProgrammeGridProps {
   onLoadMore?: () => void;
   hasMore?: boolean;
   isLoadingMore?: boolean;
+  refreshing?: boolean;
+  onRefresh?: () => void;
 }
 
 const AnimatedFlatList = Animated.FlatList as unknown as typeof Animated.FlatList<Channel>;
@@ -73,8 +76,14 @@ function EpgProgrammeGridInner({
   onLoadMore,
   hasMore,
   isLoadingMore,
+  refreshing = false,
+  onRefresh,
 }: EpgProgrammeGridProps) {
   const borderColor = useThemeColor({ light: '#d0d0d0', dark: '#444' }, 'icon');
+  const tintColor = useThemeColor({}, 'tint');
+  const isDark = (useColorScheme() ?? 'light') === 'dark';
+  const refreshArrowColor = isDark ? tintColor : '#3d4560';
+  const refreshBackgroundColor = isDark ? '#1f2740' : '#dbe0ec';
 
   // Outer horizontal scroll drives scrollX (syncs time header)
   const horizontalScrollHandler = useAnimatedScrollHandler({
@@ -122,10 +131,7 @@ function EpgProgrammeGridInner({
     []
   );
 
-  const keyExtractor = useCallback(
-    (item: Channel, index: number) => `${item.name}-${index}`,
-    []
-  );
+  const keyExtractor = useCallback((item: Channel) => getChannelId(item), []);
 
   const handleEndReached = useCallback(() => {
     if (hasMore && !isLoadingMore && onLoadMore) {
@@ -165,6 +171,17 @@ function EpgProgrammeGridInner({
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
         ListFooterComponent={listFooter}
+        refreshControl={
+          onRefresh ? (
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={refreshArrowColor}
+              colors={[refreshArrowColor]}
+              progressBackgroundColor={refreshBackgroundColor}
+            />
+          ) : undefined
+        }
       />
     </Animated.ScrollView>
   );

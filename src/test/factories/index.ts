@@ -7,6 +7,7 @@
  * needs them rather than speculatively.
  */
 import type { Channel as RustChannel, PlaylistMetadata } from 'expo-m3u-parser';
+import { getRawChannelId } from '@/lib/channel-utils';
 import type { Channel, Playlist, PlaylistCredentials } from '@/types/playlist.types';
 
 let counter = 0;
@@ -52,7 +53,8 @@ export function makeRustChannel(overrides: Partial<RustChannel> = {}): RustChann
     duration: -1,
     contentType: 'live',
     isAdult: false,
-    channelId: tvgId?.trim() ? tvgId.trim() : `${title}|${url}`,
+    // The id rule the backend applies on import, from its one TS mirror.
+    channelId: getRawChannelId({ name: title, url, tvgId }),
     ...overrides,
   };
 }

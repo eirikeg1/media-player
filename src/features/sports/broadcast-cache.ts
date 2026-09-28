@@ -4,9 +4,9 @@ import type { RankedBroadcast } from 'expo-m3u-parser';
  * The channels matched to a fixture, remembered for the length of a browsing
  * session.
  *
- * Matching is the most expensive thing a match sheet does: the native side
+ * Matching is the most expensive thing the match surface does: the native side
  * scans the playlist while holding the channel database lock, so reopening the
- * same match — which the user does constantly, flicking between the sheet and
+ * same match — which the user does constantly, flicking between the surface and
  * the list — must not pay for it twice. The playlist and country are part of
  * the key, so switching either resolves to a miss rather than a stale answer;
  * {@link clearBroadcastCache} covers the case where the data underneath a key

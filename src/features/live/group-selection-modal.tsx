@@ -216,6 +216,9 @@ export function GroupSelectionModal({
                       style={styles.sortDropdownRow}
                       onPress={() => handleSortSelect(option)}
                       activeOpacity={0.7}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Sort groups by ${GROUP_SORT_LABELS[option]}`}
+                      accessibilityState={{ selected: isActive }}
                     >
                       <ThemedText
                         style={[

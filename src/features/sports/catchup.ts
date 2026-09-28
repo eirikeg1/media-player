@@ -57,7 +57,7 @@ export function shouldHandOverToLive(
   catchup: CatchupWindow | null,
   fixture: Fixture | null
 ): boolean {
-  return !!catchup && !!fixture && !isMatchConcluded(fixture.status);
+  return !!catchup && !!fixture && !isMatchConcluded(fixture);
 }
 
 /** The broadcasts that can play the match from archive, in the given order. */

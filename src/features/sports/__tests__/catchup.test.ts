@@ -105,12 +105,22 @@ describe('shouldHandOverToLive', () => {
 
   it('hands over on any status the match can still go live from', () => {
     expect(shouldHandOverToLive(window, { ...fixture, status: 'scheduled' })).toBe(true);
-    expect(shouldHandOverToLive(window, { ...fixture, status: 'interrupted' })).toBe(true);
+    // An interruption does not say whether the match resumes, so it counts as
+    // live until long after kickoff: a match interrupted minutes ago still has
+    // a live stream to hand over to.
+    const justInterrupted = {
+      ...fixture,
+      status: 'interrupted',
+      kickoffTime: Math.floor(Date.now() / 1000) - 600,
+    };
+    expect(shouldHandOverToLive(window, justInterrupted)).toBe(true);
   });
 
   it('never hands over for a concluded match', () => {
     expect(shouldHandOverToLive(window, { ...fixture, status: 'finished' })).toBe(false);
     expect(shouldHandOverToLive(window, { ...fixture, status: 'postponed' })).toBe(false);
+    // Kickoff was months ago: whatever "interrupted" meant, it is over.
+    expect(shouldHandOverToLive(window, { ...fixture, status: 'interrupted' })).toBe(false);
   });
 
   it('never hands over without a window or a fixture', () => {

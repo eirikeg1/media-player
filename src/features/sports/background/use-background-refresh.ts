@@ -1,3 +1,4 @@
+import { whenLandingReady } from '@/features/launch/landing-readiness';
 import { useUserStore } from '@/stores/user/user-store';
 import {
   DEFAULT_SPORTS_BACKGROUND_REFRESH,
@@ -7,7 +8,11 @@ import { useEffect } from 'react';
 import { AppState, InteractionManager } from 'react-native';
 
 import { expoBackgroundScheduler } from './expo-scheduler';
-import { runForegroundRefresh, warmAdjacentDays } from './foreground-refresh';
+import {
+  getSportsWarmPromise,
+  runForegroundRefresh,
+  warmAdjacentDays,
+} from './foreground-refresh';
 import { refreshStateStore } from './refresh-state-store';
 import { schedulerIntervalMinutes } from './refresh-policy';
 
@@ -16,6 +21,22 @@ let warnedUnavailable = false;
 
 /** The adjacent-day warm runs once per launch, not on every settings change. */
 let warmedAdjacentDays = false;
+
+/**
+ * A floor under the launch warm. `runAfterInteractions` fires as soon as the
+ * interaction queue happens to be empty, which on a cold launch is well before
+ * the first screen has settled — the fan-out of provider requests then competes
+ * with the data that screen is waiting for.
+ */
+const LAUNCH_WARM_DELAY_MS = 3_000;
+
+/**
+ * How long the adjacent-day warm waits for the sports day view before going
+ * ahead. Longer than the loading screen's own cap: this wait exists to keep the
+ * warm off the request pacer the visible list is using, and a launch that never
+ * opens the sports tab has no day view to wait for at all.
+ */
+const DAY_VIEW_SETTLE_TIMEOUT_MS = 10_000;
 
 /**
  * Mirror the preference to the device-level store and (un)register the OS task
@@ -94,8 +115,18 @@ export function useBackgroundRefresh(): void {
   const hasUser = useUserStore((s) => s.currentUser !== null);
 
   useEffect(() => {
-    void applyPreference({ mode, intervalHours, dailyTime, refreshOnOpen });
-  }, [mode, intervalHours, dailyTime, refreshOnOpen]);
+    // Until the user is loaded these are the shipped defaults, and acting on
+    // them would register the default schedule for someone who turned it off.
+    if (!hasUser) return;
+    // A hidden sports tab means the whole feature is off: the OS task is
+    // unregistered rather than left waking the app for data nothing displays.
+    // Turning the tab back on re-applies the user's own mode from this effect.
+    void applyPreference(
+      sportsEnabled
+        ? { mode, intervalHours, dailyTime, refreshOnOpen }
+        : { mode: 'off', intervalHours, dailyTime, refreshOnOpen }
+    );
+  }, [hasUser, sportsEnabled, mode, intervalHours, dailyTime, refreshOnOpen]);
 
   useEffect(() => {
     if (!hasUser || !refreshOnOpen || !sportsEnabled) return;
@@ -113,25 +144,37 @@ export function useBackgroundRefresh(): void {
     // flag is only set once the warm has actually happened — setting it up
     // front would let one offline launch disable it for the whole process.
     const warmOnLaunch = async () => {
+      // The boot sequence starts today's warm while the loading screen is
+      // still up (see `use-playlist-init`), so this joins that run instead of
+      // paying for a second fan-out. Only a launch that never started one —
+      // the preference was turned on mid-session — runs it here.
       try {
-        await runForegroundRefresh();
+        await (getSportsWarmPromise() ?? runForegroundRefresh());
       } catch (err) {
         console.warn('[sports-refresh] Foreground refresh failed:', err);
         return;
       }
       warmedAdjacentDays = true;
+      // Every provider request shares one pacer, so days the user is not
+      // looking at wait for the day view to have its own.
+      await whenLandingReady('sports', DAY_VIEW_SETTLE_TIMEOUT_MS);
       await warmAdjacentDays();
     };
 
     // The cold launch is the first "open" — and the only one AppState never
     // reports, since the app is already 'active' by the time this mounts.
-    // Deferred behind the first interactions so a fan-out of provider requests
-    // never competes with the first paint.
+    // Deferred behind the first interactions, and never sooner than
+    // {@link LAUNCH_WARM_DELAY_MS}, so a fan-out of provider requests never
+    // competes with the first paint.
     let cancelled = false;
+    let warmTimer: ReturnType<typeof setTimeout> | undefined;
     const launchWarm = InteractionManager.runAfterInteractions(() => {
       if (cancelled) return;
-      if (warmedAdjacentDays) refresh();
-      else void warmOnLaunch();
+      warmTimer = setTimeout(() => {
+        if (cancelled) return;
+        if (warmedAdjacentDays) refresh();
+        else void warmOnLaunch();
+      }, LAUNCH_WARM_DELAY_MS);
     });
 
     const subscription = AppState.addEventListener('change', (nextState) => {
@@ -140,6 +183,7 @@ export function useBackgroundRefresh(): void {
     return () => {
       cancelled = true;
       launchWarm.cancel();
+      if (warmTimer) clearTimeout(warmTimer);
       subscription.remove();
     };
   }, [hasUser, refreshOnOpen, sportsEnabled]);

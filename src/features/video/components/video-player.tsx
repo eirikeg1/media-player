@@ -5,12 +5,14 @@ import { View } from 'react-native';
 import { useSharedValue } from 'react-native-reanimated';
 
 import { useLiveMatchScore } from '@/features/sports/hooks/use-match-detail';
+import { mergeLiveScore } from '@/features/sports/live-score';
 import { MatchWidgetOverlay } from '@/features/sports/match-widget-overlay';
 import { isMatchConcluded, supportsMatchWidgets } from '@/features/sports/match-widgets';
 import { useGestureStore } from '@/stores/video/gesture-store';
 import { usePlaybackSessionStore } from '@/stores/video/playback-session-store';
 import { useVideoPlayerStore } from '@/stores/video/player-store';
 import type { Channel } from '@/types/playlist.types';
+import { VIDEO_COLORS } from '../constants';
 import { useCastPlayback } from '../hooks/use-cast-playback';
 import { useVideoPlayerLogic } from '../hooks/use-video-player';
 import { GestureIndicatorOverlay } from './gesture-indicator-overlay';
@@ -25,7 +27,6 @@ interface VideoPlayerProps {
   streamUrl?: string;
   startPosition?: number;
   onBack?: () => void;
-  onStopVideo?: () => void;
   onRegisterStopFunction?: (stopFn: () => void) => void;
   onNext?: () => void;
   onPrevious?: () => void;
@@ -37,12 +38,11 @@ interface VideoPlayerProps {
 /**
  * Video player component with clean, modular state management architecture
  */
-export function VideoPlayer({ channel, streamUrl = channel.url, startPosition, onBack, onStopVideo, onRegisterStopFunction, onNext, onPrevious, hasNavigation, fixture }: VideoPlayerProps) {
+export function VideoPlayer({ channel, streamUrl = channel.url, startPosition, onBack, onRegisterStopFunction, onNext, onPrevious, hasNavigation, fixture }: VideoPlayerProps) {
   const {
     player,
     isLoading,
     loadingStage,
-    loadingProgress,
     hasError,
     videoError,
     showControls,
@@ -51,7 +51,6 @@ export function VideoPlayer({ channel, streamUrl = channel.url, startPosition, o
     togglePlayPause,
     clearHideControlsTimeout,
     isPlaying,
-    networkState,
     retryState,
     toggleControls,
     currentTime,
@@ -62,9 +61,7 @@ export function VideoPlayer({ channel, streamUrl = channel.url, startPosition, o
     pauseVideo,
     resyncToLive,
   } = useVideoPlayerLogic({
-    channel,
     startPosition,
-    onStopVideo,
     onRegisterStopFunction,
   });
 
@@ -106,12 +103,6 @@ export function VideoPlayer({ channel, streamUrl = channel.url, startPosition, o
     seekCast,
   } = useCastPlayback({ channel, streamUrl, isCatchup: isSessionCatchup });
   const isCasting = useVideoPlayerStore(s => s.isCasting);
-  // While casting the local player is unloaded, so its `isLive` is stale; the
-  // session says what the receiver plays. A catch-up window is a finite
-  // recording, so it is never live even on a live channel.
-  const isSessionLive = usePlaybackSessionStore(
-    (s) => s.session?.contentType === 'live' && s.session.catchup == null
-  );
 
   // Tell the session which view holds the player: Android allows only one
   // attached VideoView per player, so the mini bar waits for the screen's
@@ -140,18 +131,12 @@ export function VideoPlayer({ channel, streamUrl = channel.url, startPosition, o
   // stops itself once the match concludes.
   const liveScore = useLiveMatchScore(
     widgetFixture?.providerId,
-    !!widgetFixture && !isMatchConcluded(widgetFixture.status)
+    !!widgetFixture && !isMatchConcluded(widgetFixture)
   );
-  const liveFixture = useMemo<Fixture | null>(() => {
-    if (!widgetFixture) return null;
-    if (!liveScore) return widgetFixture;
-    return {
-      ...widgetFixture,
-      homeScore: liveScore.homeScore ?? widgetFixture.homeScore,
-      awayScore: liveScore.awayScore ?? widgetFixture.awayScore,
-      status: liveScore.status || widgetFixture.status,
-    };
-  }, [widgetFixture, liveScore]);
+  const liveFixture = useMemo<Fixture | null>(
+    () => (widgetFixture ? mergeLiveScore(widgetFixture, liveScore) : null),
+    [widgetFixture, liveScore]
+  );
   const [matchInfoVisible, setMatchInfoVisible] = useState(false);
   const showMatchInfo = useCallback(() => setMatchInfoVisible(true), []);
   const hideMatchInfo = useCallback(() => setMatchInfoVisible(false), []);
@@ -159,11 +144,11 @@ export function VideoPlayer({ channel, streamUrl = channel.url, startPosition, o
   // The route only mounts this component once the session (and its player)
   // exists; this guards the brief window of a channel switch replacing it.
   if (!player) {
-    return <View style={{ flex: 1, backgroundColor: '#000' }} />;
+    return <View style={{ flex: 1, backgroundColor: VIDEO_COLORS.background }} />;
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#000' }}>
+    <View style={{ flex: 1, backgroundColor: VIDEO_COLORS.background }}>
       <View style={{ flex: 1 }}>
         {!isCasting && (
           <VideoView
@@ -171,38 +156,29 @@ export function VideoPlayer({ channel, streamUrl = channel.url, startPosition, o
             player={player}
             nativeControls={false}
             fullscreenOptions={{ enable: true }}
-            allowsPictureInPicture
             contentFit="contain"
           />
         )}
 
-        {isCasting && <VideoCastingState channel={channel} />}
-        {isLoading && !isCasting && (
-          <LoadingProgress
-            channel={channel}
-            stage={loadingStage}
-            progress={loadingProgress}
-            networkType={networkState.type}
-          />
-        )}
+        {isCasting && <VideoCastingState />}
+        {isLoading && !isCasting && <LoadingProgress stage={loadingStage} />}
         {hasError && videoError && !isCasting && (
           <VideoErrorState
-            channel={channel}
             error={videoError}
             onRetry={retryPlayback}
+            onBack={onBack}
             isRetrying={retryState.isRetrying}
           />
         )}
         {isCasting && (
           <VideoControls
             channel={channel}
-            player={player}
             isLoading={false}
             isPlaying={isCastPlaying}
             onBack={onBack}
             onTogglePlayPause={toggleCastPlayPause}
             onClearTimeout={clearHideControlsTimeout}
-            isLive={isSessionLive}
+            isLive={isLive}
             // The receiver owns the timeline while casting: a buffered stream
             // reports a duration and gets a seek bar, a live one reports 0.
             currentTime={castPosition}
@@ -211,12 +187,11 @@ export function VideoPlayer({ channel, streamUrl = channel.url, startPosition, o
             onSeekEnd={seekCast}
             fixture={liveFixture}
             onShowMatchInfo={widgetFixture ? showMatchInfo : undefined}
-            onResync={isSessionLive ? resyncCastToLive : undefined}
+            onResync={isLive ? resyncCastToLive : undefined}
           />
         )}
         {!hasError && !isCasting && (
           <VideoGestureLayer
-            player={player}
             currentTime={currentTime}
             duration={duration}
             isLive={isLive}
@@ -234,7 +209,6 @@ export function VideoPlayer({ channel, streamUrl = channel.url, startPosition, o
         {(showControls || activeGesture === 'fine-seek') && !hasError && !isCasting && (
           <VideoControls
             channel={channel}
-            player={player}
             isLoading={isLoading}
             isPlaying={isPlaying}
             currentTime={currentTime}
@@ -277,4 +251,3 @@ export function VideoPlayer({ channel, streamUrl = channel.url, startPosition, o
     </View>
   );
 }
-

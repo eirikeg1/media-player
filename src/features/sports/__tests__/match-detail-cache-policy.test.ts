@@ -61,7 +61,15 @@ describe('matchDetailTtl', () => {
     expect(matchDetailTtl(fixture('FINISHED'), 'score')).toBe(TTL_CONCLUDED_SECS);
   });
 
-  it('treats an unknown status as not started', () => {
-    expect(matchDetailTtl(fixture('interrupted'), 'statistics')).toBe(TTL_UPCOMING_SECS);
+  it('treats an unresolved status as not started until the match must be over', () => {
+    const justKickedOff: Fixture = {
+      ...base,
+      status: 'interrupted',
+      kickoffTime: Math.floor(Date.now() / 1000) - 600,
+    };
+    expect(matchDetailTtl(justKickedOff, 'statistics')).toBe(TTL_UPCOMING_SECS);
+    // Hours past kickoff nothing is going to change again, whatever the status
+    // meant — keep serving the cache instead of polling for good.
+    expect(matchDetailTtl(fixture('interrupted'), 'statistics')).toBe(TTL_CONCLUDED_SECS);
   });
 });

@@ -1,7 +1,8 @@
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { GlassColors } from '@/lib/theme';
+import { useThemeColor } from '@/hooks/use-theme-color';
+import { GlassColors, TINT } from '@/lib/theme';
 import { useCallback, useState } from 'react';
 import { FlatList, Modal, StyleSheet, TouchableOpacity, View, ViewStyle } from 'react-native';
 
@@ -68,6 +69,8 @@ export function Dropdown<T = string>({
 }: DropdownProps<T>) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const iconColor = useThemeColor({}, 'icon');
+  const tintColor = useThemeColor({}, 'tint');
   const [isOpen, setIsOpen] = useState(false);
 
   const selectedOption = options.find(option => option.value === value);
@@ -129,12 +132,12 @@ export function Dropdown<T = string>({
             )}
           </View>
           {isSelected && (
-            <IconSymbol name="checkmark" size={18} color="#007AFF" />
+            <IconSymbol name="checkmark" size={18} color={tintColor} />
           )}
         </TouchableOpacity>
       );
     },
-    [value, isDark, handleSelect]
+    [value, isDark, handleSelect, tintColor]
   );
 
   const keyExtractor = useCallback(
@@ -163,7 +166,7 @@ export function Dropdown<T = string>({
         <IconSymbol
           name={isOpen ? 'chevron.up' : 'chevron.down'}
           size={20}
-          color={isDark ? '#7c869e' : '#5c6477'}
+          color={iconColor}
         />
       </TouchableOpacity>
 
@@ -174,10 +177,13 @@ export function Dropdown<T = string>({
         onRequestClose={handleClose}
         accessibilityViewIsModal
       >
+        {/* Tap-outside-to-close. `accessible={false}` keeps it a passthrough
+            container so the options inside stay individually reachable. */}
         <TouchableOpacity
           style={[styles.overlay, { backgroundColor: isDark ? GlassColors.dark.backdrop : GlassColors.light.backdrop }]}
           activeOpacity={1}
           onPress={handleClose}
+          accessible={false}
         >
           <View style={[
             styles.modalContent,
@@ -255,7 +261,7 @@ const styles = StyleSheet.create({
   },
   selectedOptionLabel: {
     fontWeight: '600',
-    color: '#007AFF',
+    color: TINT,
   },
   optionDescription: {
     fontSize: 13,

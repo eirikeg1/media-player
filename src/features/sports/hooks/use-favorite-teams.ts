@@ -1,7 +1,17 @@
 import { getSportsDatabase } from '@/services/sports-service';
-import type { Team } from 'expo-m3u-parser';
+import type { SportsDatabase, Team } from 'expo-m3u-parser';
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
+
+import { useSportsQuery } from './use-sports-query';
+
+/** Shared identity for "no favourites", so the first loads agree on the list. */
+const NO_TEAMS: Team[] = [];
+
+/** There is one favourites list per user; nothing about the key ever changes. */
+const FAVORITES_KEY = 'favorite-teams';
+
+const fetchFavorites = (db: SportsDatabase): Promise<Team[]> => db.getFavoriteTeams();
 
 /**
  * Whether two favorite lists are interchangeable for everything the UI derives
@@ -23,63 +33,76 @@ function sameTeams(a: readonly Team[], b: readonly Team[]): boolean {
 }
 
 export function useFavoriteTeams() {
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const fetchRef = useRef(0);
+  const { data, isLoading, error, refresh, setData } = useSportsQuery<string, Team[]>({
+    key: FAVORITES_KEY,
+    fetcher: fetchFavorites,
+    fallback: "Couldn't load your favorite teams.",
+    // This reloads on every tab focus. An unchanged list must keep its array
+    // identity: a new one regroups the whole day and re-renders every row.
+    isEqual: sameTeams,
+  });
+  const teams = data ?? NO_TEAMS;
 
-  // `isLoading` covers the first load only: later refreshes (tab focus,
-  // pull-to-refresh) keep the current teams on screen instead of flickering.
-  const refresh = useCallback(async () => {
-    const fetchId = ++fetchRef.current;
-    try {
-      setError(null);
-      const db = await getSportsDatabase();
-      const result = await db.getFavoriteTeams();
-      if (fetchId === fetchRef.current) {
-        // This runs on every tab focus. An unchanged list must keep its array
-        // identity: a new one regroups the whole day and re-renders every row.
-        setTeams((previous) => (sameTeams(previous, result) ? previous : result));
-      }
-    } catch (err) {
-      if (fetchId === fetchRef.current) {
-        setError(err instanceof Error ? err.message : 'Failed to load favorite teams');
-        console.error('[useFavoriteTeams] Error:', err);
-      }
-    } finally {
-      if (fetchId === fetchRef.current) {
-        setIsLoading(false);
-      }
-    }
-  }, []);
+  // Every surface that shows favourites needs the same two derivations — the
+  // list of ids the day fetch is made with, and the set every row is checked
+  // against — and each of them is keyed on identity: a fresh array regroups the
+  // whole day, a fresh set re-renders every row. Derived once here so the
+  // screen and the detail routes share one identity per unchanged list.
+  const teamIds = useMemo(() => teams.map((team) => team.providerId), [teams]);
+  const teamIdSet = useMemo<ReadonlySet<number>>(() => new Set(teamIds), [teamIds]);
 
+  // The list as of this render, so the mutations below can roll back to it
+  // without depending on `teams` — a dependency that changed identity on every
+  // refresh and re-rendered the whole team list with it.
+  const teamsRef = useRef(teams);
+  teamsRef.current = teams;
+
+  // The query already loads on mount; this is only about coming *back* to the
+  // tab, where the favourites may have changed in the picker meanwhile.
+  const mountedRef = useRef(false);
   useFocusEffect(
     useCallback(() => {
-      refresh();
+      if (!mountedRef.current) {
+        mountedRef.current = true;
+        return;
+      }
+      void refresh();
     }, [refresh])
   );
 
-  const addTeam = useCallback(async (team: Team) => {
-    try {
-      const db = await getSportsDatabase();
-      await db.addFavoriteTeam(team);
+  const reload = useCallback(() => refresh(), [refresh]);
+
+  // Both mutations rethrow: the caller has an optimistic checkmark on screen and
+  // is the only place that can put it back and tell the user what happened.
+  const addTeam = useCallback(
+    async (team: Team) => {
+      try {
+        const db = await getSportsDatabase();
+        await db.addFavoriteTeam(team);
+      } catch (err) {
+        console.error('[useFavoriteTeams] Error adding team:', err);
+        throw err;
+      }
       await refresh();
-    } catch (err) {
-      console.error('[useFavoriteTeams] Error adding team:', err);
-    }
-  }, [refresh]);
+    },
+    [refresh]
+  );
 
-  const removeTeam = useCallback(async (provider: string, providerId: number) => {
-    const previous = teams;
-    setTeams((prev) => prev.filter((t) => !(t.provider === provider && t.providerId === providerId)));
-    try {
-      const db = await getSportsDatabase();
-      await db.removeFavoriteTeam(provider, providerId);
-    } catch (err) {
-      console.error('[useFavoriteTeams] Error removing team:', err);
-      setTeams(previous);
-    }
-  }, [teams]);
+  const removeTeam = useCallback(
+    async (provider: string, providerId: number) => {
+      const previous = teamsRef.current;
+      setData(previous.filter((t) => !(t.provider === provider && t.providerId === providerId)));
+      try {
+        const db = await getSportsDatabase();
+        await db.removeFavoriteTeam(provider, providerId);
+      } catch (err) {
+        console.error('[useFavoriteTeams] Error removing team:', err);
+        setData(previous);
+        throw err;
+      }
+    },
+    [setData]
+  );
 
-  return { teams, isLoading, error, refresh, addTeam, removeTeam };
+  return { teams, teamIds, teamIdSet, isLoading, error, refresh: reload, addTeam, removeTeam };
 }

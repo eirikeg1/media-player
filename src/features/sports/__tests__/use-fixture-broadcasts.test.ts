@@ -1,6 +1,6 @@
 import { getSportsDatabase } from '@/services/sports-service';
 import { usePlaylistStore } from '@/stores/playlist/playlist-store';
-import { renderHook, waitFor } from '@testing-library/react-native';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
 import type { Fixture, RankedBroadcast, SportsDatabase } from 'expo-m3u-parser';
 
 import { clearBroadcastCache } from '../broadcast-cache';
@@ -109,6 +109,31 @@ describe('useFixtureBroadcasts', () => {
 
     await renderHook(() => useFixtureBroadcasts(fixture()));
     await waitFor(() => expect(match).toHaveBeenCalledTimes(2));
+  });
+
+  it('reports a crashed match as an error, and retries it on demand', async () => {
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    const match = jest
+      .spyOn(db, 'findPlayableChannelsForFixture')
+      .mockRejectedValueOnce(new Error('FfiException: channel database is locked'))
+      .mockResolvedValue([broadcast('ch-1')]);
+
+    const { result } = await renderHook(() => useFixtureBroadcasts(fixture()));
+
+    // Not an empty result: the sheet must not claim the playlist carries no
+    // channel for this match when the matcher never got to answer.
+    await waitFor(() =>
+      expect(result.current.error).toBe("Couldn't find channels for this match.")
+    );
+    expect(result.current.broadcasts).toEqual([]);
+
+    // A failed run caches nothing, so the retry really does re-match.
+    await act(async () => {
+      result.current.retry();
+    });
+    await waitFor(() => expect(result.current.broadcasts).toHaveLength(1));
+    expect(result.current.error).toBeNull();
+    expect(match).toHaveBeenCalledTimes(2);
   });
 
   it('matches nothing without a fixture or an active playlist', async () => {

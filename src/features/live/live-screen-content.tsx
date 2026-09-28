@@ -1,24 +1,41 @@
 import { ChannelItem } from '@/features/live/channel-item';
-import { LiveEmptyState } from '@/features/live/live-empty-state';
 import { SkeletonGrid } from '@/components/ui/display/skeleton-grid';
+import { EmptyState, ErrorState, Spinner } from '@/components/ui/display/state';
 import { LiveTopBar, type LiveViewMode } from '@/features/live/live-top-bar';
 import { EpgGuide } from '@/features/live/guide/epg-guide';
 import InfiniteParallaxGrid from '@/components/ui/containers/infinite-parallax-grid';
 import { Image } from 'expo-image';
-import { IconSymbol } from '@/components/ui/display/icon-symbol';
-import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
-import { getRawChannelId } from '@/lib/channel-utils';
+import { getChannelId, getRawChannelId } from '@/lib/channel-utils';
+import { useChromeInsets } from '@/hooks/use-chrome-insets';
 import { useHeaderBackground } from '@/hooks/use-header-background';
-import type { GroupOption } from '@/lib/group-utils';
+import { FAVORITES_GROUP_SENTINEL, type GroupOption } from '@/lib/group-utils';
 import type { SortOption } from '@/types/sort.types';
 import type { EpgProgramme } from 'expo-m3u-parser';
 import type { Channel, Playlist } from '@/types/playlist.types';
 import type { ListRenderItemInfo } from '@shopify/flash-list';
 import { useCallback, useMemo } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const DEFAULT_LIVE_HEADER = require('../../../assets/images/parallax-headers/live/header-champions-league.jpg');
+
+/** Human-readable label for a group filter — never the raw sentinel string. */
+function groupLabel(selectedGroupName: string): string {
+  return selectedGroupName === FAVORITES_GROUP_SENTINEL ? 'Favorite Groups' : selectedGroupName;
+}
+
+/** Why the channel list came back empty, in the user's terms. */
+function noChannelsMessage(
+  searchText: string,
+  selectedGroupName: string,
+  hasUnmatchedFavoriteGroups: boolean
+): string {
+  if (searchText.trim().length > 0) return `No channels found for "${searchText}"`;
+  if (hasUnmatchedFavoriteGroups) return 'None of your favorite groups are in this playlist';
+  if (selectedGroupName) return `No channels found in "${groupLabel(selectedGroupName)}"`;
+  return "This playlist doesn't contain any channels";
+}
 
 interface LiveScreenContentProps {
   viewMode: LiveViewMode;
@@ -31,6 +48,11 @@ interface LiveScreenContentProps {
   selectedGroup: string;
   searchText: string;
   isRefreshing: boolean;
+  /** Message from a failed channel or group query, if any. */
+  error?: string | null;
+  onRetry?: () => void;
+  /** Favorites filter is on, but none of the favorite groups exist here. */
+  hasUnmatchedFavoriteGroups?: boolean;
   onGroupSelect: (group: string) => void;
   onSearchChange: (text: string) => void;
   onChannelPress: (channel: Channel) => void;
@@ -39,8 +61,6 @@ interface LiveScreenContentProps {
   isLoadingMore?: boolean;
   hasMore?: boolean;
   backgroundColor: string;
-  iconColor: string;
-  tintColor: string;
   favoriteGroups: string[];
   onToggleFavoriteGroup: (name: string) => void;
   sortOptions: SortOption[];
@@ -62,6 +82,9 @@ export function LiveScreenContent({
   selectedGroup,
   searchText,
   isRefreshing,
+  error,
+  onRetry,
+  hasUnmatchedFavoriteGroups,
   onGroupSelect,
   onSearchChange,
   onChannelPress,
@@ -70,8 +93,6 @@ export function LiveScreenContent({
   isLoadingMore = false,
   hasMore = true,
   backgroundColor,
-  iconColor,
-  tintColor,
   favoriteGroups,
   onToggleFavoriteGroup,
   sortOptions,
@@ -82,10 +103,10 @@ export function LiveScreenContent({
   excludeAdult,
 }: LiveScreenContentProps) {
   const customHeader = useHeaderBackground('live');
+  const insets = useSafeAreaInsets();
+  const chromeInsets = useChromeInsets();
 
-  const keyExtractor = useCallback((item: Channel, index: number) => {
-    return `channel-${item.name}-${index}`;
-  }, []);
+  const keyExtractor = useCallback((item: Channel) => getChannelId(item), []);
 
   const renderChannelItem = useCallback(({ item: channel }: ListRenderItemInfo<Channel>) => {
     const programme = currentProgrammes?.get(channel.tvg?.id ?? '') ?? null;
@@ -100,25 +121,37 @@ export function LiveScreenContent({
     );
   }, [onChannelPress, currentProgrammes]);
 
-  const EmptyComponent = useCallback(() => {
+  // An element, not a component type: FlashList remounts the latter on every
+  // render, throwing away the empty state's own state each time.
+  const emptyComponent = useMemo(() => {
+    // A failure must never read as "this playlist has no channels".
+    if (error) {
+      return <ErrorState title="Couldn't Load Channels" message={error} onRetry={onRetry} />;
+    }
+
+    const isSearching = searchText.trim().length > 0;
     return (
-      <LiveEmptyState
-        searchText={searchText}
-        selectedGroupName={selectedGroup}
-        iconColor={iconColor}
+      <EmptyState
+        icon={isSearching ? 'magnifyingglass' : 'tv'}
+        title={isSearching ? 'No Results' : 'No Channels'}
+        message={noChannelsMessage(
+          searchText,
+          selectedGroup,
+          hasUnmatchedFavoriteGroups ?? false
+        )}
       />
     );
-  }, [searchText, selectedGroup, iconColor]);
+  }, [searchText, selectedGroup, hasUnmatchedFavoriteGroups, error, onRetry]);
 
   // Loading more indicator for pagination
   const LoadingMoreComponent = useMemo(() => {
     if (!isLoadingMore) return undefined;
     return (
       <View style={styles.loadingMoreContainer}>
-        <ActivityIndicator size="small" color={tintColor} />
+        <Spinner />
       </View>
     );
-  }, [isLoadingMore, tintColor]);
+  }, [isLoadingMore]);
 
   // Handler for end reached - only trigger if we have more to load and not already loading
   const handleEndReached = useCallback(() => {
@@ -127,75 +160,66 @@ export function LiveScreenContent({
     }
   }, [hasMore, isLoadingMore, onLoadMore]);
 
+  const liveTopBar = (
+    <LiveTopBar
+      viewMode={viewMode}
+      onViewModeChange={onViewModeChange}
+      groups={groups}
+      selectedGroupName={selectedGroup}
+      onGroupSelect={onGroupSelect}
+      searchText={searchText}
+      onSearchTextChange={onSearchChange}
+      favoriteGroups={favoriteGroups}
+      onToggleFavoriteGroup={onToggleFavoriteGroup}
+      sortOptions={sortOptions}
+      selectedSortId={selectedSortId}
+      sortOrder={sortOrder}
+      onSortSelect={onSortSelect}
+    />
+  );
+
+  // Inside the parallax list the bar has to stretch so its background covers the
+  // gap left by the header spacer; as a plain sibling it must not.
   const topBarComponent = (
-    <ThemedView style={[styles.contentContainer, styles.gridBackground]}>
-      <LiveTopBar
-        viewMode={viewMode}
-        onViewModeChange={onViewModeChange}
-        groups={groups}
-        selectedGroupName={selectedGroup}
-        onGroupSelect={onGroupSelect}
-        searchText={searchText}
-        onSearchTextChange={onSearchChange}
-        favoriteGroups={favoriteGroups}
-        onToggleFavoriteGroup={onToggleFavoriteGroup}
-        sortOptions={sortOptions}
-        selectedSortId={selectedSortId}
-        sortOrder={sortOrder}
-        onSortSelect={onSortSelect}
-      />
-    </ThemedView>
+    <ThemedView style={[styles.contentContainer, styles.gridBackground]}>{liveTopBar}</ThemedView>
   );
 
   // Show no playlist message only when we've confirmed there's no playlist
   if (!isLoading && !playlist) {
     return (
       <View style={[styles.container, { backgroundColor }]}>
-        <ThemedView style={styles.emptyContainer}>
-          <IconSymbol name="tv" size={64} color={iconColor} />
-          <ThemedText style={styles.emptyTitle}>
-            No Active Playlist
-          </ThemedText>
-          <ThemedText style={styles.emptyText} type="subtitle">
-            Please add and select a playlist from the settings
-          </ThemedText>
-        </ThemedView>
+        <EmptyState
+          icon="tv"
+          title="No Active Playlist"
+          message="Please add and select a playlist from the settings"
+          safeArea
+        />
       </View>
     );
   }
 
-  // Guide mode — render EPG guide instead of channel grid
+  // Guide mode — a fixed two-axis grid that has to own its own scrolling, so it
+  // is a full-height sibling of the top bar rather than a cell inside the
+  // parallax list (which nested two scrollers and capped the guide at 400px).
   if (viewMode === 'guide') {
     return (
-      <View style={[styles.container, { backgroundColor }]}>
-        <InfiniteParallaxGrid
-          data={[]}
-          renderItem={renderChannelItem}
-          keyExtractor={keyExtractor}
-          headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
-          headerImage={
-            <Image
-              source={customHeader ?? DEFAULT_LIVE_HEADER}
-              style={styles.headerImage}
-              contentFit="cover"
-            />
-          }
-          ListHeaderComponentAfterParallax={topBarComponent}
-          columns={4}
-          padding={5}
-          gap={4}
-          ListEmptyComponent={
-            <EpgGuide
-              playlistId={playlist?.id}
-              favoriteChannels={favoriteChannels}
-              favoriteGroups={favoriteGroups}
-              excludeAdult={excludeAdult}
-              onChannelPress={onChannelPress}
-              onToggleFavoriteGroup={onToggleFavoriteGroup}
-            />
-          }
-          refreshing={isRefreshing}
+      <View
+        style={[
+          styles.container,
+          { backgroundColor, paddingTop: insets.top, paddingBottom: chromeInsets.bottom },
+        ]}
+      >
+        <ThemedView style={styles.contentContainer}>{liveTopBar}</ThemedView>
+        <EpgGuide
+          playlistId={playlist?.id}
+          favoriteChannels={favoriteChannels}
+          favoriteGroups={favoriteGroups}
+          groups={groups}
+          excludeAdult={excludeAdult}
+          onChannelPress={onChannelPress}
+          onToggleFavoriteGroup={onToggleFavoriteGroup}
           onRefresh={onRefresh}
+          isRefreshing={isRefreshing}
         />
       </View>
     );
@@ -209,7 +233,6 @@ export function LiveScreenContent({
           data={[]}
           renderItem={renderChannelItem}
           keyExtractor={keyExtractor}
-          headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
           headerImage={
             <Image
               source={customHeader ?? DEFAULT_LIVE_HEADER}
@@ -236,7 +259,6 @@ export function LiveScreenContent({
         data={channels}
         renderItem={renderChannelItem}
         keyExtractor={keyExtractor}
-        headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
         headerImage={
           <Image
             source={customHeader ?? DEFAULT_LIVE_HEADER}
@@ -248,7 +270,7 @@ export function LiveScreenContent({
         columns={4}
         padding={5}
         gap={4}
-        ListEmptyComponent={<EmptyComponent />}
+        ListEmptyComponent={emptyComponent}
         ListFooterComponent={LoadingMoreComponent}
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
@@ -273,24 +295,6 @@ const styles = StyleSheet.create({
   gridBackground: {
     flex: 1,
     minHeight: '100%',
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 32,
-    minHeight: 200,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptyText: {
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
   },
   loadingMoreContainer: {
     paddingVertical: 16,

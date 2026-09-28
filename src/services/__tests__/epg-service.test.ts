@@ -6,7 +6,7 @@
  * BASIC_XMLTV fixture (five programmes on 2026-06-12). Time-sensitive queries
  * pin the clock to EPG_FIXTURE_NOW (19:30 UTC) with fake timers.
  */
-import { EpgService } from '../epg-service';
+import { EpgService, isEpgFetchComplete } from '../epg-service';
 import { RustChannelService } from '../rust-channel-service';
 import { __registerRemoteM3u, __registerRemoteXmltv } from '@/test/fakes/m3u-database-fake';
 import { BASIC_M3U, BASIC_XMLTV, EPG_FIXTURE_NOW } from '@/test/fixtures';
@@ -53,11 +53,12 @@ describe('detectAndFetchEpgSources', () => {
     __registerRemoteXmltv(GUIDE_URL, BASIC_XMLTV);
     await importBasicPlaylist();
 
-    const sources = await EpgService.detectAndFetchEpgSources('pl-1');
+    const { sources, succeeded, failed } = await EpgService.detectAndFetchEpgSources('pl-1');
 
     expect(sources).toHaveLength(1);
     expect(sources[0].url).toBe(GUIDE_URL);
     expect(sources[0].autoDetected).toBe(true);
+    expect({ succeeded, failed }).toEqual({ succeeded: 1, failed: 0 });
 
     const [stored] = await EpgService.getEpgSourcesByPlaylist('pl-1');
     expect(stored.programmeCount).toBe(PROGRAMME_COUNT);
@@ -76,7 +77,7 @@ describe('detectAndFetchEpgSources', () => {
     __registerRemoteXmltv(userEpgUrl, BASIC_XMLTV);
     await RustChannelService.fetchAndImportPlaylist('pl-1', 'Main', PLAYLIST_URL);
 
-    const sources = await EpgService.detectAndFetchEpgSources('pl-1', userEpgUrl);
+    const { sources } = await EpgService.detectAndFetchEpgSources('pl-1', userEpgUrl);
 
     expect(sources).toHaveLength(1);
     expect(sources[0]).toMatchObject({
@@ -96,9 +97,9 @@ describe('detectAndFetchEpgSources', () => {
     __registerRemoteXmltv(userEpgUrl, BASIC_XMLTV);
     await importBasicPlaylist();
 
-    const sources = await EpgService.detectAndFetchEpgSources('pl-1', userEpgUrl);
+    const { sources } = await EpgService.detectAndFetchEpgSources('pl-1', userEpgUrl);
 
-    expect(sources.map((s) => s.url).sort()).toEqual([GUIDE_URL, userEpgUrl]);
+    expect(sources.map((source) => source.url).sort()).toEqual([GUIDE_URL, userEpgUrl]);
 
     const stored = await EpgService.getEpgSourcesByPlaylist('pl-1');
     expect(stored).toHaveLength(2);
@@ -114,7 +115,7 @@ describe('detectAndFetchEpgSources', () => {
     __registerRemoteXmltv(xtreamEpgUrl, BASIC_XMLTV);
     await RustChannelService.fetchAndImportPlaylist('pl-x', 'Xtream', xtreamPlaylistUrl);
 
-    const sources = await EpgService.detectAndFetchEpgSources('pl-x');
+    const { sources } = await EpgService.detectAndFetchEpgSources('pl-x');
 
     expect(sources).toHaveLength(1);
     expect(sources[0]).toMatchObject({
@@ -132,22 +133,39 @@ describe('detectAndFetchEpgSources', () => {
     __registerRemoteM3u(PLAYLIST_URL, NO_EPG_M3U);
     await RustChannelService.fetchAndImportPlaylist('pl-1', 'Main', PLAYLIST_URL);
 
-    const sources = await EpgService.detectAndFetchEpgSources('pl-1');
+    const result = await EpgService.detectAndFetchEpgSources('pl-1');
 
-    expect(sources).toEqual([]);
+    expect(result).toEqual({ sources: [], succeeded: 0, failed: 0 });
     expect(await EpgService.getEpgSourcesByPlaylist('pl-1')).toEqual([]);
+    // Nothing to download is not a failure: there is no guide to come back for.
+    expect(isEpgFetchComplete(result)).toBe(true);
   });
 
   it('survives a source whose guide cannot be downloaded', async () => {
     // tvg-url points at the guide, but no XMLTV fixture is registered.
     await importBasicPlaylist();
 
-    const sources = await EpgService.detectAndFetchEpgSources('pl-1');
+    const result = await EpgService.detectAndFetchEpgSources('pl-1');
 
-    expect(sources).toHaveLength(1);
+    expect(result.sources).toHaveLength(1);
+    expect(result).toMatchObject({ succeeded: 0, failed: 1 });
+    // The guide is missing, so the caller must retry rather than record a fetch.
+    expect(isEpgFetchComplete(result)).toBe(false);
     const [stored] = await EpgService.getEpgSourcesByPlaylist('pl-1');
     expect(stored.programmeCount).toBe(0);
     expect(await EpgService.getChannelSchedule('tv2sport1.no', DAY_START, DAY_END)).toEqual([]);
+  });
+
+  it('counts a partial download as complete — some guide data did arrive', async () => {
+    const userEpgUrl = 'https://user.example.com/custom.xml';
+    __registerRemoteXmltv(userEpgUrl, BASIC_XMLTV);
+    // Only the user-provided source has a fixture; the detected one has none.
+    await importBasicPlaylist();
+
+    const result = await EpgService.detectAndFetchEpgSources('pl-1', userEpgUrl);
+
+    expect(result).toMatchObject({ succeeded: 1, failed: 1 });
+    expect(isEpgFetchComplete(result)).toBe(true);
   });
 });
 

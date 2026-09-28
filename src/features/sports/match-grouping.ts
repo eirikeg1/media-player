@@ -75,9 +75,13 @@ export function groupFixturesByLeague(fixtures: readonly Fixture[], options: Gro
       group = {
         key,
         title: fixture.competitionName,
-        subtitle: fixture.competitionCountry,
-        logoUrl: fixture.competitionId != null ? competitionLogoUrl(fixture.competitionId) : undefined,
-        competitionId: fixture.competitionId,
+        subtitle: fixture.competitionCountry ?? undefined,
+        // The stored emblem when the row has one; the provider's own URL for a
+        // row cached before that column existed (see `competitionLogoUrl`).
+        logoUrl:
+          fixture.competitionEmblemUrl ??
+          (fixture.competitionId != null ? competitionLogoUrl(fixture.competitionId) : undefined),
+        competitionId: fixture.competitionId ?? undefined,
         isFavorites: false,
         isRanked,
         fixtures: [],

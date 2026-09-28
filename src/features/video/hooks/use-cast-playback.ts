@@ -13,11 +13,36 @@ import {
 
 import { resolveRedirects } from 'expo-m3u-parser';
 import { getChannelId } from '@/lib/channel-utils';
-import { usePlaybackSessionStore } from '@/stores/video/playback-session-store';
+import { buildVideoSource, usePlaybackSessionStore } from '@/stores/video/playback-session-store';
 import { useVideoPlayerStore } from '@/stores/video/player-store';
 import type { Channel } from '@/types/playlist.types';
 import { CONNECTION_RELEASE_DELAY_MS } from '../constants';
 import { parseXtreamUrl, type XtreamUrlInfo } from '../utils/xtream-url';
+
+/**
+ * How long to wait for the redirect probe before casting the URL as it is. It
+ * is a courtesy for receivers that don't follow 302s, not a requirement — an
+ * unreachable or slow endpoint must not strand the cast in "loading" forever.
+ */
+const REDIRECT_TIMEOUT_MS = 5000;
+
+/** Resolve redirects, falling back to `url` if that takes too long or fails. */
+async function resolveRedirectsWithTimeout(url: string): Promise<string> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      resolveRedirects(url),
+      new Promise<string>((resolve) => {
+        timeout = setTimeout(() => resolve(url), REDIRECT_TIMEOUT_MS);
+      }),
+    ]);
+  } catch (error) {
+    console.warn('[Cast] Redirect resolution failed:', error);
+    return url;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 /** Map a URL to its MIME content type based on extension. */
 function getContentType(url: string): string {
@@ -102,6 +127,10 @@ export function useCastPlayback({ channel, streamUrl = channel.url, isCatchup }:
       // and bump the sequence so earlier in-flight loads abandon before calling loadMedia.
       const mySeq = ++loadSeqRef.current;
       castLoadedTargetRef.current = `${getChannelId(ch)}|${url}`;
+      // The claim is a lie until loadMedia is actually reached; anything that
+      // returns early below has to take it back, or the auto-load effect will
+      // never try this target again and the receiver sits on a blank screen.
+      let reachedLoadMedia = false;
 
       try {
         // 1. Try to parse as Xtream URL and query API for HLS support.
@@ -122,7 +151,7 @@ export function useCastPlayback({ channel, streamUrl = channel.url, isCatchup }:
         // 2. Resolve redirects — Chromecast default receiver may not follow 302s.
         //    Redirect endpoints return 302 immediately (no stream opened,
         //    no connection slot consumed).
-        castUrl = await resolveRedirects(castUrl);
+        castUrl = await resolveRedirectsWithTimeout(castUrl);
 
         // 3. Give the server time to release the connection slot
         //    (freed by the CONNECTING effect).
@@ -132,6 +161,7 @@ export function useCastPlayback({ channel, streamUrl = channel.url, isCatchup }:
         if (mySeq !== loadSeqRef.current) return;
 
         // 4. Load media on Chromecast.
+        reachedLoadMedia = true;
         try {
           await client.loadMedia({
             autoplay: true,
@@ -162,8 +192,13 @@ export function useCastPlayback({ channel, streamUrl = channel.url, isCatchup }:
           );
         }
       } catch (error) {
-        if (mySeq === loadSeqRef.current) castLoadedTargetRef.current = null;
         console.warn('[Cast] castMedia setup failed:', error);
+      } finally {
+        // Only the latest attempt may release the claim — a stale one must not
+        // wipe a newer successful load's.
+        if (!reachedLoadMedia && mySeq === loadSeqRef.current) {
+          castLoadedTargetRef.current = null;
+        }
       }
     },
     [client, isCatchup],
@@ -178,23 +213,33 @@ export function useCastPlayback({ channel, streamUrl = channel.url, isCatchup }:
     // The playback session owns the local player handle — reading it here (and
     // not a mirrored copy) is what guarantees it is actually unloaded before
     // the receiver claims the panel's only connection slot.
-    const localPlayer = usePlaybackSessionStore.getState().session?.player ?? null;
+    const session = usePlaybackSessionStore.getState().session;
+    if (!session) return;
+    const localPlayer = session.player;
+
+    const unload = () => {
+      didUnloadForCastRef.current = true;
+      localPlayer
+        .replaceAsync(null)
+        .catch((error) => console.warn('[Cast] Failed to unload local player:', error));
+    };
 
     if (castState === CastState.CONNECTING) {
-      localPlayer?.replaceAsync(null);
-      didUnloadForCastRef.current = true;
+      unload();
     } else if (connected) {
-      didUnloadForCastRef.current = true;
       // Unload local player — handles screen remount while already casting,
       // where a fresh session player would compete for the server stream slot.
-      localPlayer?.replaceAsync(null);
+      unload();
     } else if (didUnloadForCastRef.current) {
-      // Cast ended or connection failed — restore local player
+      // Cast ended or connection failed — restore local playback. Through
+      // buildVideoSource, or the channel's HTTP headers are dropped and a
+      // header-gated stream comes back as an IOException.
       castLoadedTargetRef.current = null;
       didUnloadForCastRef.current = false;
-      localPlayer?.replaceAsync(streamUrl);
+      localPlayer
+        .replaceAsync(buildVideoSource(session.channel, session.streamUrl))
+        .catch((error) => console.warn('[Cast] Failed to restore local player:', error));
     }
-
   }, [castState, streamUrl]);
 
   // Auto-load the stream when cast state is fully connected, or when what the

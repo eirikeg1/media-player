@@ -1,28 +1,29 @@
 import type { Fixture } from 'expo-m3u-parser';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { BackHandler, StatusBar } from 'react-native';
+import { BackHandler, StatusBar, View } from 'react-native';
 
 import { ConfirmDialog } from '@/components/ui/containers/modal/confirm-dialog';
 import { shouldHandOverToLive } from '@/features/sports/catchup';
+import { parseFixtureParam } from '@/features/sports/fixture-param';
+import { VIDEO_COLORS } from '@/features/video/constants';
 import { VideoPlayer } from '@/features/video/components/video-player';
+import { VideoStateButton } from '@/features/video/components/video-states';
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
-import { ThemedView } from '@/components/ui/display/themed-view';
-import { useThemeColor } from '@/hooks/use-theme-color';
+import { firstVisibleTabHref } from '@/features/user/visible-tabs';
 import { getChannelId } from '@/lib/channel-utils';
+import { hrefParam } from '@/lib/route-params';
 import { RustChannelService } from '@/services/rust-channel-service';
 import { useCastMiniPlayerStore } from '@/stores/video/cast-mini-player-store';
 import { useUserStore } from '@/stores/user/user-store';
-import { useVideoErrorStore } from '@/stores/video/error-store';
 import { useGestureStore } from '@/stores/video/gesture-store';
-import { useVideoNetworkStore } from '@/stores/video/network-store';
 import {
   sessionMatches,
   usePlaybackSessionStore,
 } from '@/stores/video/playback-session-store';
 import { useVideoPlayerStore } from '@/stores/video/player-store';
-import { usePlaybackQueueStore } from '@/stores/video/queue-store';
+import { usePlaybackQueueStore, type QueueHandover } from '@/stores/video/queue-store';
 import { parseCatchupParams } from '@/types/playback.types';
 import type { Channel } from '@/types/playlist.types';
 import type { ContentType } from '@/types/user.types';
@@ -44,6 +45,7 @@ export default function VideoPlayerScreen() {
     fixture?: string;
     catchupStart?: string;
     catchupDuration?: string;
+    origin?: string;
   }>();
   const contentType = (params.contentType as ContentType) || 'live';
 
@@ -54,18 +56,18 @@ export default function VideoPlayerScreen() {
     [params.catchupStart, params.catchupDuration]
   );
 
-  // Sports launches pass the associated fixture (serialized) so the player can
-  // surface SofaScore match widgets. Parse defensively — a bad value just means
-  // no widgets, never a crashed screen.
-  const fixture = useMemo<Fixture | null>(() => {
-    if (!params.fixture) return null;
-    try {
-      return JSON.parse(params.fixture) as Fixture;
-    } catch {
-      return null;
-    }
-  }, [params.fixture]);
-  const iconColor = useThemeColor({}, 'icon');
+  // Sports launches pass the associated fixture (serialised) so the player can
+  // surface SofaScore match widgets. Validated, not cast: see `fixture-param`.
+  const fixture = useMemo<Fixture | null>(
+    () => parseFixtureParam(params.fixture),
+    [params.fixture]
+  );
+
+  // The surface playback was launched from, carried on the session so the mini
+  // bar can put it back underneath the player when it expands. Validated, not
+  // cast: see `route-params`.
+  const origin = useMemo(() => hrefParam.decode(params.origin), [params.origin]);
+
   const stopVideoRef = useRef<(() => void) | null>(null);
 
   // Whether the mini bar's session already plays this exact channel
@@ -75,27 +77,54 @@ export default function VideoPlayerScreen() {
   const adoptedRef = useRef(
     !!params.channelId &&
       !!params.playlistId &&
-      sessionMatches(
-        usePlaybackSessionStore.getState().session,
-        params.channelId,
-        params.playlistId,
-        catchup
-      )
+      sessionMatches(usePlaybackSessionStore.getState().session, {
+        channelId: params.channelId,
+        playlistId: params.playlistId,
+        catchup,
+      })
   );
+
+  // The queue this session navigates with. Taken once from the launching
+  // screen's handover, then carried across in-screen channel switches — a
+  // launch that staged nothing plays with no queue rather than inheriting the
+  // previous session's (which is how next/previous used to jump from a movie
+  // into a list of live channels).
+  //
+  // Guarded rather than passed to `useRef`, whose argument is evaluated on
+  // every render: taking the handover is a *consuming* read, so a queue staged
+  // while this screen is mounted would be swallowed by an unrelated re-render.
+  const queueRef = useRef<QueueHandover | null>(null);
+  const hasTakenQueueRef = useRef(false);
+  if (!hasTakenQueueRef.current) {
+    hasTakenQueueRef.current = true;
+    queueRef.current = usePlaybackQueueStore.getState().takeStagedQueue(params.channelId);
+  }
 
   // Look up channel from route params
   const [channel, setChannel] = useState<Channel | null>(null);
   const [isLoadingChannel, setIsLoadingChannel] = useState(true);
 
-  // What is actually played: the channel's URL, or the panel's archive URL for
-  // a catch-up window. Null once resolved means the panel has no such archive.
-  const [streamUrl, setStreamUrl] = useState<string | null>(null);
-  const [isResolvingStream, setIsResolvingStream] = useState(true);
+  // The archive URL for a catch-up window. Null once resolved means the panel
+  // has no such archive. Live playback needs no resolution at all — see below.
+  const [catchupUrl, setCatchupUrl] = useState<string | null>(null);
+  const [isResolvingCatchup, setIsResolvingCatchup] = useState(!!catchup);
 
   // Resume playback state
   const [startPosition, setStartPosition] = useState(0);
   const [isResumeResolved, setIsResumeResolved] = useState(false);
   const [resumeDialogData, setResumeDialogData] = useState<{ position: number } | null>(null);
+
+  /**
+   * What is actually played, known synchronously for live playback: the
+   * channel's own URL. Deriving it instead of holding it in state is what lets
+   * a catch-up window hand over to live — a state value still holding the
+   * archive URL made the session look like a match, so the screen expanded the
+   * finished window instead of starting the live stream.
+   */
+  const streamUrl = useMemo(() => {
+    if (!channel) return null;
+    return catchup ? catchupUrl : channel.url;
+  }, [channel, catchup, catchupUrl]);
 
   // Dismiss the cast mini bar when this screen mounts (expanding from bar or new channel)
   useEffect(() => {
@@ -104,9 +133,8 @@ export default function VideoPlayerScreen() {
 
   // Reset stores not covered by the orchestrator's unmount cleanup. The
   // playback queue is NOT reset here — it belongs to the session (so
-  // next/previous survive minimize → expand) and resets in endSession.
+  // next/previous survive minimize → expand) and is replaced by startSession.
   useEffect(() => {
-    useVideoNetworkStore.getState().reset();
     useGestureStore.getState().reset();
   }, []);
 
@@ -114,29 +142,41 @@ export default function VideoPlayerScreen() {
   const queueHasNavigation = usePlaybackQueueStore(s => s.channels.length > 1);
   const hasNavigation = queueHasNavigation && contentType !== 'movie';
 
-  const handleChannelSwitch = useCallback((newChannel: Channel | null) => {
-    if (!newChannel) return;
+  const handleChannelSwitch = useCallback((newChannel: Channel, queue: QueueHandover) => {
     stopVideoRef.current?.();
+    queueRef.current = queue;
     setStartPosition(0);
     setIsResumeResolved(false);
     setResumeDialogData(null);
-    setStreamUrl(null);
-    setIsResolvingStream(true);
+    setCatchupUrl(null);
     setChannel(newChannel);
     setIsLoadingChannel(false);
   }, []);
 
-  const handleNext = useCallback(() => {
-    handleChannelSwitch(usePlaybackQueueStore.getState().goNext());
-  }, [handleChannelSwitch]);
+  const goToQueueChannel = useCallback(
+    (direction: 'next' | 'previous') => {
+      const queue = usePlaybackQueueStore.getState();
+      const newChannel = direction === 'next' ? queue.goNext() : queue.goPrevious();
+      if (!newChannel) return;
+      // Read back after the move: the new session has to be started with the
+      // queue *and* the index it just landed on, or navigating once would clear
+      // the queue that made it possible.
+      const { channels, currentIndex } = usePlaybackQueueStore.getState();
+      handleChannelSwitch(newChannel, { channels, index: currentIndex });
+    },
+    [handleChannelSwitch]
+  );
 
-  const handlePrevious = useCallback(() => {
-    handleChannelSwitch(usePlaybackQueueStore.getState().goPrevious());
-  }, [handleChannelSwitch]);
+  const handleNext = useCallback(() => goToQueueChannel('next'), [goToQueueChannel]);
+  const handlePrevious = useCallback(() => goToQueueChannel('previous'), [goToQueueChannel]);
 
   useEffect(() => {
     if (!params.channelId || !params.playlistId) {
+      // Nothing to play and nothing to wait for: fall through to the "Invalid
+      // Channel" layout instead of sitting on the loading screen forever.
       setIsLoadingChannel(false);
+      setIsResolvingCatchup(false);
+      setIsResumeResolved(true);
       return;
     }
 
@@ -148,36 +188,38 @@ export default function VideoPlayerScreen() {
       return;
     }
 
+    let cancelled = false;
     RustChannelService.getChannelById(params.playlistId, params.channelId)
-      .then(setChannel)
+      .then((loaded) => {
+        if (!cancelled) setChannel(loaded);
+      })
       .catch((error) => {
         console.error('Failed to load channel:', error);
       })
-      .finally(() => setIsLoadingChannel(false));
+      .finally(() => {
+        if (!cancelled) setIsLoadingChannel(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [params.channelId, params.playlistId]);
 
-  // Resolve what to play. Live playback is the channel's own URL; a catch-up
-  // window has to be turned into a panel archive URL, which only Xtream
+  // Resolve the catch-up window into a panel archive URL, which only Xtream
   // playlists can serve (null otherwise — see the error layout below).
   useEffect(() => {
-    if (!channel || isLoadingChannel) return;
-
-    if (!catchup) {
-      setStreamUrl(channel.url);
-      setIsResolvingStream(false);
-      return;
-    }
+    if (!channel || isLoadingChannel || !catchup) return;
 
     // Expanding from the mini bar: the session already holds the archive URL.
     const session = usePlaybackSessionStore.getState().session;
     if (adoptedRef.current && session) {
-      setStreamUrl(session.streamUrl);
-      setIsResolvingStream(false);
+      setCatchupUrl(session.streamUrl);
+      setIsResolvingCatchup(false);
       return;
     }
 
     let cancelled = false;
-    setIsResolvingStream(true);
+    setIsResolvingCatchup(true);
     RustChannelService.getCatchupStreamUrl(
       params.playlistId,
       getChannelId(channel),
@@ -185,13 +227,13 @@ export default function VideoPlayerScreen() {
       catchup.durationMinutes
     )
       .then((url) => {
-        if (!cancelled) setStreamUrl(url);
+        if (!cancelled) setCatchupUrl(url);
       })
       .catch((error) => {
         console.error('Failed to resolve catch-up stream:', error);
       })
       .finally(() => {
-        if (!cancelled) setIsResolvingStream(false);
+        if (!cancelled) setIsResolvingCatchup(false);
       });
 
     return () => {
@@ -221,19 +263,24 @@ export default function VideoPlayerScreen() {
       return;
     }
 
+    let cancelled = false;
     const channelId = getChannelId(channel);
     useUserStore.getState().getSavedPosition(userId, params.playlistId, channelId)
       .then((saved) => {
+        if (cancelled) return;
         if (!saved) {
           setIsResumeResolved(true);
           return;
         }
-
         setResumeDialogData({ position: saved.lastPosition });
       })
       .catch(() => {
-        setIsResumeResolved(true);
+        if (!cancelled) setIsResumeResolved(true);
       });
+
+    return () => {
+      cancelled = true;
+    };
   }, [channel, isLoadingChannel, contentType, params.playlistId]);
 
   // Start (or adopt) the app-wide playback session once the channel and
@@ -242,7 +289,13 @@ export default function VideoPlayerScreen() {
   useEffect(() => {
     if (!channel || !isResumeResolved || !streamUrl || !params.playlistId) return;
     const store = usePlaybackSessionStore.getState();
-    if (sessionMatches(store.session, getChannelId(channel), params.playlistId, catchup)) {
+    const target = {
+      channelId: getChannelId(channel),
+      playlistId: params.playlistId,
+      catchup,
+      streamUrl,
+    };
+    if (sessionMatches(store.session, target)) {
       store.expand();
       return;
     }
@@ -251,11 +304,13 @@ export default function VideoPlayerScreen() {
       playlistId: params.playlistId,
       contentType,
       fixture,
+      origin,
       startPosition,
       streamUrl,
       catchup,
+      queue: queueRef.current,
     });
-  }, [channel, isResumeResolved, streamUrl, catchup, params.playlistId, contentType, fixture, startPosition]);
+  }, [channel, isResumeResolved, streamUrl, catchup, params.playlistId, contentType, fixture, origin, startPosition]);
 
   // Hand a catch-up window over to the live stream when it runs out. The panel
   // fixes the archive file's length at request time, so a window over a match
@@ -275,6 +330,9 @@ export default function VideoPlayerScreen() {
           playlistId: params.playlistId,
           contentType,
           ...(params.fixture ? { fixture: params.fixture } : {}),
+          // The launch origin outlives the hand-over: the surface the viewer
+          // came from is the same one whether they watch the archive or live.
+          ...(params.origin ? { origin: params.origin } : {}),
         },
       });
     });
@@ -288,6 +346,7 @@ export default function VideoPlayerScreen() {
     params.channelId,
     params.playlistId,
     params.fixture,
+    params.origin,
     contentType,
   ]);
 
@@ -298,8 +357,24 @@ export default function VideoPlayerScreen() {
     (s) =>
       !!channel &&
       !!params.playlistId &&
-      sessionMatches(s.session, getChannelId(channel), params.playlistId, catchup)
+      !!streamUrl &&
+      sessionMatches(s.session, {
+        channelId: getChannelId(channel),
+        playlistId: params.playlistId,
+        catchup,
+        streamUrl,
+      })
   );
+
+  /**
+   * Leave the screen, falling back to the tabs when this route was opened cold
+   * (a deep link, a notification) and there is no history to pop. `/(tabs)` on
+   * its own lands on Home, which the user may have hidden.
+   */
+  const dismiss = useCallback(() => {
+    if (router.canGoBack()) router.back();
+    else router.replace(firstVisibleTabHref(useUserStore.getState().currentUser?.settings));
+  }, [router]);
 
   // Leaving the screen: healthy local playback minimizes into the mini bar
   // and keeps playing; casting hands off to the cast bar; a failed stream
@@ -313,38 +388,54 @@ export default function VideoPlayerScreen() {
         .activate(channel, params.playlistId, contentType, streamUrl, catchup);
       // The cast bar takes over — the idle local player isn't needed anymore.
       sessionStore.endSession();
-    } else if (sessionStore.session && !useVideoErrorStore.getState().hasError) {
+    } else if (sessionStore.session && !sessionStore.session.error) {
       sessionStore.minimize();
     } else {
       stopVideoRef.current?.();
       sessionStore.endSession();
     }
-    router.back();
-  }, [router, channel, streamUrl, catchup, params.playlistId, contentType]);
+    dismiss();
+  }, [dismiss, channel, streamUrl, catchup, params.playlistId, contentType]);
 
+  // Registered once with a stable callback: re-registering on every identity
+  // change of `handleGoBack` pushed this handler to the front of the LIFO stack
+  // again and again, so it started swallowing overlays' own back handling.
+  const handleGoBackRef = useRef(handleGoBack);
+  handleGoBackRef.current = handleGoBack;
   useLayoutEffect(() => {
     const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
-      handleGoBack();
+      handleGoBackRef.current();
       return true;
     });
 
     return () => backHandler.remove();
-  }, [handleGoBack]);
-
-  // Stable identities: the orchestrator's focus effect and stop-function
-  // registration hang off these, and a new identity on every render would
-  // re-run them (the focus cleanup pauses playback).
-  const handleStopVideo = useCallback(() => {
-    // This will be called when video stops
   }, []);
 
   const handleRegisterStopFunction = useCallback((stopFn: () => void) => {
     stopVideoRef.current = stopFn;
   }, []);
 
-  if (isLoadingChannel || !isResumeResolved || isResolvingStream) {
+  /** Switch a catch-up launch over to the channel's live stream. */
+  const watchLive = useCallback(() => {
+    router.replace({
+      pathname: '/video-player',
+      params: {
+        channelId: params.channelId,
+        playlistId: params.playlistId,
+        contentType,
+        ...(params.fixture ? { fixture: params.fixture } : {}),
+        ...(params.origin ? { origin: params.origin } : {}),
+      },
+    });
+  }, [router, params.channelId, params.playlistId, params.fixture, params.origin, contentType]);
+
+  // Waiting for the channel, and then for what depends on it. Without a channel
+  // there is nothing left to resolve — a rejected lookup must fall through to
+  // the "Invalid Channel" layout rather than wait for a resume position that
+  // will never be asked for.
+  if (isLoadingChannel || (channel && (!isResumeResolved || isResolvingCatchup))) {
     return (
-      <ThemedView style={styles.errorContainer}>
+      <View style={styles.errorContainer}>
         <StatusBar hidden />
         {resumeDialogData && (
           <ConfirmDialog
@@ -371,76 +462,105 @@ export default function VideoPlayerScreen() {
             ]}
           />
         )}
-      </ThemedView>
+      </View>
     );
   }
 
   if (!channel) {
     return (
-      <ThemedView style={styles.errorContainer}>
-        <StatusBar hidden />
-        <IconSymbol name="exclamationmark.triangle" size={64} color={iconColor} />
-        <ThemedText style={styles.errorTitle}>Invalid Channel</ThemedText>
-        <ThemedText style={styles.errorSubtitle} type="subtitle">
-          No channel data was provided
-        </ThemedText>
-      </ThemedView>
+      <UnavailableLayout
+        title="Invalid Channel"
+        message="No channel data was provided"
+        onBack={dismiss}
+      />
     );
   }
 
   // Only reachable for catch-up: live playback always resolves to channel.url.
   if (!streamUrl) {
     return (
-      <ThemedView style={styles.errorContainer}>
-        <StatusBar hidden />
-        <IconSymbol name="exclamationmark.triangle" size={64} color={iconColor} />
-        <ThemedText style={styles.errorTitle}>Catch-up unavailable</ThemedText>
-        <ThemedText style={styles.errorSubtitle} type="subtitle">
-          This channel has no archive for that time.
-        </ThemedText>
-      </ThemedView>
+      <UnavailableLayout
+        title="Catch-up unavailable"
+        message="This channel has no archive for that time."
+        onBack={dismiss}
+        onWatchLive={watchLive}
+      />
     );
   }
 
   // One-frame gap while the session effect above starts/replaces the session.
   if (!isSessionReady) {
     return (
-      <ThemedView style={styles.container}>
+      <View style={styles.container}>
         <StatusBar hidden />
-      </ThemedView>
+      </View>
     );
   }
 
   return (
-    <ThemedView style={styles.container}>
+    <View style={styles.container}>
       <StatusBar hidden />
       <VideoPlayer
         channel={channel}
         streamUrl={streamUrl}
         startPosition={startPosition}
         onBack={handleGoBack}
-        onStopVideo={handleStopVideo}
         onRegisterStopFunction={handleRegisterStopFunction}
         onNext={handleNext}
         onPrevious={handlePrevious}
         hasNavigation={hasNavigation}
         fixture={fixture}
       />
-    </ThemedView>
+    </View>
+  );
+}
+
+interface UnavailableLayoutProps {
+  title: string;
+  message: string;
+  onBack: () => void;
+  /** Offered when the live stream is a usable alternative (catch-up launches). */
+  onWatchLive?: () => void;
+}
+
+/**
+ * Nothing can be played, and the player chrome that would normally offer a way
+ * out never mounts — so this layout has to carry it itself.
+ */
+function UnavailableLayout({ title, message, onBack, onWatchLive }: UnavailableLayoutProps) {
+  return (
+    <View style={styles.errorContainer}>
+      <StatusBar hidden />
+      <IconSymbol name="exclamationmark.triangle" size={64} color={VIDEO_COLORS.text} />
+      <ThemedText style={styles.errorTitle}>{title}</ThemedText>
+      <ThemedText style={styles.errorSubtitle} type="subtitle">
+        {message}
+      </ThemedText>
+      <View style={styles.errorActions}>
+        <VideoStateButton label="Go Back" onPress={onBack} accessibilityLabel="Go back" />
+        {onWatchLive && (
+          <VideoStateButton
+            label="Watch live"
+            onPress={onWatchLive}
+            accessibilityLabel="Watch the live stream instead"
+          />
+        )}
+      </View>
+    </View>
   );
 }
 
 const styles = {
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: VIDEO_COLORS.background,
   },
   errorContainer: {
     flex: 1,
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
     padding: 32,
-    backgroundColor: '#000',
+    backgroundColor: VIDEO_COLORS.background,
   },
   errorTitle: {
     fontSize: 20,
@@ -448,10 +568,18 @@ const styles = {
     marginTop: 16,
     marginBottom: 8,
     textAlign: 'center' as const,
+    color: VIDEO_COLORS.text,
   },
   errorSubtitle: {
     fontSize: 14,
     textAlign: 'center' as const,
     lineHeight: 20,
+    color: VIDEO_COLORS.subtitle,
+  },
+  errorActions: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 12,
+    marginTop: 24,
   },
 };

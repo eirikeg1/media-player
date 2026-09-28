@@ -1,8 +1,7 @@
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import type { Fixture } from 'expo-m3u-parser';
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import {
-  BackHandler,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -14,8 +13,11 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useBackClose } from '@/hooks/use-back-close';
+import { useLiveTick } from './hooks/use-live-tick';
 import { MatchDetailContent } from './match-detail/match-detail-content';
-import { buildMatchTabs, getFixtureScoreDisplay } from './match-widgets';
+import { DETAIL_BACKGROUND } from './match-detail/match-detail-shared';
+import { buildMatchTabs, getFixtureScoreDisplay, isMatchLive } from './match-widgets';
 
 interface MatchWidgetOverlayProps {
   visible: boolean;
@@ -33,7 +35,7 @@ type ContentOrientation = 'landscape' | 'portrait';
  *
  * It is rendered as an absolute sibling of the `VideoView` (not a native
  * `Modal`) so the stream keeps playing and stays visible behind the dimmed
- * backdrop. When hidden it renders nothing, so the WebView is not created until
+ * backdrop. When hidden it renders nothing, so no match detail is fetched until
  * the user opens it.
  *
  * The card keeps the **same on-screen footprint** whether it is showing
@@ -51,8 +53,14 @@ export const MatchWidgetOverlay = memo(function MatchWidgetOverlay({
   const { width: winW, height: winH } = useWindowDimensions();
   const tabs = useMemo(() => buildMatchTabs(fixture), [fixture]);
   // The `fixture` prop already carries the live-polled score (merged upstream in
-  // the video player), so the header just reflects it.
-  const score = useMemo(() => getFixtureScoreDisplay(fixture), [fixture]);
+  // the video player), so the header just reflects it — but the match minute is
+  // read from the device clock, which only the tick makes visible to React.
+  const tick = useLiveTick(visible && isMatchLive(fixture));
+  const score = useMemo(
+    () => getFixtureScoreDisplay(fixture, new Date()),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `tick` is the clock
+    [fixture, tick]
+  );
   const [activeKey, setActiveKey] = useState(tabs[0]?.key);
   const [orientation, setOrientation] = useState<ContentOrientation>('landscape');
 
@@ -76,14 +84,7 @@ export const MatchWidgetOverlay = memo(function MatchWidgetOverlay({
 
   // Hardware back closes the overlay first (listener is LIFO, so it runs before
   // the player's back handler) instead of leaving the stream.
-  useEffect(() => {
-    if (!visible) return;
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      onClose();
-      return true;
-    });
-    return () => sub.remove();
-  }, [visible, onClose]);
+  useBackClose(visible, onClose);
 
   if (!visible || !activeTab) return null;
 
@@ -116,12 +117,15 @@ export const MatchWidgetOverlay = memo(function MatchWidgetOverlay({
 
   return (
     <View style={styles.root} pointerEvents="box-none">
-      {/* Dim backdrop — tap to dismiss. */}
+      {/* Dim backdrop — tap to dismiss. Hidden from assistive tech: it is a
+          full-screen convenience, and announcing it as a button puts a control
+          the size of the screen in front of the card it is dimming. The header
+          has the real Close button. */}
       <Pressable
         style={styles.backdrop}
         onPress={onClose}
-        accessibilityRole="button"
-        accessibilityLabel="Close match info"
+        accessibilityElementsHidden
+        importantForAccessibility="no"
       />
 
       {/* Per-side safe-area padding: the card fills the padded area exactly
@@ -258,7 +262,8 @@ function TabButton({
   );
 }
 
-const CARD_BACKGROUND = '#141417';
+// The tabs decide their own surface; the card just adopts it.
+const CARD_BACKGROUND = DETAIL_BACKGROUND;
 const FAINT_BORDER = 'rgba(255, 255, 255, 0.12)';
 
 const styles = StyleSheet.create({

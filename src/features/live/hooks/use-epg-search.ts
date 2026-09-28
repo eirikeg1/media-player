@@ -5,6 +5,18 @@ import type { EpgProgramme } from 'expo-m3u-parser';
 
 const SEARCH_DEBOUNCE_MS = 300;
 
+/** A single character matches almost every programme, so searching starts at two. */
+export const MIN_EPG_SEARCH_LENGTH = 2;
+
+/**
+ * The one predicate for "the guide is showing search results". Shared so the
+ * guide can't consider a one-character query active while this hook returns
+ * nothing for it, which blanks the grid.
+ */
+export function isEpgSearchActive(searchText: string): boolean {
+  return searchText.trim().length >= MIN_EPG_SEARCH_LENGTH;
+}
+
 interface UseEpgSearchReturn {
   searchProgrammesByChannel: Map<string, EpgProgramme[]>;
   searchChannels: Channel[];
@@ -43,7 +55,7 @@ export function useEpgSearch(
     }
 
     const trimmed = searchText.trim();
-    if (trimmed.length < 2) {
+    if (!isEpgSearchActive(searchText)) {
       setProgrammesByChannel(new Map());
       setSearchChannels([]);
       setIsSearching(false);
@@ -52,6 +64,9 @@ export function useEpgSearch(
 
     setIsSearching(true);
     const generation = ++fetchGenerationRef.current;
+    // Covers the unmount case, which no later generation would invalidate.
+    let cancelled = false;
+    const isStale = () => cancelled || generation !== fetchGenerationRef.current;
 
     debounceTimerRef.current = setTimeout(async () => {
       try {
@@ -71,7 +86,7 @@ export function useEpgSearch(
           limit: 200,
         });
 
-        if (generation !== fetchGenerationRef.current) return;
+        if (isStale()) return;
 
         // Backend returns pre-grouped & sorted results — convert to Map
         const grouped = new Map<string, EpgProgramme[]>();
@@ -105,20 +120,21 @@ export function useEpgSearch(
         setProgrammesByChannel(grouped);
         setSearchChannels(channels);
       } catch (err) {
-        if (generation !== fetchGenerationRef.current) return;
-        if (__DEV__) {
-          console.warn('[useEpgSearch] Error:', err);
-        }
+        if (isStale()) return;
+        console.warn('[useEpgSearch] Programme search failed:', err);
         setProgrammesByChannel(new Map());
         setSearchChannels([]);
       } finally {
-        if (generation === fetchGenerationRef.current) {
+        if (!isStale()) {
           setIsSearching(false);
         }
       }
     }, SEARCH_DEBOUNCE_MS);
 
     return () => {
+      // A request already in flight when the guide unmounts would otherwise
+      // resolve into a dead component.
+      cancelled = true;
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
       }

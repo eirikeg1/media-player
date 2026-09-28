@@ -65,6 +65,7 @@ export function ModalHeader({
           <TouchableOpacity
             onPress={onClose}
             style={styles.closeButton}
+            hitSlop={12}
             accessibilityRole="button"
             accessibilityLabel="Close modal"
             accessibilityHint="Close the modal"

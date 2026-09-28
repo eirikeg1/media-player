@@ -1,21 +1,14 @@
-import type { Channel } from '@/types/playlist.types';
 import { useVideoOrchestrator } from './specialized/use-video-orchestrator';
 
 interface UseVideoPlayerProps {
-  channel: Channel;
   startPosition?: number;
-  onStopVideo?: () => void;
   onRegisterStopFunction?: (stopFn: () => void) => void;
 }
 
 /**
- * Main video player hook with clean, modular architecture
+ * Main video player hook. Everything about *what* is playing comes from the
+ * playback session; the screen only supplies its own concerns.
  */
-export function useVideoPlayerLogic({ channel, startPosition, onStopVideo, onRegisterStopFunction }: UseVideoPlayerProps) {
-  return useVideoOrchestrator({
-    channel,
-    startPosition,
-    onStopVideo,
-    onRegisterStopFunction,
-  });
+export function useVideoPlayerLogic({ startPosition, onRegisterStopFunction }: UseVideoPlayerProps) {
+  return useVideoOrchestrator({ startPosition, onRegisterStopFunction });
 }

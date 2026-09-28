@@ -2,17 +2,21 @@ import type { Competition } from 'expo-m3u-parser';
 
 import { groupCompetitions } from '../competition-groups';
 
-function competition(providerId: number, name: string, country?: string): Competition {
-  return { providerId, provider: 'sofascore', name, country };
+function competition(
+  providerId: number,
+  name: string,
+  { country, international = false }: { country?: string; international?: boolean } = {}
+): Competition {
+  return { providerId, provider: 'sofascore', name, country, international };
 }
 
 const registry: Competition[] = [
-  competition(17, 'Premier League', 'England'),
-  competition(8, 'La Liga', 'Spain'),
-  competition(16, 'FIFA World Cup', 'World'),
-  competition(7, 'UEFA Champions League', 'Europe'),
-  competition(20, 'Eliteserien', 'Norway'),
-  competition(17015, 'UEFA Conference League', 'Europe'),
+  competition(17, 'Premier League', { country: 'England' }),
+  competition(8, 'La Liga', { country: 'Spain' }),
+  competition(16, 'FIFA World Cup', { country: 'World', international: true }),
+  competition(7, 'UEFA Champions League', { country: 'Europe', international: true }),
+  competition(20, 'Eliteserien', { country: 'Norway' }),
+  competition(17015, 'UEFA Conference League', { country: 'Europe', international: true }),
 ];
 
 describe('groupCompetitions', () => {
@@ -27,18 +31,16 @@ describe('groupCompetitions', () => {
     expect(top.map((c) => c.name)).toEqual(['Eliteserien', 'La Liga', 'Premier League']);
   });
 
-  it('treats an unknown or missing country as domestic', () => {
+  it('groups by the provider flag, not by the country name', () => {
+    // "Europe" is a region the app used to pattern-match on; the registry is
+    // what decides now, so a domestic league there stays domestic.
     const { top, international } = groupCompetitions([
-      competition(999, 'Veikkausliiga', 'Finland'),
+      competition(999, 'Veikkausliiga', { country: 'Finland' }),
       competition(998, 'Mystery Cup'),
+      competition(997, 'Regional League', { country: 'Europe' }),
     ]);
-    expect(top.map((c) => c.providerId)).toEqual([999, 998]);
+    expect(top.map((c) => c.providerId)).toEqual([999, 998, 997]);
     expect(international).toEqual([]);
-  });
-
-  it('matches the country regardless of case or padding', () => {
-    const { international } = groupCompetitions([competition(679, 'UEFA Europa League', ' europe ')]);
-    expect(international.map((c) => c.providerId)).toEqual([679]);
   });
 
   it('returns empty groups for an empty registry', () => {

@@ -2,8 +2,9 @@
  * Migration tests: schema completeness, migration bookkeeping, and idempotency.
  * resetTestDatabases() runs all migrations against a fresh in-memory database.
  */
-import { runMigrations } from '@/db/migrations';
-import { executeQuery, executeStatement } from '@/db/sqlite-client';
+import { addColumnIfMissing, runMigrations } from '@/db/migrations';
+import { COMPLETION_RATIO } from '@/lib/viewing-progress';
+import { executeQuery, executeStatement, getDatabase } from '@/db/sqlite-client';
 import { resetTestDatabases } from '@/test/helpers';
 
 const LATEST_VERSION = 21;
@@ -53,6 +54,18 @@ describe('runMigrations', () => {
     expect(tables).toEqual(expect.arrayContaining(EXPECTED_TABLES));
   });
 
+  it('builds the resume index around the shared completion ratio', async () => {
+    const [index] = await executeQuery<{ sql: string }>(
+      "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'idx_cws_resume'",
+    );
+
+    // The repository's "in progress" queries inline the same constant, and
+    // SQLite only reaches for a partial index when the query's condition
+    // provably implies the index's own — two different literals would quietly
+    // cost every continue-watching query a full table scan.
+    expect(index.sql).toContain(`totalDuration * ${COMPLETION_RATIO}`);
+  });
+
   it('drops the legacy watch-history tables replaced in migration 9', async () => {
     const tables = await getTableNames();
     expect(tables).not.toContain('user_watch_history');
@@ -73,6 +86,15 @@ describe('runMigrations', () => {
       expect(row.name).toBeTruthy();
       expect(Number.isNaN(Date.parse(row.appliedAt))).toBe(false);
     }
+  });
+
+  it('leaves version 22 to the deferred channel-id remap', async () => {
+    // `migrateLegacyChannelIds` runs from the boot sequence, not from this
+    // list, and records itself as version 22. A schema migration claiming that
+    // number would collide with it on any device that has already migrated.
+    const rows = await getMigrationRows();
+
+    expect(rows.map((row) => row.version)).not.toContain(22);
   });
 
   it('adds the columns introduced by later playlist migrations', async () => {
@@ -142,5 +164,49 @@ describe('runMigrations', () => {
     const after = await getMigrationRows();
     expect(after).toEqual(before);
     expect(after).toHaveLength(LATEST_VERSION);
+  });
+});
+
+describe('addColumnIfMissing', () => {
+  async function columnNames(table: string): Promise<string[]> {
+    const columns = await executeQuery<{ name: string }>(`PRAGMA table_info(${table})`);
+    return columns.map((column) => column.name);
+  }
+
+  it('adds a column that is not there yet', async () => {
+    const db = await getDatabase();
+
+    await addColumnIfMissing(db, 'user_settings', 'experimentalFlag', 'INTEGER NOT NULL DEFAULT 0');
+
+    expect(await columnNames('user_settings')).toContain('experimentalFlag');
+  });
+
+  it('is a no-op for a column that already exists', async () => {
+    // The state a retried migration finds: the ADD COLUMN landed but the
+    // `migrations` row did not, so the DDL runs a second time.
+    const db = await getDatabase();
+    const before = await columnNames('user_settings');
+    expect(before).toContain('showHomeTab');
+
+    await expect(
+      addColumnIfMissing(db, 'user_settings', 'showHomeTab', 'INTEGER NOT NULL DEFAULT 1'),
+    ).resolves.toBeUndefined();
+
+    expect(await columnNames('user_settings')).toEqual(before);
+  });
+
+  it('re-running a migration that already added its column succeeds', async () => {
+    // Rewind the bookkeeping from migration 19 (sportsLeagueOrder /
+    // sportsHideOtherLeagues) on, without touching the schema — the state a
+    // torn run leaves behind — then migrate again: the guarded ADD COLUMNs must
+    // not throw over the columns that are already there.
+    await executeStatement('DELETE FROM migrations WHERE version >= ?', [19]);
+
+    await expect(runMigrations()).resolves.toBeUndefined();
+
+    const columns = await columnNames('user_settings');
+    expect(columns).toEqual(expect.arrayContaining(['sportsLeagueOrder', 'sportsHideOtherLeagues']));
+    const rows = await getMigrationRows();
+    expect(rows).toHaveLength(LATEST_VERSION);
   });
 });

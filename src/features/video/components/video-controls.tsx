@@ -1,21 +1,20 @@
 import type { Fixture } from 'expo-m3u-parser';
-import type { VideoPlayer } from 'expo-video';
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import { TouchableOpacity, View } from 'react-native';
 import { CastButton } from 'react-native-google-cast';
 import type { SharedValue } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
-import { getFixtureScoreDisplay } from '@/features/sports/match-widgets';
-import { useThemeColor } from '@/hooks/use-theme-color';
+import { useLiveTick } from '@/features/sports/hooks/use-live-tick';
+import { getFixtureScoreDisplay, isMatchLive } from '@/features/sports/match-widgets';
 import type { Channel } from '@/types/playlist.types';
-import { VIDEO_CONSTANTS } from '../constants';
+import { VIDEO_COLORS, VIDEO_CONSTANTS } from '../constants';
 import { VideoSeekBar } from './video-seek-bar';
 
 interface VideoControlsProps {
   channel: Channel;
-  player: VideoPlayer;
   isLoading: boolean;
   isPlaying: boolean;
   currentTime?: number;
@@ -42,7 +41,6 @@ interface VideoControlsProps {
 
 function VideoControlsComponent({
   channel,
-  player,
   isLoading,
   isPlaying,
   currentTime = 0,
@@ -63,11 +61,18 @@ function VideoControlsComponent({
   onShowMatchInfo,
   onResync,
 }: VideoControlsProps) {
-  const score = fixture ? getFixtureScoreDisplay(fixture) : null;
-  const iconColor = useThemeColor({}, 'icon');
-  const overlayColor = useThemeColor({ light: 'rgba(0, 0, 0, 0.3)', dark: 'rgba(0, 0, 0, 0.3)' }, 'background');
-  const buttonBackground = useThemeColor({ light: 'rgba(0, 0, 0, 0.6)', dark: 'rgba(0, 0, 0, 0.6)' }, 'background');
-  const textColor = useThemeColor({ light: '#fff', dark: '#fff' }, 'background');
+  // The minute on the score button is counted from the device clock, so time
+  // has to be an input or it freezes at whatever it read when the controls last
+  // rendered — which, on a stream left playing, is the whole match.
+  const tick = useLiveTick(!!fixture && isMatchLive(fixture));
+  const score = useMemo(
+    () => (fixture ? getFixtureScoreDisplay(fixture, new Date()) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `tick` is the clock
+    [fixture, tick]
+  );
+  // The screen is landscape and edge-to-edge: without these the back button
+  // sits under the notch and the seek bar under the navigation bar.
+  const insets = useSafeAreaInsets();
 
   return (
     <View className="absolute inset-0" pointerEvents="box-none">
@@ -75,10 +80,11 @@ function VideoControlsComponent({
         className="absolute inset-0 justify-between"
         pointerEvents="box-none"
         style={{
-          backgroundColor: overlayColor,
-          paddingTop: VIDEO_CONSTANTS.OVERLAY_PADDING_TOP,
-          paddingBottom: VIDEO_CONSTANTS.OVERLAY_PADDING_BOTTOM,
-          paddingHorizontal: VIDEO_CONSTANTS.OVERLAY_PADDING_HORIZONTAL,
+          backgroundColor: VIDEO_COLORS.overlay,
+          paddingTop: VIDEO_CONSTANTS.OVERLAY_PADDING_TOP + insets.top,
+          paddingBottom: VIDEO_CONSTANTS.OVERLAY_PADDING_BOTTOM + insets.bottom,
+          paddingLeft: VIDEO_CONSTANTS.OVERLAY_PADDING_HORIZONTAL + insets.left,
+          paddingRight: VIDEO_CONSTANTS.OVERLAY_PADDING_HORIZONTAL + insets.right,
         }}
       >
         <View className="flex-row items-center" pointerEvents="box-none">
@@ -87,7 +93,7 @@ function VideoControlsComponent({
             style={{
               paddingVertical: VIDEO_CONSTANTS.BACK_BUTTON_PADDING_VERTICAL,
               paddingHorizontal: VIDEO_CONSTANTS.BACK_BUTTON_PADDING_HORIZONTAL,
-              backgroundColor: buttonBackground,
+              backgroundColor: VIDEO_COLORS.button,
               borderRadius: VIDEO_CONSTANTS.BACK_BUTTON_BORDER_RADIUS,
             }}
             onPress={() => {
@@ -97,13 +103,13 @@ function VideoControlsComponent({
             accessibilityRole="button"
             accessibilityLabel="Go back"
           >
-            <IconSymbol name="chevron.left" size={VIDEO_CONSTANTS.BACK_ICON_SIZE} color={iconColor} />
+            <IconSymbol name="chevron.left" size={VIDEO_CONSTANTS.BACK_ICON_SIZE} color={VIDEO_COLORS.text} />
             <ThemedText
               style={{
                 marginLeft: VIDEO_CONSTANTS.BACK_TEXT_MARGIN_LEFT,
                 fontSize: VIDEO_CONSTANTS.BACK_TEXT_SIZE,
                 fontWeight: '600',
-                color: textColor,
+                color: VIDEO_COLORS.text,
               }}
             >
               Back
@@ -121,7 +127,7 @@ function VideoControlsComponent({
                     width: VIDEO_CONSTANTS.NAV_BUTTON_SIZE,
                     height: VIDEO_CONSTANTS.NAV_BUTTON_SIZE,
                     borderRadius: VIDEO_CONSTANTS.NAV_BUTTON_RADIUS,
-                    backgroundColor: buttonBackground,
+                    backgroundColor: VIDEO_COLORS.button,
                   }}
                   onPress={() => {
                     onClearTimeout();
@@ -133,7 +139,7 @@ function VideoControlsComponent({
                   <IconSymbol
                     name="backward.end.fill"
                     size={VIDEO_CONSTANTS.NAV_ICON_SIZE}
-                    color={iconColor}
+                    color={VIDEO_COLORS.text}
                   />
                 </TouchableOpacity>
               )}
@@ -144,7 +150,7 @@ function VideoControlsComponent({
                   width: VIDEO_CONSTANTS.PLAY_BUTTON_SIZE,
                   height: VIDEO_CONSTANTS.PLAY_BUTTON_SIZE,
                   borderRadius: VIDEO_CONSTANTS.PLAY_BUTTON_RADIUS,
-                  backgroundColor: buttonBackground,
+                  backgroundColor: VIDEO_COLORS.button,
                 }}
                 onPress={() => {
                   onClearTimeout();
@@ -156,7 +162,7 @@ function VideoControlsComponent({
                 <IconSymbol
                   name={isPlaying ? 'pause.fill' : 'play.fill'}
                   size={VIDEO_CONSTANTS.PLAY_ICON_SIZE}
-                  color={iconColor}
+                  color={VIDEO_COLORS.text}
                 />
               </TouchableOpacity>
 
@@ -167,7 +173,7 @@ function VideoControlsComponent({
                     width: VIDEO_CONSTANTS.NAV_BUTTON_SIZE,
                     height: VIDEO_CONSTANTS.NAV_BUTTON_SIZE,
                     borderRadius: VIDEO_CONSTANTS.NAV_BUTTON_RADIUS,
-                    backgroundColor: buttonBackground,
+                    backgroundColor: VIDEO_COLORS.button,
                   }}
                   onPress={() => {
                     onClearTimeout();
@@ -179,7 +185,7 @@ function VideoControlsComponent({
                   <IconSymbol
                     name="forward.end.fill"
                     size={VIDEO_CONSTANTS.NAV_ICON_SIZE}
-                    color={iconColor}
+                    color={VIDEO_COLORS.text}
                   />
                 </TouchableOpacity>
               )}
@@ -196,7 +202,7 @@ function VideoControlsComponent({
                   gap: 10,
                   paddingVertical: 8,
                   paddingHorizontal: 14,
-                  backgroundColor: buttonBackground,
+                  backgroundColor: VIDEO_COLORS.button,
                   borderRadius: 20,
                 }}
                 onPress={() => {
@@ -206,14 +212,14 @@ function VideoControlsComponent({
                 accessibilityRole="button"
                 accessibilityLabel="Show match info and stats"
               >
-                <IconSymbol name="sportscourt.fill" size={18} color={textColor} />
-                <ThemedText style={{ color: textColor, fontWeight: '600', fontSize: 14 }} numberOfLines={1}>
+                <IconSymbol name="sportscourt.fill" size={18} color={VIDEO_COLORS.text} />
+                <ThemedText style={{ color: VIDEO_COLORS.text, fontWeight: '600', fontSize: 14 }} numberOfLines={1}>
                   {score.home}
                 </ThemedText>
                 <ThemedText style={{ color: score.statusColor, fontWeight: '700', fontSize: 15 }}>
                   {score.score ?? 'vs'}
                 </ThemedText>
-                <ThemedText style={{ color: textColor, fontWeight: '600', fontSize: 14 }} numberOfLines={1}>
+                <ThemedText style={{ color: VIDEO_COLORS.text, fontWeight: '600', fontSize: 14 }} numberOfLines={1}>
                   {score.away}
                 </ThemedText>
                 <View className="flex-row items-center" style={{ gap: 4, marginLeft: 2 }}>
@@ -224,7 +230,7 @@ function VideoControlsComponent({
                     {score.status}
                   </ThemedText>
                 </View>
-                <IconSymbol name="chevron.up" size={16} color={textColor} />
+                <IconSymbol name="chevron.up" size={16} color={VIDEO_COLORS.text} />
               </TouchableOpacity>
             </View>
           )}
@@ -238,7 +244,7 @@ function VideoControlsComponent({
                   gap: 8,
                   paddingVertical: 7,
                   paddingHorizontal: 14,
-                  backgroundColor: buttonBackground,
+                  backgroundColor: VIDEO_COLORS.button,
                   borderRadius: 18,
                 }}
                 onPress={() => {
@@ -249,12 +255,12 @@ function VideoControlsComponent({
                 accessibilityLabel="Resync to live"
               >
                 <View
-                  style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#FF3B30' }}
+                  style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: VIDEO_COLORS.live }}
                 />
-                <ThemedText style={{ color: textColor, fontWeight: '600', fontSize: 13 }}>
+                <ThemedText style={{ color: VIDEO_COLORS.text, fontWeight: '600', fontSize: 13 }}>
                   Resync to live
                 </ThemedText>
-                <IconSymbol name="arrow.clockwise" size={15} color={textColor} />
+                <IconSymbol name="arrow.clockwise" size={15} color={VIDEO_COLORS.text} />
               </TouchableOpacity>
             </View>
           )}
@@ -274,7 +280,7 @@ function VideoControlsComponent({
             style={{
               fontSize: VIDEO_CONSTANTS.CHANNEL_NAME_SIZE,
               fontWeight: '600',
-              color: textColor,
+              color: VIDEO_COLORS.text,
               textAlign: 'center',
               marginTop: !isLive && duration > 0 ? 8 : 0,
             }}
@@ -289,15 +295,15 @@ function VideoControlsComponent({
       <View
         style={{
           position: 'absolute',
-          top: VIDEO_CONSTANTS.OVERLAY_PADDING_TOP,
-          right: VIDEO_CONSTANTS.OVERLAY_PADDING_HORIZONTAL,
-          backgroundColor: buttonBackground,
+          top: VIDEO_CONSTANTS.OVERLAY_PADDING_TOP + insets.top,
+          right: VIDEO_CONSTANTS.OVERLAY_PADDING_HORIZONTAL + insets.right,
+          backgroundColor: VIDEO_COLORS.button,
           borderRadius: VIDEO_CONSTANTS.BACK_BUTTON_BORDER_RADIUS,
           padding: VIDEO_CONSTANTS.BACK_BUTTON_PADDING_VERTICAL,
         }}
       >
         <CastButton
-          style={{ width: 28, height: 28, tintColor: iconColor }}
+          style={{ width: 28, height: 28, tintColor: VIDEO_COLORS.text }}
         />
       </View>
     </View>
@@ -309,19 +315,3 @@ function VideoControlsComponent({
  * changes — not on every unrelated store write in the player tree.
  */
 export const VideoControls = memo(VideoControlsComponent);
-
-interface VideoTapOverlayProps {
-  onTap: () => void;
-}
-
-export function VideoTapOverlay({ onTap }: VideoTapOverlayProps) {
-  return (
-    <TouchableOpacity
-      className="absolute inset-0 bg-transparent"
-      onPress={onTap}
-      activeOpacity={1}
-      accessibilityRole="button"
-      accessibilityLabel="Show video controls"
-    />
-  );
-}

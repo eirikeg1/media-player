@@ -1,53 +1,57 @@
-import { useVideoErrorStore } from '@/stores/video/error-store';
+import type { VideoPlayer } from 'expo-video';
 import { useCallback, useMemo } from 'react';
-import { Alert } from 'react-native';
-import { useShallow } from 'zustand/react/shallow';
-import { calculateRetryDelay, getVideoErrorInfo, type RawVideoError } from '../../types/video-error.types';
 
-export function useVideoErrorHandling() {
-  // Selected rather than subscribing to the whole store: an unrelated write
-  // must not re-render the entire player tree.
-  const { hasError, error, retryState } = useVideoErrorStore(
-    useShallow((s) => ({ hasError: s.hasError, error: s.error, retryState: s.retryState }))
+import { usePlaybackSessionStore } from '@/stores/video/playback-session-store';
+import { useVideoRetryStore } from '@/stores/video/retry-store';
+import {
+  calculateRetryDelay,
+  getVideoErrorInfo,
+  type RawVideoError,
+} from '../../types/video-error.types';
+
+/**
+ * The video screen's view of playback failure: the error the session is in,
+ * plus the retry budget for getting out of it.
+ *
+ * The error is read from — and written to — the session, not mirrored here: it
+ * must survive this screen unmounting into the mini bar, and two copies of it
+ * meant an error raised while minimized showed nothing on expand.
+ */
+export function useVideoErrorHandling(player: VideoPlayer | null) {
+  const error = usePlaybackSessionStore((s) => s.session?.error ?? null);
+  const retryState = useVideoRetryStore((s) => s.retryState);
+  const setRetryState = useVideoRetryStore((s) => s.setRetryState);
+  const incrementRetryAttempt = useVideoRetryStore((s) => s.incrementRetryAttempt);
+  const resetRetryState = useVideoRetryStore((s) => s.reset);
+
+  const handleError = useCallback(
+    (rawError: RawVideoError) => {
+      if (!player) return;
+      const enhancedError = getVideoErrorInfo(rawError, retryState.attempt);
+      console.error('Video playback error:', rawError, 'Enhanced:', enhancedError);
+      // No alert: the error card *is* the UI for this, and an alert on every
+      // status change stacked one dialog per failed retry on top of it.
+      usePlaybackSessionStore.getState().setSessionError(player, enhancedError);
+    },
+    [player, retryState.attempt]
   );
-  const setError = useVideoErrorStore((s) => s.setError);
-  const clearError = useVideoErrorStore((s) => s.clearError);
-  const setRetryState = useVideoErrorStore((s) => s.setRetryState);
-  const incrementRetryAttempt = useVideoErrorStore((s) => s.incrementRetryAttempt);
-  const resetRetryState = useVideoErrorStore((s) => s.resetRetryState);
 
-  const handleError = useCallback((rawError: RawVideoError) => {
-    const enhancedError = getVideoErrorInfo(rawError, retryState.attempt);
-    setError(enhancedError);
+  const clearError = useCallback(() => {
+    if (!player) return;
+    usePlaybackSessionStore.getState().setSessionError(player, null);
+  }, [player]);
 
-    // Only show alert for non-retryable errors or after max retries
-    if (!enhancedError.canRetry || retryState.attempt >= retryState.maxAttempts) {
-      Alert.alert(
-        enhancedError.title,
-        enhancedError.message + '\n\n' + enhancedError.suggestion,
-        [{ text: 'OK' }]
-      );
-    }
+  const canRetry =
+    !retryState.isRetrying && retryState.attempt < retryState.maxAttempts && !!error?.canRetry;
 
-    console.error('Video playback error:', rawError, 'Enhanced:', enhancedError);
-  }, [retryState.attempt, retryState.maxAttempts, setError]);
-
-  const canRetry = useCallback(() => {
-    return !retryState.isRetrying &&
-           retryState.attempt < retryState.maxAttempts &&
-           error?.canRetry;
-  }, [retryState.isRetrying, retryState.attempt, retryState.maxAttempts, error?.canRetry]);
-
-  const getRetryDelay = useCallback(() => {
-    return calculateRetryDelay(retryState.attempt, retryState.baseDelay);
-  }, [retryState.attempt, retryState.baseDelay]);
+  const getRetryDelay = useCallback(
+    () => calculateRetryDelay(retryState.attempt, retryState.baseDelay),
+    [retryState.attempt, retryState.baseDelay]
+  );
 
   const startRetry = useCallback(() => {
-    if (!canRetry()) return false;
-
     setRetryState({ isRetrying: true });
-    return true;
-  }, [canRetry, setRetryState]);
+  }, [setRetryState]);
 
   const completeRetry = useCallback(() => {
     incrementRetryAttempt();
@@ -59,33 +63,26 @@ export function useVideoErrorHandling() {
     resetRetryState();
   }, [clearError, resetRetryState]);
 
-  const actions = useMemo(() => ({
-    handleError,
-    clearError,
-    startRetry,
-    completeRetry,
-    onRetrySuccess,
-    getRetryDelay,
-  }), [
-    handleError,
-    clearError,
-    startRetry,
-    completeRetry,
-    onRetrySuccess,
-    getRetryDelay,
-  ]);
+  const actions = useMemo(
+    () => ({
+      handleError,
+      clearError,
+      startRetry,
+      completeRetry,
+      onRetrySuccess,
+      getRetryDelay,
+    }),
+    [handleError, clearError, startRetry, completeRetry, onRetrySuccess, getRetryDelay]
+  );
 
-  return useMemo(() => ({
-    hasError,
-    error,
-    retryState,
-    canRetry: canRetry(),
-    actions,
-  }), [
-    hasError,
-    error,
-    retryState,
-    canRetry,
-    actions,
-  ]);
+  return useMemo(
+    () => ({
+      hasError: !!error,
+      error,
+      retryState,
+      canRetry,
+      actions,
+    }),
+    [error, retryState, canRetry, actions]
+  );
 }

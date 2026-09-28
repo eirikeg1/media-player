@@ -3,6 +3,7 @@ import type { Fixture } from 'expo-m3u-parser';
 import { memo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { formatKickoffTime } from '../fixture-status';
 import { FAINT, MUTED } from './match-detail-shared';
 
 interface MatchOverviewTabProps {
@@ -27,7 +28,7 @@ export const MatchOverviewTab = memo(function MatchOverviewTab({ fixture }: Matc
     {
       icon: 'clock',
       label: 'Kick-off',
-      value: kickoff.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      value: formatKickoffTime(fixture.kickoffTime),
     },
     {
       icon: 'flag',

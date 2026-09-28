@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
+import { TINT } from '@/lib/theme';
 import { Button } from '../button';
 
 describe('Button', () => {
@@ -46,7 +47,7 @@ describe('Button', () => {
   });
 
   it.each([
-    ['primary', '#007AFF'],
+    ['primary', TINT],
     ['danger', '#FF3B30'],
     ['ghost', 'transparent'],
   ] as const)('applies the %s variant background color', async (variant, backgroundColor) => {

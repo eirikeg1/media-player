@@ -1,60 +1,51 @@
-import { getSportsDatabase } from '@/services/sports-service';
-import type { TeamSearchResult } from 'expo-m3u-parser';
-import { useEffect, useRef, useState } from 'react';
+import type { SportsDatabase, Team } from 'expo-m3u-parser';
+import { useCallback } from 'react';
 
 import { CACHE_ONLY_SECS } from '../fixture-fetch';
+import { useSportsQuery, type SportsQueryContext } from './use-sports-query';
 
 const CACHE_TTL = 21_600; // 6 hours
 
+/** Shared identity for "no teams", so an empty competition never re-renders. */
+const NO_TEAMS: Team[] = [];
+
+export interface CompetitionTeamsState {
+  teams: Team[];
+  isLoading: boolean;
+  /** Why the list could not be refreshed, or null. */
+  error: string | null;
+  /** Read the competition again, ignoring the cache age. */
+  retry: () => void;
+}
+
 /**
- * One competition's teams, cached-first: a {@link CACHE_ONLY_SECS} read serves
- * whatever is stored without a request (an empty competition counts as stale,
- * so the first ever open still fetches), and the TTL'd read after it refreshes
- * a stale list in place — the user browses the old list instead of a spinner.
+ * Cached first: the {@link CACHE_ONLY_SECS} read serves whatever is stored
+ * without a request (an empty competition counts as stale, so the first ever
+ * open still fetches), and the TTL'd read behind it refreshes a stale list in
+ * place — the user browses the old list instead of a spinner.
  */
-export function useCompetitionTeams(compId: number | null) {
-  const [teams, setTeams] = useState<TeamSearchResult[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const fetchRef = useRef(0);
+async function fetchCompetitionTeams(
+  db: SportsDatabase,
+  compId: number,
+  { force, publish }: SportsQueryContext<Team[]>
+): Promise<Team[]> {
+  const cached = await db.getCompetitionTeams(compId, CACHE_ONLY_SECS);
+  if (cached.length > 0) publish(cached);
+  return db.getCompetitionTeams(compId, force ? 0 : CACHE_TTL);
+}
 
-  useEffect(() => {
-    if (compId === null) {
-      setTeams([]);
-      return;
-    }
+/** One competition's teams, for the favourites picker. */
+export function useCompetitionTeams(compId: number | null): CompetitionTeamsState {
+  const { data, isLoading, error, refresh } = useSportsQuery<number, Team[]>({
+    key: compId,
+    fetcher: fetchCompetitionTeams,
+    fallback: "Couldn't load this competition's teams.",
+  });
 
-    let cancelled = false;
-    const fetchId = ++fetchRef.current;
-    setIsLoading(true);
-
-    (async () => {
-      try {
-        const db = await getSportsDatabase();
-
-        const cached = await db.getCompetitionTeams(compId, CACHE_ONLY_SECS);
-        if (cancelled || fetchId !== fetchRef.current) return;
-        if (cached.length > 0) {
-          setTeams(cached);
-          setIsLoading(false);
-        }
-
-        const result = await db.getCompetitionTeams(compId, CACHE_TTL);
-        if (!cancelled && fetchId === fetchRef.current) {
-          setTeams(result);
-        }
-      } catch (err) {
-        console.warn('[useCompetitionTeams] Error:', err);
-      } finally {
-        if (!cancelled && fetchId === fetchRef.current) {
-          setIsLoading(false);
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [compId]);
-
-  return { teams, isLoading };
+  return {
+    teams: data ?? NO_TEAMS,
+    isLoading,
+    error,
+    retry: useCallback(() => void refresh({ force: true }), [refresh]),
+  };
 }

@@ -28,13 +28,14 @@ function endOfDay(date: Date): number {
 }
 
 /**
- * Lazy-loads the EPG schedule for a single channel when the modal is open.
- * Supports date navigation (prev/next day).
+ * Loads the EPG schedule for a single channel, with date navigation
+ * (prev/next day).
+ *
+ * Mounting is the enablement: the detail surface is a route of its own now, so
+ * the hook only runs while that surface is on screen — it no longer has to be
+ * told whether a modal holding it is open.
  */
-export function useChannelSchedule(
-  channelId: string | null,
-  enabled: boolean
-): UseChannelScheduleReturn {
+export function useChannelSchedule(channelId: string | null): UseChannelScheduleReturn {
   const [schedule, setSchedule] = useState<EpgProgramme[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedDate, setSelectedDate] = useState(() => new Date());
@@ -54,7 +55,7 @@ export function useChannelSchedule(
   }, [channelId]);
 
   useEffect(() => {
-    if (!enabled || !channelId) {
+    if (!channelId) {
       setSchedule([]);
       return;
     }
@@ -88,7 +89,7 @@ export function useChannelSchedule(
     return () => {
       cancelled = true;
     };
-  }, [enabled, channelId, selectedDate]);
+  }, [channelId, selectedDate]);
 
   return { schedule, isLoading, selectedDate, setSelectedDate };
 }

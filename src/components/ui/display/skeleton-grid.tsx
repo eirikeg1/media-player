@@ -1,4 +1,4 @@
-import { Dimensions, StyleSheet, View } from 'react-native';
+import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import { SkeletonCard } from './skeleton-card';
 
 type SkeletonVariant = 'channel' | 'movie' | 'series';
@@ -18,7 +18,7 @@ export function SkeletonGrid({
   gap = 4,
   padding = 5,
 }: SkeletonGridProps) {
-  const { width: screenWidth } = Dimensions.get('window');
+  const { width: screenWidth } = useWindowDimensions();
   const cardWidth = (screenWidth - padding * 2 - gap * (columns - 1)) / columns;
 
   return (

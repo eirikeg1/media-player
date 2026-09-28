@@ -60,6 +60,13 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         backgroundColor: "#13214A",
       },
     ],
+    // expo-video is configured with neither `supportsPictureInPicture` nor
+    // `supportsBackgroundPlayback`: on iOS declaring PiP alone is what enables
+    // the background audio session, and playback is meant to *stop* when the
+    // app leaves the foreground — the panel allows a single connection, which
+    // a backgrounded stream would keep holding. Enabling PiP later means
+    // enabling it here (plus a prebuild) and passing `allowsPictureInPicture`
+    // to the `VideoView`; the prop alone is silently ignored.
     "expo-video",
     [
       "react-native-google-cast",

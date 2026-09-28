@@ -7,6 +7,8 @@ import { Animated, Easing, Keyboard, Modal, Platform, StyleSheet, TouchableWitho
 interface AnimatedModalProps {
   children: ReactNode;
   visible: boolean;
+  /** Dismissal the dialog's own controls don't cover: backdrop tap and Android
+   *  back. Omitted (or momentarily undefined) means neither dismisses it. */
   onClose?: () => void;
 }
 
@@ -22,51 +24,54 @@ export function AnimatedModal({ children, visible, onClose }: AnimatedModalProps
   const backdropOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    if (visible) {
-      // Entrance animation
-      Animated.parallel([
-        Animated.timing(backdropOpacity, {
-          toValue: 1,
-          duration: 300,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacity, {
-          toValue: 1,
-          duration: 400,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.spring(scale, {
-          toValue: 1,
-          tension: 100,
-          friction: 8,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    } else {
-      // Exit animation
-      Animated.parallel([
-        Animated.timing(backdropOpacity, {
-          toValue: 0,
-          duration: 200,
-          easing: Easing.in(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacity, {
-          toValue: 0,
-          duration: 200,
-          easing: Easing.in(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.timing(scale, {
-          toValue: 0.9,
-          duration: 200,
-          easing: Easing.in(Easing.cubic),
-          useNativeDriver: true,
-        }),
-      ]).start();
-    }
+    const animation = visible
+      ? // Entrance animation
+        Animated.parallel([
+          Animated.timing(backdropOpacity, {
+            toValue: 1,
+            duration: 300,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }),
+          Animated.timing(opacity, {
+            toValue: 1,
+            duration: 400,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }),
+          Animated.spring(scale, {
+            toValue: 1,
+            tension: 100,
+            friction: 8,
+            useNativeDriver: true,
+          }),
+        ])
+      : // Exit animation
+        Animated.parallel([
+          Animated.timing(backdropOpacity, {
+            toValue: 0,
+            duration: 200,
+            easing: Easing.in(Easing.cubic),
+            useNativeDriver: true,
+          }),
+          Animated.timing(opacity, {
+            toValue: 0,
+            duration: 200,
+            easing: Easing.in(Easing.cubic),
+            useNativeDriver: true,
+          }),
+          Animated.timing(scale, {
+            toValue: 0.9,
+            duration: 200,
+            easing: Easing.in(Easing.cubic),
+            useNativeDriver: true,
+          }),
+        ]);
+
+    animation.start();
+    // A modal unmounted mid-transition (or reopened before one finished) would
+    // otherwise leave the previous composition driving its values.
+    return () => animation.stop();
   }, [visible, backdropOpacity, opacity, scale]);
 
   useEffect(() => {
@@ -107,8 +112,13 @@ export function AnimatedModal({ children, visible, onClose }: AnimatedModalProps
   }, [translateY, visible]);
 
   return (
-    <Modal transparent visible={visible} statusBarTranslucent>
+    // A visible Modal consumes the Android back key inside its own Dialog
+    // window, so no BackHandler listener in the app can see it: dismissing on
+    // back has to go through onRequestClose, here.
+    <Modal transparent visible={visible} statusBarTranslucent onRequestClose={onClose}>
       <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]}>
+        {/* A redundant dismiss target beside the dialog's own actions, so it is
+            hidden from screen readers rather than announced as a nameless control. */}
         <TouchableWithoutFeedback onPress={onClose}>
           <BlurView
             intensity={isDark ? GlassColors.dark.backdropBlur : GlassColors.light.backdropBlur}
@@ -116,6 +126,8 @@ export function AnimatedModal({ children, visible, onClose }: AnimatedModalProps
             style={[styles.backdropTouchArea, {
               backgroundColor: isDark ? GlassColors.dark.backdrop : GlassColors.light.backdrop,
             }]}
+            accessibilityElementsHidden
+            importantForAccessibility="no"
           />
         </TouchableWithoutFeedback>
         <Animated.View

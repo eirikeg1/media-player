@@ -44,6 +44,15 @@ function rewrapRealmError(error: unknown): unknown {
 
 export class SQLiteDatabase {
   private db: BetterSqlite3.Database;
+  /**
+   * Every `execAsync` source this connection ran, newest last.
+   *
+   * Connection setup (the pragmas `sqlite-client` applies on open) is otherwise
+   * unobservable: several of them are indistinguishable from better-sqlite3's own
+   * defaults once the connection is up, so a test asserting the *effect* would
+   * pass with no setup at all.
+   */
+  private readonly execLog: string[] = [];
 
   constructor(template?: Buffer) {
     // A serialized template restores its full state into a new :memory: db.
@@ -74,7 +83,13 @@ export class SQLiteDatabase {
   }
 
   async execAsync(source: string): Promise<void> {
+    this.execLog.push(source);
     this.run(() => this.db.exec(source));
+  }
+
+  /** The `execAsync` sources this connection has run (test-only). */
+  __execLog(): string[] {
+    return [...this.execLog];
   }
 
   async withTransactionAsync(task: () => Promise<void>): Promise<void> {
@@ -83,6 +98,25 @@ export class SQLiteDatabase {
     this.run(() => this.db.exec('BEGIN'));
     try {
       await task();
+      this.run(() => this.db.exec('COMMIT'));
+    } catch (error) {
+      this.run(() => this.db.exec('ROLLBACK'));
+      throw error;
+    }
+  }
+
+  /**
+   * Real expo-sqlite runs this on a dedicated connection; better-sqlite3 has
+   * only the one, which is equivalent here because `sqlite-client` serialises
+   * every access anyway. The callback gets the transaction handle, as it does
+   * in production.
+   */
+  async withExclusiveTransactionAsync(
+    task: (txn: SQLiteDatabase) => Promise<void>,
+  ): Promise<void> {
+    this.run(() => this.db.exec('BEGIN IMMEDIATE'));
+    try {
+      await task(this);
       this.run(() => this.db.exec('COMMIT'));
     } catch (error) {
       this.run(() => this.db.exec('ROLLBACK'));
