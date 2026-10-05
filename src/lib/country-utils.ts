@@ -1,8 +1,13 @@
 import type { DropdownOption } from '@/components/ui/controls/inputs/dropdown';
+import { ALL_COUNTRIES } from 'expo-m3u-parser';
 import { Platform } from 'react-native';
 
-/** Sentinel value for "no country filter" — must match `sports_types::ALL_COUNTRIES` in Rust. */
-export const ALL_COUNTRIES_VALUE = 'ALL';
+/**
+ * Sentinel value for "no country filter". Taken from the bridge rather than
+ * spelled out again here: the native side compares against it, and a Rust test
+ * pins `sports_types::ALL_COUNTRIES` to the same literal.
+ */
+export const ALL_COUNTRIES_VALUE = ALL_COUNTRIES;
 
 export const COUNTRY_OPTIONS: DropdownOption<string>[] = [
   { label: 'All', value: ALL_COUNTRIES_VALUE },

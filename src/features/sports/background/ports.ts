@@ -1,9 +1,10 @@
 import type { SportsBackgroundRefresh } from '@/types/user.types';
 
 /**
- * The two things the background refresh needs from the platform. Keeping them
- * as interfaces lets the domain stay free of expo imports: the adapter that
- * implements them lives outside this directory, and the tests use fakes.
+ * What the sports refresh needs from the platform, as an interface: the task
+ * stays free of expo imports, and the tests use a fake. The OS task that runs
+ * the refresh is app-level (`src/background/`), as it serves the playlist sync
+ * too.
  */
 
 /**
@@ -20,13 +21,4 @@ export interface RefreshStateStore {
   /** Device-level copy of the preference; null when nothing was ever saved. */
   getPreference(): Promise<SportsBackgroundRefresh | null>;
   setPreference(pref: SportsBackgroundRefresh): Promise<void>;
-}
-
-/** The OS-level periodic task the refresh is driven by. */
-export interface BackgroundScheduler {
-  /** Register (or re-register) the periodic OS task. minutes >= 15. */
-  register(minutes: number): Promise<void>;
-  unregister(): Promise<void>;
-  /** False when the OS denies background work (restricted, disabled, or unsupported). */
-  isAvailable(): Promise<boolean>;
 }

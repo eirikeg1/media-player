@@ -2,7 +2,7 @@ import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
 import type { Channel } from '@/types/playlist.types';
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { Image, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 interface MovieItemProps {
@@ -11,9 +11,12 @@ interface MovieItemProps {
   onPress: (channel: Channel) => void;
 }
 
-export function MovieItem({ channel, isFavorite, onPress }: MovieItemProps) {
-  const [imageError, setImageError] = useState(false);
-  const hasLogo = !!channel.tvg.logo && !imageError;
+export const MovieItem = memo(function MovieItem({ channel, isFavorite, onPress }: MovieItemProps) {
+  // Keyed by URL rather than a boolean: a recycled cell showing a different
+  // poster must start out trusting it again.
+  const [failedLogoUrl, setFailedLogoUrl] = useState<string | null>(null);
+  const logoUrl = channel.tvg.logo;
+  const hasLogo = !!logoUrl && failedLogoUrl !== logoUrl;
   const initial = channel.name.charAt(0).toUpperCase();
 
   return (
@@ -28,10 +31,10 @@ export function MovieItem({ channel, isFavorite, onPress }: MovieItemProps) {
       >
         {hasLogo ? (
           <Image
-            source={{ uri: channel.tvg.logo }}
+            source={{ uri: logoUrl }}
             style={styles.poster}
             resizeMode="cover"
-            onError={() => setImageError(true)}
+            onError={() => setFailedLogoUrl(logoUrl)}
           />
         ) : (
           <ThemedView style={[styles.poster, styles.fallbackPoster]}>
@@ -51,7 +54,7 @@ export function MovieItem({ channel, isFavorite, onPress }: MovieItemProps) {
       </TouchableOpacity>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {

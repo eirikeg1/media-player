@@ -1,15 +1,19 @@
 import type { MatchIncident, MatchTimeline } from 'expo-m3u-parser';
 import { memo } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
-import type { MatchDataState } from '../hooks/use-match-detail';
-import { FAINT, MUTED, SectionLoading, SectionMessage } from './match-detail-shared';
+import type { MatchSectionState } from '../hooks/use-match-detail';
+import { MatchTimelineSkeleton } from '../skeletons';
+import { SectionMessage, StaleNotice, TabScroller } from './match-detail-shared';
+import { createThemedStyles } from './match-detail-theme';
 
 interface TimelineTabProps {
-  state: MatchDataState<MatchTimeline>;
+  state: MatchSectionState<MatchTimeline>;
   /** Landscape: cap the timeline width and centre it so incident rows stay
    * legible instead of stretching the two rails across the full card. */
   compact?: boolean;
+  /** False when the host already owns a vertical scroller (the match surface). */
+  scrollable?: boolean;
 }
 
 // Incident types we render; everything else (injury-time notes, etc.) is noise.
@@ -18,8 +22,10 @@ const RENDERED = new Set(['goal', 'card', 'substitution', 'varDecision']);
 export const MatchTimelineTab = memo(function MatchTimelineTab({
   state,
   compact = false,
+  scrollable = true,
 }: TimelineTabProps) {
-  if (state.isLoading) return <SectionLoading />;
+  const styles = useStyles();
+  if (state.isLoading) return <MatchTimelineSkeleton compact={compact} />;
   if (state.error) return <SectionMessage text={state.error} />;
 
   const timeline = state.data;
@@ -37,11 +43,11 @@ export const MatchTimelineTab = memo(function MatchTimelineTab({
   // Incidents arrive newest-first (the provider passes SofaScore's order
   // through) — the freshest events are what people check for.
   return (
-    <ScrollView
-      style={styles.fill}
-      contentContainerStyle={[styles.content, compact && styles.contentCompact]}
-      showsVerticalScrollIndicator={false}
+    <TabScroller
+      scrollable={scrollable}
+      contentStyle={[styles.content, compact && styles.contentCompact]}
     >
+      <StaleNotice meta={timeline} onRetry={state.refresh} />
       {incidents.map((incident, index) =>
         incident.type === 'period' ? (
           <PeriodMarker key={`p-${index}`} incident={incident} />
@@ -49,11 +55,12 @@ export const MatchTimelineTab = memo(function MatchTimelineTab({
           <IncidentRow key={`i-${index}`} incident={incident} />
         )
       )}
-    </ScrollView>
+    </TabScroller>
   );
 });
 
 function PeriodMarker({ incident }: { incident: MatchIncident }) {
+  const styles = useStyles();
   const score =
     incident.homeScore != null && incident.awayScore != null
       ? `${incident.homeScore} - ${incident.awayScore}`
@@ -73,6 +80,7 @@ function PeriodMarker({ incident }: { incident: MatchIncident }) {
 }
 
 function IncidentRow({ incident }: { incident: MatchIncident }) {
+  const styles = useStyles();
   // Home events sit on the right rail, away on the left; unknown defaults left.
   const isHome = incident.isHome === true;
   const content = <IncidentContent incident={incident} align={isHome ? 'right' : 'left'} />;
@@ -99,6 +107,7 @@ function IncidentContent({
   incident: MatchIncident;
   align: 'left' | 'right';
 }) {
+  const styles = useStyles();
   const alignStyle = align === 'right' ? styles.contentRight : styles.contentLeft;
 
   if (incident.type === 'substitution') {
@@ -159,7 +168,7 @@ function incidentGlyph(incident: MatchIncident): string {
   }
 }
 
-function cardGlyph(detail?: string): string {
+function cardGlyph(detail?: string | null): string {
   // Coloured squares render distinctly on the dark card without an icon font.
   // A second yellow shows the red it results in; the row text carries the
   // "(second yellow)" detail.
@@ -182,10 +191,7 @@ function formatMinute(incident: MatchIncident): string {
   return incident.addedTime ? `${incident.time}+${incident.addedTime}'` : `${incident.time}'`;
 }
 
-const styles = StyleSheet.create({
-  fill: {
-    flex: 1,
-  },
+const useStyles = createThemedStyles((theme) => ({
   content: {
     padding: 16,
     paddingBottom: 28,
@@ -223,26 +229,26 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: 2,
-    backgroundColor: FAINT,
+    backgroundColor: theme.faint,
   },
   node: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#1F1F24',
+    backgroundColor: theme.card,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.2)',
+    borderColor: theme.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
   nodeIcon: {
     fontSize: 14,
-    color: '#FFFFFF',
+    color: theme.text,
     fontWeight: '700',
   },
   minute: {
     marginTop: 3,
-    color: MUTED,
+    color: theme.muted,
     fontSize: 11,
     fontWeight: '600',
   },
@@ -253,26 +259,26 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   primaryText: {
-    color: '#FFFFFF',
+    color: theme.text,
     fontSize: 14,
     fontWeight: '600',
   },
   scoreText: {
-    color: '#1FB66B',
+    color: theme.positive,
     fontWeight: '800',
   },
   secondaryText: {
-    color: MUTED,
+    color: theme.muted,
     fontSize: 12,
     marginTop: 1,
   },
   subIn: {
-    color: '#1FB66B',
+    color: theme.positive,
     fontSize: 13,
     fontWeight: '600',
   },
   subOut: {
-    color: '#D85A4A',
+    color: theme.negative,
     fontSize: 13,
     fontWeight: '600',
     marginTop: 1,
@@ -286,17 +292,17 @@ const styles = StyleSheet.create({
   periodLine: {
     flex: 1,
     height: StyleSheet.hairlineWidth,
-    backgroundColor: FAINT,
+    backgroundColor: theme.border,
   },
   periodChip: {
-    backgroundColor: FAINT,
+    backgroundColor: theme.faint,
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 4,
   },
   periodText: {
-    color: '#FFFFFF',
+    color: theme.text,
     fontSize: 12,
     fontWeight: '700',
   },
-});
+}));

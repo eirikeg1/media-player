@@ -13,6 +13,11 @@ export interface MatchGroup {
   logoUrl?: string;
   competitionId?: number;
   isFavorites: boolean;
+  /**
+   * The group is one the user asked for: Favorites, or a competition in their
+   * league order. The list shows these expanded and collapses the rest.
+   */
+  isRanked: boolean;
   fixtures: Fixture[];
   liveCount: number;
 }
@@ -70,10 +75,15 @@ export function groupFixturesByLeague(fixtures: readonly Fixture[], options: Gro
       group = {
         key,
         title: fixture.competitionName,
-        subtitle: fixture.competitionCountry,
-        logoUrl: fixture.competitionId != null ? competitionLogoUrl(fixture.competitionId) : undefined,
-        competitionId: fixture.competitionId,
+        subtitle: fixture.competitionCountry ?? undefined,
+        // The stored emblem when the row has one; the provider's own URL for a
+        // row cached before that column existed (see `competitionLogoUrl`).
+        logoUrl:
+          fixture.competitionEmblemUrl ??
+          (fixture.competitionId != null ? competitionLogoUrl(fixture.competitionId) : undefined),
+        competitionId: fixture.competitionId ?? undefined,
         isFavorites: false,
+        isRanked,
         fixtures: [],
         liveCount: 0,
       };
@@ -105,6 +115,7 @@ export function groupFixturesByLeague(fixtures: readonly Fixture[], options: Gro
       key: FAVORITES_GROUP_KEY,
       title: 'Favorites',
       isFavorites: true,
+      isRanked: true,
       fixtures: favorites,
       liveCount: favorites.filter(isMatchLive).length,
     });

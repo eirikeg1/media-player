@@ -71,6 +71,12 @@ describe('expo-m3u-parser fake (Rust backend)', () => {
     const { series } = await db.getSeriesList({ playlistId: 'pl-1' });
     expect(series.map((s) => s.seriesName)).toEqual(['Breaking Bad', 'The Wire']);
     expect(series[0].episodeCount).toBe(3);
+
+    const exact = await db.getSeriesList({ playlistId: 'pl-1', exactName: 'The Wire', limit: 1 });
+    expect(exact.series.map((s) => s.seriesName)).toEqual(['The Wire']);
+    expect(
+      (await db.getSeriesList({ playlistId: 'pl-1', exactName: 'The Wir' })).series,
+    ).toEqual([]);
   });
 
   it('imports the XMLTV fixture and answers now/next queries', async () => {

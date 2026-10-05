@@ -15,6 +15,13 @@ interface MatchRowProps {
   onPress: (fixture: Fixture) => void;
   /** Draw a divider below the row (all but the last in a group). */
   showDivider?: boolean;
+  /**
+   * A counter the host advances while any match in the group is live (see
+   * `useLiveTick`). The minute below is read from the device clock, which React
+   * cannot see changing, so this is what carries the passage of time past
+   * `memo` — the value itself is never rendered.
+   */
+  tick?: number;
 }
 
 function statusColor(kind: FixtureStatusKind, muted: string): string {
@@ -41,15 +48,22 @@ export const MatchRow = memo(function MatchRow({ fixture, isFavorite, onPress, s
   const awayWon = isFinished && (fixture.awayScore ?? 0) > (fixture.homeScore ?? 0);
   const scoreColor = isLive ? SPORTS_ACCENT.live : palette.text;
   // The match minute in place of a bare "LIVE", when the backend captured the
-  // clock. No timer: the list already re-renders on the ~60s fixture poll.
+  // clock. Advanced by the `tick` prop above.
   const label = liveMinuteLabel(fixture, new Date()) ?? status.label;
+  // The row reads out what it shows. Without the scoreline a screen reader got
+  // "Arsenal versus Chelsea, 67'" — the one thing the row exists to tell you
+  // was the one thing it left out.
+  const scoreLabel =
+    status.showScore && fixture.homeScore != null && fixture.awayScore != null
+      ? `, ${fixture.homeScore} ${fixture.awayScore}`
+      : '';
 
   return (
     <TouchableOpacity
       onPress={() => onPress(fixture)}
       activeOpacity={0.6}
       accessibilityRole="button"
-      accessibilityLabel={`${fixture.homeTeam} versus ${fixture.awayTeam}, ${label}`}
+      accessibilityLabel={`${fixture.homeTeam} versus ${fixture.awayTeam}${scoreLabel}, ${label}`}
       style={[styles.row, showDivider && { borderBottomColor: palette.border, borderBottomWidth: StyleSheet.hairlineWidth }]}
     >
       {isLive && <View style={styles.liveBar} />}
@@ -63,6 +77,7 @@ export const MatchRow = memo(function MatchRow({ fixture, isFavorite, onPress, s
         <TeamLine
           name={fixture.homeTeam}
           crest={fixture.homeTeamCrest}
+          recyclingKey={`${fixture.providerId}:home`}
           score={status.showScore ? fixture.homeScore : undefined}
           scoreColor={scoreColor}
           dim={isFinished && !homeWon && !!awayWon}
@@ -71,6 +86,7 @@ export const MatchRow = memo(function MatchRow({ fixture, isFavorite, onPress, s
         <TeamLine
           name={fixture.awayTeam}
           crest={fixture.awayTeamCrest}
+          recyclingKey={`${fixture.providerId}:away`}
           score={status.showScore ? fixture.awayScore : undefined}
           scoreColor={scoreColor}
           dim={isFinished && !awayWon && !!homeWon}
@@ -92,14 +108,17 @@ export const MatchRow = memo(function MatchRow({ fixture, isFavorite, onPress, s
 function TeamLine({
   name,
   crest,
+  recyclingKey,
   score,
   scoreColor,
   dim,
   textColor,
 }: {
   name: string;
-  crest?: string;
-  score?: number;
+  crest?: string | null;
+  /** Identifies the crest slot so a recycled row doesn't show the last team's. */
+  recyclingKey: string;
+  score?: number | null;
   scoreColor: string;
   dim: boolean;
   textColor: string;
@@ -107,7 +126,14 @@ function TeamLine({
   return (
     <View style={styles.teamLine}>
       {crest ? (
-        <Image source={{ uri: crest }} style={styles.crest} contentFit="contain" transition={150} />
+        <Image
+          source={{ uri: crest }}
+          style={styles.crest}
+          contentFit="contain"
+          transition={150}
+          recyclingKey={recyclingKey}
+          cachePolicy="memory-disk"
+        />
       ) : (
         <View style={styles.crest} />
       )}

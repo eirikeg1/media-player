@@ -1,62 +1,68 @@
 import { TouchableOpacity } from 'react-native';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
+import { useHaptics } from '@/hooks/use-haptics';
 import { useUserStore } from '@/stores/user/user-store';
 
+
+/**
+ * Lookup sets memoised on the favourites array identity: the store replaces the
+ * array on every write, so one set is built per change and shared by every star
+ * on screen instead of each one scanning the array.
+ */
+const idSetCache = new WeakMap<readonly string[], ReadonlySet<string>>();
+
+function favoriteIdSet(ids: string[]): ReadonlySet<string> {
+  let set = idSetCache.get(ids);
+  if (!set) {
+    set = new Set(ids);
+    idSetCache.set(ids, set);
+  }
+  return set;
+}
+
+/**
+ * Whether `channelId` is favorited, as an O(1) store subscription — safe to call
+ * from every row of a long list.
+ */
+export function useIsFavoriteChannel(channelId: string): boolean {
+  return useUserStore((state) => favoriteIdSet(state.favoriteChannels).has(channelId));
+}
 
 interface FavoriteStarProps {
   channelId: string;
   channelName: string;
   size?: number;
-  initialIsFavorite?: boolean;
 }
 
-export function FavoriteStar({ channelId, channelName, size = 16, initialIsFavorite }: FavoriteStarProps) {
-  const [isFavorite, setIsFavorite] = useState(initialIsFavorite ?? false);
+export function FavoriteStar({ channelId, channelName, size = 16 }: FavoriteStarProps) {
   const [isLoading, setIsLoading] = useState(false);
+  const haptics = useHaptics();
 
-  const currentUser = useUserStore((state) => state.currentUser);
+  const userId = useUserStore((state) => state.currentUser?.id);
   const toggleFavorite = useUserStore((state) => state.toggleFavorite);
-  const checkIsFavorite = useUserStore((state) => state.isFavorite);
+  // `toggleFavorite` keeps this list in sync, so the store is the single source
+  // of truth — no local copy to drift and no per-star database round-trip.
+  const isFavorite = useIsFavoriteChannel(channelId);
 
   const favoriteColor = '#FFD700';
 
-  const loadFavoriteStatus = useCallback(async () => {
-    if (!currentUser) return;
-
-    try {
-      const favorite = await checkIsFavorite(currentUser.id, channelId);
-      setIsFavorite(favorite);
-    } catch (error) {
-      console.error('[FavoriteStar] Error checking favorite status:', error);
-    }
-  }, [currentUser, channelId, checkIsFavorite]);
-
   const handleToggle = useCallback(async () => {
-    if (!currentUser || isLoading) return;
+    if (!userId || isLoading) return;
 
-    console.log('[FavoriteStar] Toggling favorite for:', channelId, 'Current state:', isFavorite);
     setIsLoading(true);
+    haptics.selection();
     try {
-      await toggleFavorite(currentUser.id, channelId);
-      setIsFavorite(!isFavorite);
-      console.log('[FavoriteStar] Successfully toggled favorite to:', !isFavorite);
+      await toggleFavorite(userId, channelId);
     } catch (error) {
       console.error('[FavoriteStar] Error toggling favorite:', error);
     } finally {
       setIsLoading(false);
     }
-  }, [currentUser, channelId, isFavorite, isLoading, toggleFavorite]);
+  }, [userId, channelId, isLoading, toggleFavorite, haptics]);
 
-  useEffect(() => {
-    // Only load from database if initial favorite status wasn't provided
-    if (initialIsFavorite === undefined) {
-      loadFavoriteStatus();
-    }
-  }, [loadFavoriteStatus, initialIsFavorite]);
-
-  if (!currentUser) return null;
+  if (!userId) return null;
 
   return (
     <TouchableOpacity

@@ -1,3 +1,4 @@
+import { ErrorState } from '@/components/ui/display/state';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useThemeColor } from '@/hooks/use-theme-color';
@@ -5,15 +6,20 @@ import { GlassColors } from '@/lib/theme';
 import { Image } from 'expo-image';
 import type { Competition } from 'expo-m3u-parser';
 import { memo, useCallback, useMemo } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { groupCompetitions } from './competition-groups';
+import { CompetitionGridSkeleton } from './skeletons';
 
 interface CompetitionGridProps {
   competitions: Competition[];
   selectedCompId: number | null;
   onSelect: (id: number | null) => void;
   isLoading: boolean;
+  /** Why the list could not be loaded, or null. */
+  error?: string | null;
+  /** Retries the load; required for `error` to be actionable. */
+  onRetry?: () => void;
 }
 
 const COLUMNS = 3;
@@ -25,6 +31,8 @@ export const CompetitionGrid = memo(function CompetitionGrid({
   selectedCompId,
   onSelect,
   isLoading,
+  error,
+  onRetry,
 }: CompetitionGridProps) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
@@ -76,11 +84,13 @@ export const CompetitionGrid = memo(function CompetitionGrid({
   );
 
   if (isLoading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator />
-      </View>
-    );
+    return <CompetitionGridSkeleton />;
+  }
+
+  // Only when the load produced nothing: a failed refresh behind a list that is
+  // already on screen leaves the user with the competitions they had.
+  if (error && competitions.length === 0) {
+    return <ErrorState inline message={error} onRetry={onRetry} />;
   }
 
   const isAllSelected = selectedCompId === null;
@@ -127,10 +137,6 @@ export const CompetitionGrid = memo(function CompetitionGrid({
 const styles = StyleSheet.create({
   container: {
     gap: 8,
-  },
-  loadingContainer: {
-    padding: 32,
-    alignItems: 'center',
   },
   allChip: {
     paddingVertical: 10,

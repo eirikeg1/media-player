@@ -1,44 +1,24 @@
-import { getSportsDatabase } from '@/services/sports-service';
-import type { Standing } from 'expo-m3u-parser';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import type { SportsDatabase, Standing } from 'expo-m3u-parser';
 
-export function useStandings(competitionId: number | null) {
-  const [standings, setStandings] = useState<Standing[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const fetchRef = useRef(0);
+import { useLazyCompetitionData, type CompetitionDataState } from './use-competition-data';
 
-  const refresh = useCallback(async () => {
-    if (competitionId === null) {
-      setStandings([]);
-      return;
-    }
+/** Shared identity for "no table", so an empty result never re-renders the rows. */
+const NO_STANDINGS: Standing[] = [];
 
-    const fetchId = ++fetchRef.current;
-    setIsLoading(true);
-    setError(null);
+const fetchStandings = (db: SportsDatabase, id: number, ttlSecs: number) =>
+  db.getStandings(id, ttlSecs);
 
-    try {
-      const db = await getSportsDatabase();
-      const result = await db.getStandings(competitionId, undefined, undefined, 21600);
-      if (fetchId === fetchRef.current) {
-        setStandings(result);
-      }
-    } catch (err) {
-      if (fetchId === fetchRef.current) {
-        setError(err instanceof Error ? err.message : 'Failed to load standings');
-        console.error('[useStandings] Error:', err);
-      }
-    } finally {
-      if (fetchId === fetchRef.current) {
-        setIsLoading(false);
-      }
-    }
-  }, [competitionId]);
+export interface StandingsState extends Omit<CompetitionDataState<Standing[]>, 'data'> {
+  standings: Standing[];
+}
 
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
-
-  return { standings, isLoading, error, refresh };
+/** A competition's league table, loaded when its tab is on screen. */
+export function useStandings(competitionId: number | null, enabled: boolean): StandingsState {
+  const { data, ...rest } = useLazyCompetitionData(
+    competitionId,
+    enabled,
+    fetchStandings,
+    NO_STANDINGS
+  );
+  return { standings: data, ...rest };
 }

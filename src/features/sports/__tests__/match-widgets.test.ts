@@ -3,6 +3,7 @@ import type { Fixture } from 'expo-m3u-parser';
 import {
   buildMatchTabs,
   getFixtureScoreDisplay,
+  isConcludedStatus,
   isMatchConcluded,
   isMatchLive,
   matchHasStarted,
@@ -47,6 +48,8 @@ describe('matchHasStarted', () => {
     expect(matchHasStarted(makeFixture({ status: 'in_progress' }))).toBe(true);
     expect(matchHasStarted(makeFixture({ status: 'paused' }))).toBe(true);
     expect(matchHasStarted(makeFixture({ status: 'finished' }))).toBe(true);
+    // Interrupted mid-match: the statistics and timeline it produced are there.
+    expect(matchHasStarted(makeFixture({ status: 'interrupted' }))).toBe(true);
   });
 
   it('is false before kickoff', () => {
@@ -76,21 +79,68 @@ describe('isMatchLive', () => {
   it('is false when not in play', () => {
     expect(isMatchLive(makeFixture({ status: 'scheduled' }))).toBe(false);
     expect(isMatchLive(makeFixture({ status: 'finished' }))).toBe(false);
+    // The bug this vocabulary exists for: `interrupted` used to read as the
+    // half-time break, so the sheet showed HT and polled for good.
+    expect(isMatchLive(makeFixture({ status: 'interrupted' }))).toBe(false);
     expect(isMatchLive(makeFixture({ status: 'unknown' }))).toBe(false);
   });
 });
 
 describe('isMatchConcluded', () => {
+  const KICKOFF = 1_700_000_000;
+  const atKickoff = new Date(KICKOFF * 1000);
+  const hoursAfterKickoff = (hours: number) => new Date((KICKOFF + hours * 3600) * 1000);
+
   it('is true once the match can no longer go live', () => {
-    expect(isMatchConcluded('finished')).toBe(true);
-    expect(isMatchConcluded('postponed')).toBe(true);
-    expect(isMatchConcluded('cancelled')).toBe(true);
+    expect(isMatchConcluded(makeFixture({ status: 'finished' }), atKickoff)).toBe(true);
+    expect(isMatchConcluded(makeFixture({ status: 'postponed' }), atKickoff)).toBe(true);
+    expect(isMatchConcluded(makeFixture({ status: 'cancelled' }), atKickoff)).toBe(true);
   });
 
-  it('keeps scheduled, live and interrupted matches polling', () => {
-    expect(isMatchConcluded('scheduled')).toBe(false);
-    expect(isMatchConcluded('in_progress')).toBe(false);
-    expect(isMatchConcluded('unknown')).toBe(false);
+  it('keeps scheduled and live matches polling', () => {
+    expect(isMatchConcluded(makeFixture({ status: 'scheduled' }), atKickoff)).toBe(false);
+    expect(isMatchConcluded(makeFixture({ status: 'in_progress' }), atKickoff)).toBe(false);
+    expect(isMatchConcluded(makeFixture({ status: 'paused' }), atKickoff)).toBe(false);
+    // Hours late is still not concluded while the status says it is on.
+    expect(isMatchConcluded(makeFixture({ status: 'in_progress' }), hoursAfterKickoff(9))).toBe(
+      false
+    );
+  });
+
+  it('polls an interrupted match until it can only be over', () => {
+    // An interruption does not say whether the match resumes, so keep polling
+    // through it…
+    const interrupted = makeFixture({ status: 'interrupted' });
+    expect(isMatchConcluded(interrupted, hoursAfterKickoff(1))).toBe(false);
+    expect(isMatchConcluded(interrupted, hoursAfterKickoff(5))).toBe(false);
+    // …and stop once no match could still be running.
+    expect(isMatchConcluded(interrupted, hoursAfterKickoff(7))).toBe(true);
+    // The legacy provider spellings behind it get the same treatment.
+    expect(isMatchConcluded(makeFixture({ status: 'suspended' }), hoursAfterKickoff(7))).toBe(true);
+    expect(isMatchConcluded(makeFixture({ status: 'abandoned' }), hoursAfterKickoff(7))).toBe(true);
+  });
+
+  it('polls a status it does not recognise on the same timeout', () => {
+    const odd = makeFixture({ status: 'weather_delay' });
+    expect(isMatchConcluded(odd, hoursAfterKickoff(5))).toBe(false);
+    expect(isMatchConcluded(odd, hoursAfterKickoff(7))).toBe(true);
+  });
+
+  it('does not conclude a match that has not kicked off yet', () => {
+    const tomorrow = makeFixture({ status: 'something new', kickoffTime: KICKOFF + 86_400 });
+    expect(isMatchConcluded(tomorrow, atKickoff)).toBe(false);
+  });
+});
+
+describe('isConcludedStatus', () => {
+  it('decides from the status alone, for the scoreline poll', () => {
+    expect(isConcludedStatus('finished')).toBe(true);
+    expect(isConcludedStatus('cancelled')).toBe(true);
+    expect(isConcludedStatus('in_progress')).toBe(false);
+    // Without a kickoff time an unresolved status has to keep polling; the
+    // caller's own gate applies the timeout.
+    expect(isConcludedStatus('interrupted')).toBe(false);
+    expect(isConcludedStatus('weather_delay')).toBe(false);
   });
 });
 
@@ -147,5 +197,51 @@ describe('getFixtureScoreDisplay', () => {
     expect(display.score).toBeNull();
     expect(display.isLive).toBe(false);
     expect(display.status).toMatch(/\d/); // a formatted time
+  });
+
+  // The vocabulary now comes from `getFixtureStatus`, so nothing outside
+  // in-play/finished falls through to "kickoff time next to a cached scoreline".
+  it('shows HT for the halftime statuses', () => {
+    expect(getFixtureScoreDisplay(makeFixture({ status: 'paused' }))).toMatchObject({
+      status: 'HT',
+      score: '2 - 1',
+      isLive: true,
+    });
+  });
+
+  it('shows FT for the legacy full-time spelling', () => {
+    expect(getFixtureScoreDisplay(makeFixture({ status: 'FULL_TIME' }))).toMatchObject({
+      status: 'FT',
+      score: '2 - 1',
+      isLive: false,
+    });
+  });
+
+  it('names a postponed or cancelled match instead of its kickoff time', () => {
+    expect(getFixtureScoreDisplay(makeFixture({ status: 'postponed' }))).toMatchObject({
+      status: 'PP',
+      // A match that never kicked off has no scoreline, whatever the cache holds.
+      score: null,
+      isLive: false,
+    });
+    expect(getFixtureScoreDisplay(makeFixture({ status: 'cancelled' }))).toMatchObject({
+      status: 'CANC',
+      score: null,
+    });
+  });
+
+  it('names an interruption and keeps the score it stopped at', () => {
+    expect(getFixtureScoreDisplay(makeFixture({ status: 'interrupted' }))).toMatchObject({
+      status: 'SUSP',
+      score: '2 - 1',
+      isLive: false,
+    });
+  });
+
+  it('falls back to kickoff time and the known score for an unrecognised status', () => {
+    const display = getFixtureScoreDisplay(makeFixture({ status: 'weather_delay' }));
+    expect(display.status).toMatch(/\d/);
+    expect(display.score).toBe('2 - 1');
+    expect(display.isLive).toBe(false);
   });
 });

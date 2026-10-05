@@ -1,5 +1,6 @@
 import { getChannelId } from '@/lib/channel-utils';
-import { parseEpisodeInfo, type ParsedEpisode } from '@/lib/series-utils';
+import { sortEpisodes, type ParsedEpisode } from '@/lib/series-utils';
+import { isCompleted } from '@/lib/viewing-progress';
 import { useUserStore } from '@/stores/user/user-store';
 import type { Channel } from '@/types/playlist.types';
 import { useEffect, useMemo, useState } from 'react';
@@ -9,25 +10,25 @@ interface SeriesContinueResult {
   isLoading: boolean;
 }
 
+/**
+ * The episode a "Continue" button should start: the most recently watched one
+ * unless it was finished, in which case the one after it.
+ */
 export function useSeriesContinueEpisode(
   playlistId: string | null | undefined,
   episodes: Channel[]
 ): SeriesContinueResult {
   const [continueEpisode, setContinueEpisode] = useState<ParsedEpisode | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const currentUser = useUserStore((s) => s.currentUser);
-  const getRecentlyWatched = useUserStore((s) => s.getRecentlyWatched);
+  const userId = useUserStore((s) => s.currentUser?.id);
+  const getWatchStatsForChannels = useUserStore((s) => s.getWatchStatsForChannels);
 
-  // Build a flat sorted list of parsed episodes
-  const sortedEpisodes = useMemo(() => {
-    if (!episodes.length) return [];
-    return episodes
-      .map((ch, i) => parseEpisodeInfo(ch, i))
-      .sort((a, b) => a.season - b.season || a.episode - b.episode);
-  }, [episodes]);
+  // Playback order, shared with the series detail list and the next-episode
+  // pointer written during playback, so "next" means the same thing everywhere.
+  const sortedEpisodes = useMemo(() => sortEpisodes(episodes), [episodes]);
 
   useEffect(() => {
-    if (!playlistId || !currentUser || !sortedEpisodes.length) {
+    if (!playlistId || !userId || !sortedEpisodes.length) {
       setContinueEpisode(null);
       return;
     }
@@ -37,13 +38,14 @@ export function useSeriesContinueEpisode(
     (async () => {
       setIsLoading(true);
       try {
-        const history = await getRecentlyWatched(currentUser.id, playlistId, 200);
-
-        // Build a set of episode channel IDs for fast lookup
-        const episodeIds = new Set(episodes.map((ch) => getChannelId(ch)));
-
-        // Find the most recently watched episode in this series
-        const matched = history.find((item) => episodeIds.has(item.channelId));
+        // Ask about this series' episodes directly: paging through the recent
+        // history instead would miss a series last watched long enough ago to
+        // have fallen off the end of it.
+        const matched = await getWatchStatsForChannels(
+          userId,
+          playlistId,
+          sortedEpisodes.map((episode) => getChannelId(episode.channel))
+        );
 
         if (cancelled) return;
 
@@ -52,7 +54,6 @@ export function useSeriesContinueEpisode(
           return;
         }
 
-        // Find the matched episode in the sorted list
         const matchedIndex = sortedEpisodes.findIndex(
           (ep) => getChannelId(ep.channel) === matched.channelId
         );
@@ -62,22 +63,16 @@ export function useSeriesContinueEpisode(
           return;
         }
 
-        const matchedEp = sortedEpisodes[matchedIndex];
-        const lastPosition = matched.lastPosition ?? 0;
-        const totalDuration = matched.totalDuration;
-
-        // Check if in-progress (has position and not near the end)
-        const isInProgress =
-          lastPosition > 0 &&
-          (!totalDuration || lastPosition < totalDuration * 0.9);
-
-        if (isInProgress) {
-          setContinueEpisode(matchedEp);
-        } else {
-          // Completed — point to the next episode if available
-          const nextEp = sortedEpisodes[matchedIndex + 1] ?? null;
-          setContinueEpisode(nextEp);
-        }
+        // Only a *finished* episode moves the pointer on (null past the last
+        // one). Anything short of that — in progress, or barely started — offers
+        // the episode itself: a mis-tap must not skip the episode it landed on,
+        // which asking `isInProgress` did (it reads under the resume floor as
+        // "not in progress", the same answer it gives for a finished one).
+        setContinueEpisode(
+          isCompleted(matched.lastPosition ?? 0, matched.totalDuration)
+            ? sortedEpisodes[matchedIndex + 1] ?? null
+            : sortedEpisodes[matchedIndex]
+        );
       } catch (error) {
         console.error('[useSeriesContinueEpisode] Error:', error);
         if (!cancelled) setContinueEpisode(null);
@@ -89,7 +84,7 @@ export function useSeriesContinueEpisode(
     return () => {
       cancelled = true;
     };
-  }, [playlistId, currentUser, sortedEpisodes, episodes, getRecentlyWatched]);
+  }, [playlistId, userId, sortedEpisodes, getWatchStatsForChannels]);
 
   return { continueEpisode, isLoading };
 }

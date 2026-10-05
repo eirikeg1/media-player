@@ -1,30 +1,29 @@
 import type { H2H, MatchPreview, TeamForm } from 'expo-m3u-parser';
 import { memo } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
-import type { MatchDataState } from '../hooks/use-match-detail';
-import {
-  AWAY_COLOR,
-  FAINT,
-  FormPills,
-  HOME_COLOR,
-  MUTED,
-  SectionLoading,
-  SectionMessage,
-} from './match-detail-shared';
+import type { MatchSectionState } from '../hooks/use-match-detail';
+import { MatchPreviewSkeleton } from '../skeletons';
+import { FormPills, SectionMessage, StaleNotice, TabScroller } from './match-detail-shared';
+import { createThemedStyles, useMatchDetailTheme } from './match-detail-theme';
 
 interface PreviewTabProps {
-  state: MatchDataState<MatchPreview>;
+  state: MatchSectionState<MatchPreview>;
   homeLabel: string;
   awayLabel: string;
+  /** False when the host already owns a vertical scroller (the match surface). */
+  scrollable?: boolean;
 }
 
 export const MatchPreviewTab = memo(function MatchPreviewTab({
   state,
   homeLabel,
   awayLabel,
+  scrollable = true,
 }: PreviewTabProps) {
-  if (state.isLoading) return <SectionLoading />;
+  const styles = useStyles();
+  const theme = useMatchDetailTheme();
+  if (state.isLoading) return <MatchPreviewSkeleton />;
   if (state.error) return <SectionMessage text={state.error} />;
 
   const preview = state.data;
@@ -33,7 +32,8 @@ export const MatchPreviewTab = memo(function MatchPreviewTab({
   }
 
   return (
-    <ScrollView style={styles.fill} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    <TabScroller scrollable={scrollable} contentStyle={styles.content}>
+      <StaleNotice meta={preview} onRetry={state.refresh} />
       {preview.h2h && (
         <View style={styles.block}>
           <Text style={styles.blockTitle}>Head to head</Text>
@@ -45,13 +45,13 @@ export const MatchPreviewTab = memo(function MatchPreviewTab({
         <View style={styles.block}>
           <Text style={styles.blockTitle}>Recent form</Text>
           <View style={styles.formColumns}>
-            <FormColumn label={homeLabel} form={preview.homeForm} accent={HOME_COLOR} />
+            <FormColumn label={homeLabel} form={preview.homeForm} accent={theme.homeColor} />
             <View style={styles.formDivider} />
-            <FormColumn label={awayLabel} form={preview.awayForm} accent={AWAY_COLOR} align="right" />
+            <FormColumn label={awayLabel} form={preview.awayForm} accent={theme.awayColor} align="right" />
           </View>
         </View>
       )}
-    </ScrollView>
+    </TabScroller>
   );
 });
 
@@ -64,18 +64,20 @@ function HeadToHead({
   homeLabel: string;
   awayLabel: string;
 }) {
+  const styles = useStyles();
+  const theme = useMatchDetailTheme();
   const total = Math.max(1, h2h.homeWins + h2h.draws + h2h.awayWins);
   return (
     <View style={styles.h2hCard}>
       <View style={styles.h2hCounts}>
-        <H2HCount value={h2h.homeWins} label="Wins" align="left" color={HOME_COLOR} />
-        <H2HCount value={h2h.draws} label="Draws" align="center" color={MUTED} />
-        <H2HCount value={h2h.awayWins} label="Wins" align="right" color={AWAY_COLOR} />
+        <H2HCount value={h2h.homeWins} label="Wins" align="left" color={theme.homeColor} />
+        <H2HCount value={h2h.draws} label="Draws" align="center" color={theme.muted} />
+        <H2HCount value={h2h.awayWins} label="Wins" align="right" color={theme.awayColor} />
       </View>
       <View style={styles.h2hBar}>
-        <View style={{ flex: h2h.homeWins / total, backgroundColor: HOME_COLOR }} />
-        <View style={{ flex: h2h.draws / total, backgroundColor: 'rgba(255,255,255,0.25)' }} />
-        <View style={{ flex: h2h.awayWins / total, backgroundColor: AWAY_COLOR }} />
+        <View style={{ flex: h2h.homeWins / total, backgroundColor: theme.homeColor }} />
+        <View style={{ flex: h2h.draws / total, backgroundColor: theme.muted }} />
+        <View style={{ flex: h2h.awayWins / total, backgroundColor: theme.awayColor }} />
       </View>
       <View style={styles.h2hTeams}>
         <Text style={styles.h2hTeam} numberOfLines={1}>
@@ -100,6 +102,7 @@ function H2HCount({
   align: 'left' | 'center' | 'right';
   color: string;
 }) {
+  const styles = useStyles();
   return (
     <View style={[styles.h2hCount, { alignItems: alignItems(align) }]}>
       <Text style={[styles.h2hValue, { color }]}>{value}</Text>
@@ -115,10 +118,11 @@ function FormColumn({
   align = 'left',
 }: {
   label: string;
-  form?: TeamForm;
+  form?: TeamForm | null;
   accent: string;
   align?: 'left' | 'right';
 }) {
+  const styles = useStyles();
   const itemsAlign = alignItems(align);
   return (
     <View style={[styles.formColumn, { alignItems: itemsAlign }]}>
@@ -153,10 +157,7 @@ function alignItems(align: 'left' | 'center' | 'right') {
   return 'flex-start';
 }
 
-const styles = StyleSheet.create({
-  fill: {
-    flex: 1,
-  },
+const useStyles = createThemedStyles((theme) => ({
   content: {
     padding: 16,
     gap: 22,
@@ -166,7 +167,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   blockTitle: {
-    color: '#FFFFFF',
+    color: theme.text,
     fontSize: 14,
     fontWeight: '700',
   },
@@ -185,7 +186,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   h2hLabel: {
-    color: MUTED,
+    color: theme.muted,
     fontSize: 11,
     fontWeight: '600',
     textTransform: 'uppercase',
@@ -196,7 +197,7 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     overflow: 'hidden',
-    backgroundColor: FAINT,
+    backgroundColor: theme.faint,
   },
   h2hTeams: {
     flexDirection: 'row',
@@ -204,7 +205,7 @@ const styles = StyleSheet.create({
   },
   h2hTeam: {
     flex: 1,
-    color: MUTED,
+    color: theme.muted,
     fontSize: 12,
     fontWeight: '600',
   },
@@ -221,7 +222,7 @@ const styles = StyleSheet.create({
   },
   formDivider: {
     width: StyleSheet.hairlineWidth,
-    backgroundColor: FAINT,
+    backgroundColor: theme.border,
   },
   formTeamRow: {
     flexDirection: 'row',
@@ -234,7 +235,7 @@ const styles = StyleSheet.create({
     borderRadius: 4.5,
   },
   formTeamName: {
-    color: '#FFFFFF',
+    color: theme.text,
     fontSize: 13,
     fontWeight: '700',
     flexShrink: 1,
@@ -243,7 +244,7 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   formMetaText: {
-    color: MUTED,
+    color: theme.muted,
     fontSize: 12,
   },
-});
+}));

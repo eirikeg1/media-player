@@ -80,10 +80,18 @@ export function useViewingHistory({
       const totalDur = durationRef.current;
       const completed = totalDur > 0 && finalPosition / totalDur >= 0.9;
 
-      endViewingSession(sid, finalPosition, watchedTime, completed).then(() => {
-        if (completed && contentType === 'series' && userId) {
-          resolveAndStoreNextEpisode(userId, playlistId, channel);
-        }
+      // Two independent writes, each with its own failure: closing the session
+      // is what records the watch, so it must run even when resolving the next
+      // episode fails. (`setNextEpisode` creates the `channel_watch_stats` row
+      // when it is missing, so the pointer does not depend on the session write
+      // having landed either — and ending the session leaves it alone.)
+      if (completed && contentType === 'series' && userId) {
+        resolveAndStoreNextEpisode(userId, playlistId, channel).catch((error) => {
+          console.error('[ViewingHistory] Failed to resolve next episode:', error);
+        });
+      }
+      endViewingSession(sid, finalPosition, watchedTime, completed).catch((error) => {
+        console.error('[ViewingHistory] Failed to close session:', error);
       });
       sessionIdRef.current = null;
     };
@@ -123,7 +131,9 @@ export function useViewingHistory({
       currentTime / duration >= 0.9
     ) {
       nextEpisodeResolvedRef.current = true;
-      resolveAndStoreNextEpisode(userId, playlistId, channel);
+      resolveAndStoreNextEpisode(userId, playlistId, channel).catch((error) => {
+        console.error('[ViewingHistory] Failed to resolve next episode:', error);
+      });
     }
   }, [currentTime, duration, isPlaying, updateSessionProgress, contentType, userId, playlistId, channel, resolveAndStoreNextEpisode]);
 }

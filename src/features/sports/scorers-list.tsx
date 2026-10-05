@@ -1,15 +1,20 @@
 import { ThemedText } from '@/components/ui/display/themed-text';
+import { ErrorState } from '@/components/ui/display/state';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { GlassColors, THEME } from '@/lib/theme';
+import { GlassColors } from '@/lib/theme';
 import { Image } from 'expo-image';
 import type { Scorer, TopScorers } from 'expo-m3u-parser';
 import { memo } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+
+import { ScorersSkeleton } from './skeletons';
 
 interface ScorersListProps {
   scorers: TopScorers | null;
   isLoading: boolean;
   error: string | null;
+  /** Load the chart again after a failure. */
+  onRetry?: () => void;
 }
 
 const ScorerRow = memo(function ScorerRow({
@@ -21,8 +26,16 @@ const ScorerRow = memo(function ScorerRow({
   rank: number;
   isDark: boolean;
 }) {
+  const assists =
+    scorer.assists != null
+      ? `, ${scorer.assists} ${scorer.assists === 1 ? 'assist' : 'assists'}`
+      : '';
+
   return (
     <View
+      // One announcement per player: the name, team and tallies belong together.
+      accessible
+      accessibilityLabel={`${rank}. ${scorer.playerName}, ${scorer.teamName}, ${scorer.goals} ${scorer.goals === 1 ? 'goal' : 'goals'}${assists}`}
       style={[
         styles.row,
         { borderBottomColor: isDark ? GlassColors.dark.border : GlassColors.light.border },
@@ -58,21 +71,17 @@ export const ScorersList = memo(function ScorersList({
   scorers,
   isLoading,
   error,
+  onRetry,
 }: ScorersListProps) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
-  const destructiveColor = THEME[colorScheme ?? 'light'].destructive;
 
   return (
     <View style={styles.container}>
       {isLoading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator />
-        </View>
+        <ScorersSkeleton />
       ) : error ? (
-        <View style={styles.emptyContainer}>
-          <ThemedText style={[styles.errorText, { color: destructiveColor }]}>{error}</ThemedText>
-        </View>
+        <ErrorState inline message={error} onRetry={onRetry} />
       ) : scorers?.scorers && scorers.scorers.length > 0 ? (
         <View>
           {scorers.scorers.map((scorer, index) => (
@@ -93,20 +102,12 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingHorizontal: 16,
   },
-  loadingContainer: {
-    padding: 32,
-    alignItems: 'center',
-  },
   emptyContainer: {
     padding: 32,
     alignItems: 'center',
   },
   emptyText: {
     opacity: 0.6,
-  },
-  errorText: {
-    opacity: 0.7,
-    textAlign: 'center',
   },
   row: {
     flexDirection: 'row',

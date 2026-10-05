@@ -2,7 +2,9 @@ import { ModalHeader } from '@/components/ui/containers/modal/modal-header';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
 import type { PageId } from '@/config/header-backgrounds';
+import { saveSetting } from '@/features/user/save-setting';
 import { useUserStore } from '@/stores/user/user-store';
+import { SWITCH_TRACK, TINT } from '@/lib/theme';
 import { memo, useCallback } from 'react';
 import { Modal, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,18 +22,13 @@ export const CustomizeThemeModal = memo(function CustomizeThemeModal({
   onClose,
 }: CustomizeThemeModalProps) {
   const insets = useSafeAreaInsets();
-  const currentUser = useUserStore((s) => s.currentUser);
-  const updateSettings = useUserStore((s) => s.updateSettings);
-
-  const shareUploads = currentUser?.settings?.shareUploadedBackgrounds ?? true;
-
-  const handleToggleShare = useCallback(
-    (value: boolean) => {
-      if (!currentUser) return;
-      updateSettings(currentUser.id, { shareUploadedBackgrounds: value });
-    },
-    [currentUser, updateSettings],
+  const shareUploads = useUserStore(
+    (s) => s.currentUser?.settings?.shareUploadedBackgrounds ?? true,
   );
+
+  const handleToggleShare = useCallback((value: boolean) => {
+    void saveSetting({ shareUploadedBackgrounds: value }, 'background sharing');
+  }, []);
 
   return (
     <Modal
@@ -52,7 +49,7 @@ export const CustomizeThemeModal = memo(function CustomizeThemeModal({
             <Switch
               value={shareUploads}
               onValueChange={handleToggleShare}
-              trackColor={{ false: '#767577', true: '#007AFF' }}
+              trackColor={{ false: SWITCH_TRACK, true: TINT }}
               accessibilityLabel="Share uploaded background images with other users"
             />
           </View>

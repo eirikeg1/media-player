@@ -1,104 +1,73 @@
-import { useVideoNetworkStore } from '@/stores/video/network-store';
-import { useCallback, useEffect, useMemo } from 'react';
+import { useSyncExternalStore } from 'react';
+
 import {
-    checkNetworkConnectivity,
-    getNetworkErrorMessage,
-    isNetworkSuitableForStreaming,
-    subscribeToNetworkChanges
+  checkNetworkConnectivity,
+  subscribeToNetworkChanges,
+  type NetworkState,
 } from '../../utils/network-utils';
 
-export function useVideoNetwork() {
-  const {
-    networkState,
-    isMonitoring,
-    unsubscribe,
-    setNetworkState,
-    setIsMonitoring,
-    setUnsubscribe,
-  } = useVideoNetworkStore();
+// ---------------------------------------------------------------------------
+// One NetInfo subscription shared by all subscribers, refcounted like
+// `use-now-seconds`. A per-hook subscription stored in a Zustand store lost its
+// unsubscribe function whenever a second consumer mounted, leaking the native
+// listener for the rest of the app's life.
+// ---------------------------------------------------------------------------
 
-  const checkNetwork = useCallback(async () => {
-    try {
-      const network = await checkNetworkConnectivity();
-      setNetworkState(network);
-      return network;
-    } catch (error) {
-      console.warn('Failed to check network connectivity:', error);
-      return useVideoNetworkStore.getState().networkState; // Return current state if check fails
+type Listener = () => void;
+
+const listeners = new Set<Listener>();
+let netInfoUnsubscribe: (() => void) | null = null;
+
+let snapshot: NetworkState = {
+  isConnected: true,
+  type: 'unknown',
+  isWifiEnabled: false,
+};
+
+function publish(next: NetworkState): void {
+  if (
+    next.isConnected === snapshot.isConnected &&
+    next.type === snapshot.type &&
+    next.isWifiEnabled === snapshot.isWifiEnabled &&
+    next.strength === snapshot.strength
+  ) {
+    return;
+  }
+  snapshot = next;
+  for (const listener of listeners) {
+    listener();
+  }
+}
+
+function subscribe(listener: Listener): () => void {
+  listeners.add(listener);
+
+  if (listeners.size === 1) {
+    netInfoUnsubscribe = subscribeToNetworkChanges(publish);
+    void checkNetwork();
+  }
+
+  return () => {
+    listeners.delete(listener);
+    if (listeners.size === 0) {
+      netInfoUnsubscribe?.();
+      netInfoUnsubscribe = null;
     }
-  }, [setNetworkState]);
+  };
+}
 
-  const startNetworkMonitoring = useCallback(() => {
-    if (isMonitoring) return;
+function getSnapshot(): NetworkState {
+  return snapshot;
+}
 
-    const unsubscribeFn = subscribeToNetworkChanges((newNetworkState) => {
-      setNetworkState(newNetworkState);
-    });
+/** Probe connectivity now, publishing the result to every subscriber. */
+export async function checkNetwork(): Promise<NetworkState> {
+  const state = await checkNetworkConnectivity();
+  publish(state);
+  return state;
+}
 
-    setUnsubscribe(unsubscribeFn);
-    setIsMonitoring(true);
-
-    // Check initial network state
-    checkNetwork();
-  }, [isMonitoring, setNetworkState, setUnsubscribe, setIsMonitoring, checkNetwork]);
-
-  const stopNetworkMonitoring = useCallback(() => {
-    if (unsubscribe) {
-      unsubscribe();
-      setUnsubscribe(null);
-    }
-    setIsMonitoring(false);
-  }, [unsubscribe, setUnsubscribe, setIsMonitoring]);
-
-  const isNetworkSuitable = useCallback(() => {
-    return isNetworkSuitableForStreaming(networkState);
-  }, [networkState]);
-
-  const getNetworkError = useCallback(() => {
-    return getNetworkErrorMessage(networkState);
-  }, [networkState]);
-
-  // Auto-start monitoring on mount
-  useEffect(() => {
-    if (isMonitoring) return;
-
-    const unsubscribeFn = subscribeToNetworkChanges((newNetworkState) => {
-      setNetworkState(newNetworkState);
-    });
-
-    setUnsubscribe(unsubscribeFn);
-    setIsMonitoring(true);
-
-    // Check initial network state
-    checkNetworkConnectivity().then(setNetworkState).catch(console.warn);
-
-    return () => {
-      if (unsubscribeFn) {
-        unsubscribeFn();
-      }
-      setUnsubscribe(null);
-      setIsMonitoring(false);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Empty deps - only run on mount/unmount. Zustand setters are stable.
-
-  const actions = useMemo(() => ({
-    checkNetwork,
-    startNetworkMonitoring,
-    stopNetworkMonitoring,
-  }), [checkNetwork, startNetworkMonitoring, stopNetworkMonitoring]);
-
-  return useMemo(() => ({
-    networkState,
-    isMonitoring,
-    isNetworkSuitable: isNetworkSuitable(),
-    networkError: getNetworkError(),
-    actions,
-  }), [
-    networkState,
-    isMonitoring,
-    isNetworkSuitable,
-    getNetworkError,
-    actions,
-  ]);
+/** The device's current network state, updated as it changes. */
+export function useVideoNetwork(): NetworkState {
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }

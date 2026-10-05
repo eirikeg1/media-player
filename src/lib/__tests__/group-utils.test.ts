@@ -3,11 +3,9 @@ import {
   sortGroupsWithAdultLast,
   processRawGroupCounts,
   getEffectiveFavoriteGroups,
-  calculateChannelGroups,
   FAVORITES_GROUP_SENTINEL,
   type GroupOption,
 } from '../group-utils';
-import type { Channel } from '@/types/playlist.types';
 
 describe('isAdultGroup', () => {
   it.each(['XXX Movies', 'Adult Content', 'porn', 'NSFW Channels', 'Erotic', 'x-rated', 'xrated', '18+ Only'])(
@@ -91,40 +89,16 @@ describe('getEffectiveFavoriteGroups', () => {
     expect(result).toEqual(['Sports']);
   });
 
-  it('returns undefined when no favorites match', () => {
+  // An empty array is a filter that matches nothing, and must stay
+  // distinguishable from `undefined` ("no filter") — otherwise the screen
+  // silently falls back to showing every channel.
+  it('returns an empty array when no favorites match', () => {
     const result = getEffectiveFavoriteGroups(['Missing'], available);
-    expect(result).toBeUndefined();
+    expect(result).toEqual([]);
   });
 
   it('filters out empty name and sentinel', () => {
     const result = getEffectiveFavoriteGroups(['', FAVORITES_GROUP_SENTINEL], available);
-    expect(result).toBeUndefined();
-  });
-});
-
-describe('calculateChannelGroups', () => {
-  const channels: Channel[] = [
-    { name: 'Ch1', url: '', tvg: {}, group: { title: 'Sports' } },
-    { name: 'Ch2', url: '', tvg: {}, group: { title: 'Sports' } },
-    { name: 'Ch3', url: '', tvg: {}, group: { title: 'News' } },
-  ];
-
-  it('prepends "All" entry with total count', () => {
-    const groups = calculateChannelGroups(channels);
-    expect(groups[0]).toEqual({ name: '', channelCount: 3 });
-  });
-
-  it('groups channels by group.title', () => {
-    const groups = calculateChannelGroups(channels);
-    const sports = groups.find((g) => g.name === 'Sports');
-    expect(sports?.channelCount).toBe(2);
-  });
-
-  it('uses "Uncategorized" for channels without a group', () => {
-    const withNoGroup: Channel[] = [
-      { name: 'X', url: '', tvg: {}, group: { title: undefined } },
-    ];
-    const groups = calculateChannelGroups(withNoGroup);
-    expect(groups.find((g) => g.name === 'Uncategorized')).toBeDefined();
+    expect(result).toEqual([]);
   });
 });

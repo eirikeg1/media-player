@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { View } from 'react-native';
 import { Redirect } from 'expo-router';
-import { ThemedText } from '@/components/ui/display/themed-text';
-import { ThemedView } from '@/components/ui/display/themed-view';
+import { ErrorState } from '@/components/ui/display/state';
+import { firstVisibleTabHref } from '@/features/user/visible-tabs';
 import { useAppReadyStore } from '@/stores/app';
 import { useUserStore } from '@/stores/user/user-store';
 import { usePlaylistStore } from '@/stores/playlist/playlist-store';
@@ -15,6 +15,7 @@ import { retryInit } from '@/hooks/use-playlist-init';
 export default function Index() {
   const users = useUserStore(state => state.users);
   const isLoading = useUserStore(state => state.isLoading);
+  const settings = useUserStore(state => state.currentUser?.settings);
   const isPlaylistInitialized = usePlaylistStore(state => state.isInitialized);
   const initError = usePlaylistStore(state => state.initError);
 
@@ -36,51 +37,25 @@ export default function Index() {
   // Show error screen if initialization failed
   if (initError) {
     return (
-      <ThemedView style={styles.errorContainer}>
-        <ThemedText style={styles.errorTitle}>Failed to Initialize</ThemedText>
-        <ThemedText style={styles.errorMessage} type="subtitle">
-          {initError}
-        </ThemedText>
-        <ThemedText
-          style={styles.retryButton}
-          onPress={retryInit}
-        >
-          Tap to Retry
-        </ThemedText>
-      </ThemedView>
+      <ErrorState
+        title="Failed to Initialize"
+        message={initError}
+        // retryInit reports failures through `initError`; the promise itself
+        // must not be left floating.
+        onRetry={() => void retryInit()}
+      />
     );
   }
 
+  // First launch: a redirect, not a push, so back from the profile wizard exits
+  // the app. That is the policy — the wizard is the first screen, with nowhere
+  // behind it to go, and leaving it half-finished would land on this same
+  // redirect anyway.
   if (users.length === 0) {
     return <Redirect href="/user-select" />;
   }
 
-  return <Redirect href="/(tabs)" />;
+  // Home may be hidden, in which case `/(tabs)` would land on a screen with no
+  // tab of its own.
+  return <Redirect href={firstVisibleTabHref(settings)} />;
 }
-
-const styles = StyleSheet.create({
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 32,
-    gap: 12,
-  },
-  errorTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-  },
-  errorMessage: {
-    fontSize: 14,
-    textAlign: 'center',
-    opacity: 0.7,
-    lineHeight: 20,
-  },
-  retryButton: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#007AFF',
-    marginTop: 16,
-    padding: 12,
-  },
-});

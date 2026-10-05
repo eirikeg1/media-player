@@ -1,3 +1,4 @@
+import { saveSetting } from '@/features/user/save-setting';
 import { useUserStore } from '@/stores/user/user-store';
 import type { Competition } from 'expo-m3u-parser';
 import { useCallback, useMemo } from 'react';
@@ -18,32 +19,22 @@ export interface LeaguePreferences {
 
 /** The user's league ranking and related sports-list preferences. */
 export function useLeaguePreferences(): LeaguePreferences {
-  const currentUser = useUserStore((s) => s.currentUser);
-  const updateSettings = useUserStore((s) => s.updateSettings);
+  // Primitive selectors: the user object is replaced on every settings write.
+  const saved = useUserStore((s) => s.currentUser?.settings?.sportsLeagueOrder);
+  const hideOtherLeagues = useUserStore((s) => s.currentUser?.settings?.sportsHideOtherLeagues ?? false);
   const { competitions } = useCompetitions();
 
-  const saved = currentUser?.settings?.sportsLeagueOrder;
-  const hideOtherLeagues = currentUser?.settings?.sportsHideOtherLeagues ?? false;
   const order = useMemo(() => resolveLeagueOrder(saved, competitions), [saved, competitions]);
 
-  const setOrder = useCallback(
-    (next: number[]) => {
-      if (!currentUser) return;
-      void updateSettings(currentUser.id, { sportsLeagueOrder: next });
-    },
-    [currentUser, updateSettings]
-  );
+  const setOrder = useCallback((next: number[]) => {
+    void saveSetting({ sportsLeagueOrder: next }, 'league order');
+  }, []);
   const resetOrder = useCallback(() => {
-    if (!currentUser) return;
-    void updateSettings(currentUser.id, { sportsLeagueOrder: undefined });
-  }, [currentUser, updateSettings]);
-  const setHideOtherLeagues = useCallback(
-    (hide: boolean) => {
-      if (!currentUser) return;
-      void updateSettings(currentUser.id, { sportsHideOtherLeagues: hide });
-    },
-    [currentUser, updateSettings]
-  );
+    void saveSetting({ sportsLeagueOrder: undefined }, 'league order');
+  }, []);
+  const setHideOtherLeagues = useCallback((hide: boolean) => {
+    void saveSetting({ sportsHideOtherLeagues: hide }, 'league filter');
+  }, []);
 
   return { competitions, order, hideOtherLeagues, setOrder, resetOrder, setHideOtherLeagues };
 }

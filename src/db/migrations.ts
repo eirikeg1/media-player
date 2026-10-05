@@ -1,10 +1,38 @@
 import * as SQLite from 'expo-sqlite';
-import { getDatabase } from './sqlite-client';
+import { COMPLETION_RATIO } from '@/lib/viewing-progress';
+import { getRustDatabase } from '@/services/rust-channel-service';
+import { getDatabase, withDbLock } from './sqlite-client';
 
 interface Migration {
   version: number;
   name: string;
   up: (db: SQLite.SQLiteDatabase) => Promise<void>;
+}
+
+/**
+ * Add a column unless the table already has it.
+ *
+ * `ALTER TABLE … ADD COLUMN` throws on a column that already exists, which
+ * bricks the app when a migration is retried after a torn run (the DDL landed
+ * but the `migrations` row did not). Every ADD COLUMN migration goes through
+ * here so re-running it is a no-op.
+ *
+ * @param ddl The column definition after the name, e.g. `INTEGER NOT NULL DEFAULT 1`.
+ */
+export async function addColumnIfMissing(
+  db: SQLite.SQLiteDatabase,
+  table: string,
+  column: string,
+  ddl: string,
+): Promise<void> {
+  const columns = await db.getAllAsync<{ name: string }>(`PRAGMA table_info(${table})`);
+
+  if (columns.some((existing) => existing.name === column)) {
+    console.log(`[Migration] Column ${table}.${column} already exists`);
+    return;
+  }
+
+  await db.execAsync(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl};`);
 }
 
 const migrations: Migration[] = [
@@ -259,21 +287,9 @@ const migrations: Migration[] = [
     name: 'add_activePlaylistId_if_missing',
     up: async (db) => {
       // Fresh installs always reach this with the column already present
-      // (migration 4 creates it), so check the schema directly instead of
-      // pattern-matching the error message of a failed ALTER.
-      const columns = (await db.getAllAsync(
-        'PRAGMA table_info(user_settings)'
-      )) as { name: string }[];
-
-      if (columns.some((column) => column.name === 'activePlaylistId')) {
-        console.log('[Migration] activePlaylistId column already exists');
-        return;
-      }
-
-      await db.execAsync(`
-        ALTER TABLE user_settings ADD COLUMN activePlaylistId TEXT;
-      `);
-      console.log('[Migration] Added activePlaylistId column to user_settings table');
+      // (migration 4 creates it).
+      await addColumnIfMissing(db, 'user_settings', 'activePlaylistId', 'TEXT');
+      console.log('[Migration] Ensured activePlaylistId column on user_settings');
     },
   },
   {
@@ -304,15 +320,9 @@ const migrations: Migration[] = [
     version: 7,
     name: 'add_tab_visibility_settings',
     up: async (db) => {
-      await db.execAsync(`
-        ALTER TABLE user_settings ADD COLUMN showHomeTab INTEGER NOT NULL DEFAULT 1;
-      `);
-      await db.execAsync(`
-        ALTER TABLE user_settings ADD COLUMN showLiveTab INTEGER NOT NULL DEFAULT 1;
-      `);
-      await db.execAsync(`
-        ALTER TABLE user_settings ADD COLUMN showVideosTab INTEGER NOT NULL DEFAULT 1;
-      `);
+      await addColumnIfMissing(db, 'user_settings', 'showHomeTab', 'INTEGER NOT NULL DEFAULT 1');
+      await addColumnIfMissing(db, 'user_settings', 'showLiveTab', 'INTEGER NOT NULL DEFAULT 1');
+      await addColumnIfMissing(db, 'user_settings', 'showVideosTab', 'INTEGER NOT NULL DEFAULT 1');
 
       console.log('[Migration] Added tab visibility columns to user_settings');
     },
@@ -321,12 +331,13 @@ const migrations: Migration[] = [
     version: 8,
     name: 'add_playlist_sharing',
     up: async (db) => {
-      await db.execAsync(`
-        ALTER TABLE playlists ADD COLUMN createdByUserId TEXT;
-      `);
-      await db.execAsync(`
-        ALTER TABLE user_settings ADD COLUMN playlistSharingEnabled INTEGER NOT NULL DEFAULT 1;
-      `);
+      await addColumnIfMissing(db, 'playlists', 'createdByUserId', 'TEXT');
+      await addColumnIfMissing(
+        db,
+        'user_settings',
+        'playlistSharingEnabled',
+        'INTEGER NOT NULL DEFAULT 1',
+      );
 
       console.log('[Migration] Added playlist sharing columns');
     },
@@ -398,10 +409,14 @@ const migrations: Migration[] = [
       await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_cws_last_watched ON channel_watch_stats (userId, playlistId, lastWatchedAt DESC);`);
       await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_cws_watch_count ON channel_watch_stats (userId, playlistId, watchCount DESC);`);
       await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_cws_total_time ON channel_watch_stats (userId, playlistId, totalTimeWatched DESC);`);
+      // The ratio comes from the shared constant so this predicate and the
+      // "in progress" queries in the repository cannot drift into two different
+      // numbers — SQLite only uses a partial index when the query's condition
+      // provably implies the index's own, which a differing literal would break.
       await db.execAsync(`
         CREATE INDEX IF NOT EXISTS idx_cws_resume
         ON channel_watch_stats (userId, playlistId, lastWatchedAt DESC)
-        WHERE lastPosition > 0 AND (totalDuration IS NULL OR lastPosition < totalDuration * 0.9);
+        WHERE lastPosition > 0 AND (totalDuration IS NULL OR lastPosition < totalDuration * ${COMPLETION_RATIO});
       `);
 
       // Create group_watch_stats table (aggregated per user+playlist+group)
@@ -426,7 +441,7 @@ const migrations: Migration[] = [
     version: 10,
     name: 'add_private_mode_expires_at',
     up: async (db) => {
-      await db.execAsync(`ALTER TABLE user_settings ADD COLUMN privateModeExpiresAt TEXT;`);
+      await addColumnIfMissing(db, 'user_settings', 'privateModeExpiresAt', 'TEXT');
 
       console.log('[Migration] Added privateModeExpiresAt column to user_settings');
     },
@@ -467,8 +482,11 @@ const migrations: Migration[] = [
       `);
 
       // Share-uploads toggle on user_settings
-      await db.execAsync(
-        'ALTER TABLE user_settings ADD COLUMN shareUploadedBackgrounds INTEGER NOT NULL DEFAULT 1;',
+      await addColumnIfMissing(
+        db,
+        'user_settings',
+        'shareUploadedBackgrounds',
+        'INTEGER NOT NULL DEFAULT 1',
       );
 
       console.log('[Migration] Added header background tables and shareUploadedBackgrounds setting');
@@ -478,7 +496,7 @@ const migrations: Migration[] = [
     version: 12,
     name: 'add_playlist_epg_url',
     up: async (db) => {
-      await db.execAsync(`ALTER TABLE playlists ADD COLUMN epgUrl TEXT;`);
+      await addColumnIfMissing(db, 'playlists', 'epgUrl', 'TEXT');
 
       console.log('[Migration] Added epgUrl column to playlists');
     },
@@ -487,8 +505,8 @@ const migrations: Migration[] = [
     version: 13,
     name: 'add_next_episode_columns',
     up: async (db) => {
-      await db.execAsync(`ALTER TABLE channel_watch_stats ADD COLUMN nextEpisodeChannelId TEXT;`);
-      await db.execAsync(`ALTER TABLE channel_watch_stats ADD COLUMN nextEpisodeChannelName TEXT;`);
+      await addColumnIfMissing(db, 'channel_watch_stats', 'nextEpisodeChannelId', 'TEXT');
+      await addColumnIfMissing(db, 'channel_watch_stats', 'nextEpisodeChannelName', 'TEXT');
 
       console.log('[Migration] Added next-episode columns to channel_watch_stats');
     },
@@ -497,7 +515,7 @@ const migrations: Migration[] = [
     version: 14,
     name: 'add_playlist_sync_interval',
     up: async (db) => {
-      await db.execAsync(`ALTER TABLE playlists ADD COLUMN syncInterval INTEGER;`);
+      await addColumnIfMissing(db, 'playlists', 'syncInterval', 'INTEGER');
 
       console.log('[Migration] Added syncInterval column to playlists');
     },
@@ -506,7 +524,7 @@ const migrations: Migration[] = [
     version: 15,
     name: 'add_show_sports_tab',
     up: async (db) => {
-      await db.execAsync(`ALTER TABLE user_settings ADD COLUMN showSportsTab INTEGER NOT NULL DEFAULT 1;`);
+      await addColumnIfMissing(db, 'user_settings', 'showSportsTab', 'INTEGER NOT NULL DEFAULT 1');
 
       console.log('[Migration] Added showSportsTab column to user_settings');
     },
@@ -515,8 +533,8 @@ const migrations: Migration[] = [
     version: 16,
     name: 'add_playlist_epg_sync',
     up: async (db) => {
-      await db.execAsync(`ALTER TABLE playlists ADD COLUMN epgSyncInterval INTEGER;`);
-      await db.execAsync(`ALTER TABLE playlists ADD COLUMN lastEpgFetchedAt TEXT;`);
+      await addColumnIfMissing(db, 'playlists', 'epgSyncInterval', 'INTEGER');
+      await addColumnIfMissing(db, 'playlists', 'lastEpgFetchedAt', 'TEXT');
 
       console.log('[Migration] Added epgSyncInterval and lastEpgFetchedAt columns to playlists');
     },
@@ -525,7 +543,7 @@ const migrations: Migration[] = [
     version: 17,
     name: 'add_sports_country',
     up: async (db) => {
-      await db.execAsync(`ALTER TABLE user_settings ADD COLUMN sportsCountry TEXT;`);
+      await addColumnIfMissing(db, 'user_settings', 'sportsCountry', 'TEXT');
 
       console.log('[Migration] Added sportsCountry column to user_settings');
     },
@@ -582,9 +600,12 @@ const migrations: Migration[] = [
     version: 19,
     name: 'add_sports_league_preferences',
     up: async (db) => {
-      await db.execAsync(`ALTER TABLE user_settings ADD COLUMN sportsLeagueOrder TEXT;`);
-      await db.execAsync(
-        `ALTER TABLE user_settings ADD COLUMN sportsHideOtherLeagues INTEGER NOT NULL DEFAULT 0;`
+      await addColumnIfMissing(db, 'user_settings', 'sportsLeagueOrder', 'TEXT');
+      await addColumnIfMissing(
+        db,
+        'user_settings',
+        'sportsHideOtherLeagues',
+        'INTEGER NOT NULL DEFAULT 0',
       );
 
       console.log('[Migration] Added sportsLeagueOrder and sportsHideOtherLeagues columns to user_settings');
@@ -594,33 +615,97 @@ const migrations: Migration[] = [
     version: 20,
     name: 'add_sports_background_refresh',
     up: async (db) => {
-      await db.execAsync(`ALTER TABLE user_settings ADD COLUMN sportsBackgroundRefresh TEXT;`);
+      await addColumnIfMissing(db, 'user_settings', 'sportsBackgroundRefresh', 'TEXT');
 
       console.log('[Migration] Added sportsBackgroundRefresh column to user_settings');
+    },
+  },
+  {
+    version: 21,
+    name: 'add_user_content_reactions',
+    up: async (db) => {
+      // Like/dislike reactions on movies and series. One row per
+      // (user, content): the UNIQUE constraint makes like/dislike mutually
+      // exclusive. channelId follows the favorites convention (channel id for
+      // movies, `series:`-prefixed id for series) and intentionally has no
+      // foreign key — the catalog lives in the Rust database.
+      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS user_content_reactions (
+          id TEXT PRIMARY KEY NOT NULL,
+          userId TEXT NOT NULL,
+          channelId TEXT NOT NULL,
+          reaction INTEGER NOT NULL CHECK (reaction IN (1, -1)),
+          createdAt TEXT NOT NULL,
+          FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE,
+          UNIQUE(userId, channelId)
+        );
+      `);
+      await db.execAsync(`
+        CREATE INDEX IF NOT EXISTS idx_user_content_reactions_userId ON user_content_reactions (userId);
+      `);
+
+      console.log('[Migration] Created user_content_reactions table');
+    },
+  },
+  // 22 is the deferred channel-id remap (see LEGACY_CHANNEL_ID_REMAP below).
+  {
+    version: 23,
+    name: 'default_playlist_sync_intervals',
+    up: async (db) => {
+      // Playlists used to be created without either interval, and the
+      // schedulers skip an unset one — so no playlist ever synced on its own.
+      // NULL has only ever meant "never set": there was no "Off" choice until
+      // `0` was introduced alongside this migration, so filling it in cannot
+      // override a decision. The values are the defaults as of this migration,
+      // frozen here on purpose: a later change of default must not rewrite
+      // what this step did.
+      await db.runAsync('UPDATE playlists SET syncInterval = ? WHERE syncInterval IS NULL', [360]);
+      await db.runAsync('UPDATE playlists SET epgSyncInterval = ? WHERE epgSyncInterval IS NULL', [
+        1440,
+      ]);
+
+      console.log('[Migration] Backfilled unset playlist sync intervals with the defaults');
+    },
+  },
+  {
+    version: 24,
+    name: 'add_background_sync_on_mobile_data',
+    up: async (db) => {
+      await addColumnIfMissing(
+        db,
+        'user_settings',
+        'backgroundSyncOnMobileData',
+        'INTEGER NOT NULL DEFAULT 0',
+      );
+
+      console.log('[Migration] Added backgroundSyncOnMobileData column to user_settings');
     },
   },
 ];
 
 /**
- * Get the current database version
+ * Get the current database version.
+ *
+ * A fresh database is recognised by the absence of the `migrations` table, not
+ * by the error message of a failed SELECT: corruption or an unreadable file
+ * must not be read as "fresh", which would re-run every migration over
+ * existing data.
  */
 async function getCurrentVersion(db: SQLite.SQLiteDatabase): Promise<number> {
-  try {
-    const result = await db.getFirstAsync(
-      'SELECT MAX(version) as version FROM migrations'
-    ) as { version: number } | null;
-    return result?.version || 0;
-  } catch {
-    // migrations table doesn't exist yet
+  const migrationsTable = await db.getFirstAsync<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'migrations'"
+  );
+  if (!migrationsTable) {
     return 0;
   }
+
+  const result = await db.getFirstAsync<{ version: number | null }>(
+    'SELECT MAX(version) as version FROM migrations'
+  );
+  return result?.version ?? 0;
 }
 
-/**
- * Run all pending migrations
- */
-export async function runMigrations(): Promise<void> {
-  const db = await getDatabase();
+async function applyPendingMigrations(db: SQLite.SQLiteDatabase): Promise<void> {
   const currentVersion = await getCurrentVersion(db);
 
   const pendingMigrations = migrations.filter(
@@ -650,6 +735,34 @@ export async function runMigrations(): Promise<void> {
   console.log('[DB] All migrations completed successfully');
 }
 
+// Single-flight guard, tied to the connection it ran against: concurrent
+// callers share one run, and a new connection (after `closeDatabase`) migrates
+// again. A failed run is forgotten so a retry can start over.
+let migrationRun: { db: SQLite.SQLiteDatabase; promise: Promise<void> } | null = null;
+
+/**
+ * Run all pending migrations. Concurrent calls share a single run, and the
+ * whole run holds the database lock so no query can observe a half-migrated
+ * schema.
+ */
+export async function runMigrations(): Promise<void> {
+  const db = await getDatabase();
+
+  if (migrationRun?.db === db) {
+    return migrationRun.promise;
+  }
+
+  const promise = withDbLock(() => applyPendingMigrations(db));
+  migrationRun = { db, promise };
+
+  try {
+    await promise;
+  } catch (error) {
+    migrationRun = null;
+    throw error;
+  }
+}
+
 /**
  * Initialize the database by running all migrations
  */
@@ -660,4 +773,153 @@ export async function initializeDatabase(): Promise<void> {
     console.error('[DB] Error initializing database:', error);
     throw error;
   }
+}
+
+/**
+ * The one-time remap of legacy `"{title}|{url}"` channel ids onto the ids the
+ * backend generates today (`movie:12345`, `episode:678`, `live:42`).
+ *
+ * Not part of {@link migrations}: it needs the Rust database to be open (the
+ * mapping is a native call), which happens after the schema migrations. It is
+ * recorded in the same `migrations` table so it runs exactly once, which speaks
+ * for this version number, which the schema migrations skip.
+ */
+const LEGACY_CHANNEL_ID_REMAP = { version: 22, name: 'remap_legacy_channel_ids' } as const;
+
+/**
+ * Every column in this database that holds a channel id, and the column that
+ * scopes it to a playlist where there is one.
+ *
+ * Grepped from the schema above; a new id-keyed column has to be added here, or
+ * a device that has not migrated yet will leave it behind.
+ */
+const CHANNEL_ID_COLUMNS: { table: string; column: string; playlistColumn?: string }[] = [
+  { table: 'channel_watch_stats', column: 'channelId', playlistColumn: 'playlistId' },
+  { table: 'channel_watch_stats', column: 'nextEpisodeChannelId', playlistColumn: 'playlistId' },
+  { table: 'viewing_sessions', column: 'channelId', playlistColumn: 'playlistId' },
+  { table: 'user_favorite_channels', column: 'channelId' },
+  { table: 'user_hidden_channels', column: 'channelId' },
+  { table: 'user_channel_order', column: 'channelId' },
+  { table: 'user_content_reactions', column: 'channelId' },
+];
+
+/**
+ * Stored ids worth asking the backend about: only the legacy form carries the
+ * `|` separator, so a `tvg.id` or an already-current id never crosses the
+ * bridge. Live favourites are the bulk of these tables.
+ */
+const LEGACY_ID_PREDICATE = "LIKE '%|%'";
+
+/**
+ * The distinct legacy ids this playlist's rows are keyed on.
+ *
+ * Watch-stats ids come first, least recently watched first: two rows for the
+ * same title (one per spelling the panel used) collapse onto one id, and the
+ * `UPDATE OR REPLACE` below lets the last write win — so the row the user
+ * watched most recently is the one that survives.
+ */
+async function collectLegacyChannelIds(
+  db: SQLite.SQLiteDatabase,
+  playlistId: string,
+): Promise<string[]> {
+  const ids = new Set<string>();
+
+  const byRecency = await db.getAllAsync<{ id: string }>(
+    `SELECT channelId AS id FROM channel_watch_stats
+     WHERE playlistId = ? AND channelId ${LEGACY_ID_PREDICATE}
+     GROUP BY channelId
+     ORDER BY MAX(lastWatchedAt) ASC`,
+    [playlistId],
+  );
+  for (const { id } of byRecency) ids.add(id);
+
+  for (const { table, column, playlistColumn } of CHANNEL_ID_COLUMNS) {
+    const scope = playlistColumn ? ` AND ${playlistColumn} = ?` : '';
+    const rows = await db.getAllAsync<{ id: string }>(
+      `SELECT DISTINCT ${column} AS id FROM ${table}
+       WHERE ${column} ${LEGACY_ID_PREDICATE}${scope}`,
+      playlistColumn ? [playlistId] : [],
+    );
+    for (const { id } of rows) ids.add(id);
+  }
+
+  return [...ids];
+}
+
+/**
+ * Move this device's own data onto the stable channel ids.
+ *
+ * Channel ids used to be `"{title}|{url}"` for everything without a `tvg.id`,
+ * so a panel rewriting a VOD title ("Wedding Crashers - 2005" → "Wedding
+ * Crashers [PRE] [2005]") changed the id on the next playlist refresh and
+ * orphaned the history, continue-watching position, favourite and reaction
+ * keyed on it. The catalogue is rewritten first, then every table here follows,
+ * per playlist and in one transaction. Ids with nothing to map to (plain M3U
+ * playlists, which have no stream ids) are left exactly as they are.
+ *
+ * Runs once, guarded by its `migrations` row. Must be called after
+ * {@link initializeDatabase}, because it needs the schema, and it opens the
+ * Rust database, because the mapping rule lives there.
+ */
+export async function migrateLegacyChannelIds(): Promise<void> {
+  const db = await getDatabase();
+
+  await withDbLock(async () => {
+    const applied = await db.getFirstAsync<{ version: number }>(
+      'SELECT version FROM migrations WHERE version = ?',
+      [LEGACY_CHANNEL_ID_REMAP.version],
+    );
+    if (applied) return;
+
+    // With no playlist there is no catalogue to rewrite, and nothing an id
+    // could be resolved against — but the run still counts as done.
+    const playlists = await db.getAllAsync<{ id: string }>('SELECT id FROM playlists');
+    if (playlists.length > 0) {
+      const rustDb = await getRustDatabase();
+      for (const { id } of playlists) {
+        await remapPlaylistChannelIds(db, rustDb, id);
+      }
+    }
+
+    await db.runAsync('INSERT INTO migrations (version, name, appliedAt) VALUES (?, ?, ?)', [
+      LEGACY_CHANNEL_ID_REMAP.version,
+      LEGACY_CHANNEL_ID_REMAP.name,
+      new Date().toISOString(),
+    ]);
+  });
+}
+
+/** One playlist's share of {@link migrateLegacyChannelIds}. */
+async function remapPlaylistChannelIds(
+  db: SQLite.SQLiteDatabase,
+  rustDb: Awaited<ReturnType<typeof getRustDatabase>>,
+  playlistId: string,
+): Promise<void> {
+  const rewritten = await rustDb.rewritePlaylistChannelIds(playlistId);
+  const legacyIds = await collectLegacyChannelIds(db, playlistId);
+  const mappings = legacyIds.length
+    ? await rustDb.mapLegacyChannelIds(playlistId, legacyIds)
+    : [];
+
+  let remapped = 0;
+  await db.withTransactionAsync(async () => {
+    for (const { table, column, playlistColumn } of CHANNEL_ID_COLUMNS) {
+      const scope = playlistColumn ? ` AND ${playlistColumn} = ?` : '';
+      for (const { legacyId, channelId } of mappings) {
+        // OR REPLACE: two rows that differed only in the title now share one
+        // id, and the unique constraints have to collapse them rather than
+        // abort the whole remap.
+        const result = await db.runAsync(
+          `UPDATE OR REPLACE ${table} SET ${column} = ? WHERE ${column} = ?${scope}`,
+          playlistColumn ? [channelId, legacyId, playlistId] : [channelId, legacyId],
+        );
+        remapped += result.changes;
+      }
+    }
+  });
+
+  console.log(
+    `[Migration] Playlist ${playlistId}: ${rewritten} catalogue ids rewritten, ` +
+      `${mappings.length}/${legacyIds.length} stored ids mapped, ${remapped} rows remapped`,
+  );
 }

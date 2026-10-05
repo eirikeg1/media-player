@@ -28,12 +28,21 @@ function endOfDay(date: Date): number {
 }
 
 /**
- * Lazy-loads the EPG schedule for a single channel when the modal is open.
- * Supports date navigation (prev/next day).
+ * Loads the EPG schedule for a single channel, with date navigation
+ * (prev/next day).
+ *
+ * Mounting is the enablement: the detail surface is a route of its own now, so
+ * the hook only runs while that surface is on screen — it no longer has to be
+ * told whether a modal holding it is open.
+ *
+ * @param channelId The channel's EPG (`tvg.id`) id; `null` for a channel the
+ *   guide cannot match at all.
+ * @param shiftHours The channel's `tvg-shift`. Applied inside the query, so the
+ *   day asked for is the day returned and its programmes carry shifted times.
  */
 export function useChannelSchedule(
   channelId: string | null,
-  enabled: boolean
+  shiftHours: number = 0
 ): UseChannelScheduleReturn {
   const [schedule, setSchedule] = useState<EpgProgramme[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -54,7 +63,7 @@ export function useChannelSchedule(
   }, [channelId]);
 
   useEffect(() => {
-    if (!enabled || !channelId) {
+    if (!channelId) {
       setSchedule([]);
       return;
     }
@@ -65,7 +74,7 @@ export function useChannelSchedule(
     const from = startOfDay(selectedDate);
     const to = endOfDay(selectedDate);
 
-    EpgService.getChannelSchedule(channelId, from, to)
+    EpgService.getChannelSchedule(channelId, from, to, shiftHours)
       .then((result) => {
         if (!cancelled && isMountedRef.current) {
           setSchedule(result);
@@ -88,7 +97,7 @@ export function useChannelSchedule(
     return () => {
       cancelled = true;
     };
-  }, [enabled, channelId, selectedDate]);
+  }, [channelId, selectedDate, shiftHours]);
 
   return { schedule, isLoading, selectedDate, setSelectedDate };
 }

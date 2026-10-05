@@ -3,12 +3,12 @@ import { useCallback, useMemo } from 'react';
 import { VIDEO_CONSTANTS } from '../../constants';
 
 export function useVideoControls() {
-  const {
-    showControls,
-    setShowControls,
-    showControlsTemporarily,
-    clearHideControlsTimeout,
-  } = useVideoUIStore();
+  // Selected rather than subscribing to the whole store: `hideControlsTimeoutId`
+  // changes on every show/hide and must not re-render the player tree.
+  const showControls = useVideoUIStore((s) => s.showControls);
+  const setShowControls = useVideoUIStore((s) => s.setShowControls);
+  const showControlsTemporarily = useVideoUIStore((s) => s.showControlsTemporarily);
+  const clearHideControlsTimeout = useVideoUIStore((s) => s.clearHideControlsTimeout);
 
   const scheduleHideControls = useCallback((timeoutMs?: number) => {
     showControlsTemporarily(timeoutMs ?? VIDEO_CONSTANTS.CONTROLS_HIDE_TIMEOUT);

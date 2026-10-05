@@ -28,7 +28,7 @@ export type MatchDetailSection = 'score' | 'statistics' | 'players' | 'timeline'
 
 /** How stale `section` of `fixture` may be before it is refetched. */
 export function matchDetailTtl(fixture: Fixture, section: MatchDetailSection): number {
-  if (isMatchConcluded(fixture.status)) return TTL_CONCLUDED_SECS;
+  if (isMatchConcluded(fixture)) return TTL_CONCLUDED_SECS;
   // Form and H2H are about the matches *before* this one, so they don't move
   // while it is played — the one section a live match still caches for hours.
   if (section === 'preview') return TTL_PREVIEW_SECS;

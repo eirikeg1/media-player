@@ -9,7 +9,7 @@ export function useFavoriteChannels(activePlaylist: Playlist | null, hasLoadedPl
   const isInitialMount = useRef(true);
   const isMountedRef = useRef(true);
 
-  const currentUser = useUserStore((state) => state.currentUser);
+  const userId = useUserStore((state) => state.currentUser?.id);
   const favoriteChannels = useUserStore((state) => state.favoriteChannels);
   const loadFavoriteChannels = useUserStore((state) => state.loadFavoriteChannels);
 
@@ -22,9 +22,9 @@ export function useFavoriteChannels(activePlaylist: Playlist | null, hasLoadedPl
   const loadFavorites = useCallback(async () => {
     if (!isMountedRef.current) return;
 
-    if (currentUser) {
+    if (userId) {
       try {
-        await loadFavoriteChannels(currentUser.id);
+        await loadFavoriteChannels(userId);
       } catch (error) {
         if (!isMountedRef.current) return;
         console.error('Error loading favorite channels:', error);
@@ -33,7 +33,7 @@ export function useFavoriteChannels(activePlaylist: Playlist | null, hasLoadedPl
 
     if (!isMountedRef.current) return;
     setHasLoadedFavorites(true);
-  }, [currentUser, loadFavoriteChannels]);
+  }, [userId, loadFavoriteChannels]);
 
   const handleRefresh = useCallback(async () => {
     if (!isMountedRef.current) return;
@@ -47,10 +47,10 @@ export function useFavoriteChannels(activePlaylist: Playlist | null, hasLoadedPl
   useEffect(() => {
     if (activePlaylist && hasLoadedPlaylist) {
       loadFavorites();
-    } else if (hasLoadedPlaylist && !currentUser) {
+    } else if (hasLoadedPlaylist && !userId) {
       setHasLoadedFavorites(true);
     }
-  }, [activePlaylist, hasLoadedPlaylist, loadFavorites, currentUser]);
+  }, [activePlaylist, hasLoadedPlaylist, loadFavorites, userId]);
 
   useFocusEffect(
     useCallback(() => {

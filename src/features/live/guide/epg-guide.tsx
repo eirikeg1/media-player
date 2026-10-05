@@ -2,15 +2,18 @@ import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { useEpgSearch } from '@/features/live/hooks/use-epg-search';
+import { isEpgSearchActive, useEpgSearch } from '@/features/live/hooks/use-epg-search';
 import { useGuideProgrammes } from '@/features/live/hooks/use-guide-programmes';
 import { usePaginatedChannels } from '@/features/live/hooks/use-paginated-channels';
 import { useProgrammeCategories } from '@/features/live/hooks/use-programme-categories';
-import { useGroups } from '@/features/live/hooks/use-groups';
-import { FAVORITES_GROUP_SENTINEL, getEffectiveFavoriteGroups } from '@/lib/group-utils';
+import { resolvePlayableChannel } from '@/features/live/resolve-channel';
+import { isChannelFavorite } from '@/lib/channel-utils';
+import { FAVORITES_GROUP_SENTINEL, getEffectiveFavoriteGroups, type GroupOption } from '@/lib/group-utils';
+import { channelParam, epgProgrammeParam } from '@/lib/route-params';
 import type { Channel } from '@/types/playlist.types';
 import type { EpgProgramme } from 'expo-m3u-parser';
-import { useCallback, useMemo, useState } from 'react';
+import { useRouter } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useSharedValue } from 'react-native-reanimated';
 import { ROW_HEIGHT } from './epg-constants';
@@ -18,48 +21,76 @@ import { EpgChannelColumn } from './epg-channel-column';
 import { EpgCurrentTimeIndicator } from './epg-current-time-indicator';
 import { EpgFilterModal } from './epg-filter-modal';
 import { EpgGuideTopBar } from './epg-guide-top-bar';
-import { EpgProgrammeDetailModal } from './epg-programme-detail-modal';
 import { EpgProgrammeGrid } from './epg-programme-grid';
 import { EpgSkeleton } from './epg-skeleton';
 import { EpgTimeHeader } from './epg-time-header';
+
+const GUIDE_PAGE_SIZE = 50;
+
+/**
+ * How many extra pages one end-reach may pull in while the visible row count
+ * stays flat. Without a cap a playlist whose tail has no EPG data at all would
+ * page to the end in one gesture.
+ */
+const MAX_PAGES_PER_END_REACH = 5;
 
 interface EpgGuideProps {
   playlistId: string | null | undefined;
   favoriteChannels: string[];
   favoriteGroups: string[];
+  /** Fetched once by the screen and shared with the channel grid. */
+  groups: GroupOption[];
   excludeAdult: boolean;
   onChannelPress: (channel: Channel) => void;
   onToggleFavoriteGroup: (name: string) => void;
+  /** Screen-level refresh (favorites and the first-page cache). */
+  onRefresh: () => void;
+  /** True while the screen-level refresh is in flight. */
+  isRefreshing: boolean;
 }
 
 export function EpgGuide({
   playlistId,
   favoriteChannels,
   favoriteGroups,
+  groups,
   excludeAdult,
   onChannelPress,
   onToggleFavoriteGroup,
+  onRefresh,
+  isRefreshing,
 }: EpgGuideProps) {
+  const router = useRouter();
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [searchText, setSearchText] = useState('');
-  const [selectedProgramme, setSelectedProgramme] = useState<EpgProgramme | null>(null);
-  const [detailModalVisible, setDetailModalVisible] = useState(false);
   const [hideEmptyChannels, setHideEmptyChannels] = useState(true);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
 
   // Group selection state — defaults to all channels
   const [selectedGroupName, setSelectedGroupName] = useState<string>('');
 
+  // Synchronous state derivation: reset filters on playlist change, mirroring
+  // the channel grid. A group, a search or a day carried over from the previous
+  // playlist filters the guide down to nothing with no sign of why.
+  const [prevPlaylistId, setPrevPlaylistId] = useState(playlistId);
+
+  if (playlistId !== prevPlaylistId) {
+    setPrevPlaylistId(playlistId);
+    setSearchText('');
+    setSelectedGroupName('');
+    setHideEmptyChannels(true);
+    setSelectedDate(new Date());
+  }
+
   const scrollX = useSharedValue(0);
   const scrollY = useSharedValue(0);
 
   const iconColor = useThemeColor({}, 'icon');
 
-  // Fetch groups for the guide's own group selector
-  const { groups } = useGroups(playlistId, 'live', favoriteGroups, excludeAdult);
-
-  // Translate group selection for the paginated channels query
+  // Translate group selection for the paginated channels query. An empty array
+  // means "your favorite groups aren't in this playlist" — a filter that matches
+  // nothing, which must not fall back to every channel.
   const channelGroups = selectedGroupName === FAVORITES_GROUP_SENTINEL
     ? getEffectiveFavoriteGroups(favoriteGroups, groups)
     : selectedGroupName
@@ -70,47 +101,60 @@ export function EpgGuide({
   const {
     channels: guideChannels,
     isLoading: isLoadingChannels,
+    isRefreshing: isRefreshingChannels,
     hasMore: hasMoreChannels,
     loadMore: loadMoreChannels,
     isLoadingMore: isLoadingMoreChannels,
+    error: channelsError,
+    refresh: refreshChannels,
+    retry: retryChannels,
   } = usePaginatedChannels({
     playlistId,
     groups: channelGroups,
     contentType: 'live',
     favoriteChannelIds: favoriteChannels,
     excludeAdult,
-    pageSize: 50,
+    pageSize: GUIDE_PAGE_SIZE,
   });
 
   // Sort channels: favorites first, then the rest
   const sortedChannels = useMemo(() => {
-    const favSet = new Set(favoriteChannels);
-    const favs: Channel[] = [];
+    const favoriteIds = new Set(favoriteChannels);
+    const favorites: Channel[] = [];
     const rest: Channel[] = [];
-    for (const ch of guideChannels) {
-      const id = ch.tvg?.id ?? ch.name ?? '';
-      if (favSet.has(id)) {
-        favs.push(ch);
-      } else {
-        rest.push(ch);
-      }
+    for (const channel of guideChannels) {
+      (isChannelFavorite(channel, favoriteIds) ? favorites : rest).push(channel);
     }
-    return [...favs, ...rest];
+    return [...favorites, ...rest];
   }, [guideChannels, favoriteChannels]);
 
   // Fetch EPG data for the selected day
-  const { programmesByChannel, isLoading } = useGuideProgrammes(
-    sortedChannels,
-    selectedDate,
-    sortedChannels.length > 0
-  );
+  const {
+    programmesByChannel,
+    isLoading,
+    isFetching: isFetchingProgrammes,
+    refresh: refreshProgrammes,
+  } = useGuideProgrammes(sortedChannels, selectedDate, sortedChannels.length > 0);
 
   // Derive unique categories from programme data
   const categories = useProgrammeCategories(programmesByChannel);
 
+  const isSearchActive = isEpgSearchActive(searchText);
+
+  // A category only exists while some loaded programme carries it; keeping a
+  // vanished one selected filters everything away with no way back. An empty
+  // list is not a vanished category though — it is a day (or a page) whose
+  // programmes haven't arrived yet, and pruning on it dropped the filter every
+  // time the guide reloaded.
+  useEffect(() => {
+    if (categories.length > 0 && selectedCategory && !categories.includes(selectedCategory)) {
+      setSelectedCategory(null);
+    }
+  }, [categories, selectedCategory]);
+
   // Filter programmes by category and search text
   const filteredProgrammesByChannel = useMemo(() => {
-    if (!selectedCategory && !searchText.trim()) {
+    if (!selectedCategory && !isSearchActive) {
       return programmesByChannel;
     }
 
@@ -120,7 +164,7 @@ export function EpgGuide({
     for (const [channelId, programmes] of programmesByChannel) {
       const filteredProgs = programmes.filter((p) => {
         if (selectedCategory && p.category !== selectedCategory) return false;
-        if (searchLower && !p.title.toLowerCase().includes(searchLower)) return false;
+        if (isSearchActive && !p.title.toLowerCase().includes(searchLower)) return false;
         return true;
       });
       if (filteredProgs.length > 0) {
@@ -129,20 +173,19 @@ export function EpgGuide({
     }
 
     return filtered;
-  }, [programmesByChannel, selectedCategory, searchText]);
+  }, [programmesByChannel, selectedCategory, searchText, isSearchActive]);
 
   // Filter channels for display based on EPG data and active filters
   const displayChannels = useMemo(() => {
     return sortedChannels.filter((channel) => {
       const tvgId = channel.tvg?.id ?? '';
       if (hideEmptyChannels && !programmesByChannel.has(tvgId)) return false;
-      if ((searchText.trim() || selectedCategory) && !filteredProgrammesByChannel.has(tvgId)) return false;
+      if ((isSearchActive || selectedCategory) && !filteredProgrammesByChannel.has(tvgId)) return false;
       return true;
     });
-  }, [sortedChannels, programmesByChannel, filteredProgrammesByChannel, hideEmptyChannels, searchText, selectedCategory]);
+  }, [sortedChannels, programmesByChannel, filteredProgrammesByChannel, hideEmptyChannels, isSearchActive, selectedCategory]);
 
   // Backend search for text filtering across ALL channels
-  const isSearchActive = searchText.trim().length > 0;
   const { searchProgrammesByChannel, searchChannels, isSearching } = useEpgSearch(
     searchText,
     selectedDate,
@@ -154,6 +197,42 @@ export function EpgGuide({
   const effectiveChannels = isSearchActive ? searchChannels : displayChannels;
   const effectiveProgrammes = isSearchActive ? searchProgrammesByChannel : filteredProgrammesByChannel;
   const effectiveLoading = isSearchActive ? isSearching : (isLoadingChannels || isLoading);
+
+  // A page whose channels all lack EPG data adds no row, so the list's content
+  // height doesn't change and `onEndReached` never fires again. Keep pulling
+  // pages — bounded — until the visible count actually grows.
+  const remainingPagesRef = useRef(0);
+  const lastDisplayCountRef = useRef(displayChannels.length);
+
+  const requestMoreChannels = useCallback(() => {
+    remainingPagesRef.current = MAX_PAGES_PER_END_REACH;
+    loadMoreChannels();
+  }, [loadMoreChannels]);
+
+  useEffect(() => {
+    if (remainingPagesRef.current <= 0) return;
+    // Wait for the appended page and its programmes to land first.
+    if (isLoadingMoreChannels || isFetchingProgrammes) return;
+
+    if (displayChannels.length !== lastDisplayCountRef.current) {
+      lastDisplayCountRef.current = displayChannels.length;
+      remainingPagesRef.current = 0;
+      return;
+    }
+    if (!hasMoreChannels) {
+      remainingPagesRef.current = 0;
+      return;
+    }
+
+    remainingPagesRef.current -= 1;
+    loadMoreChannels();
+  }, [
+    displayChannels.length,
+    isLoadingMoreChannels,
+    isFetchingProgrammes,
+    hasMoreChannels,
+    loadMoreChannels,
+  ]);
 
   // Compute day boundaries
   const dayStartSeconds = useMemo(() => {
@@ -167,29 +246,42 @@ export function EpgGuide({
   // Active filter count for badge (only non-default states count)
   const activeFilterCount = (!hideEmptyChannels ? 1 : 0) + (selectedCategory ? 1 : 0);
 
-  const handleProgrammePress = useCallback((programme: EpgProgramme) => {
-    setSelectedProgramme(programme);
-    setDetailModalVisible(true);
-  }, []);
+  // Opening a programme is a navigation, not screen state: the guide stays
+  // mounted behind the detail route, which stays in history, so back walks
+  // player → channel → programme → guide.
+  //
+  // The channel travels with the programme when the guide has it, so the
+  // surface knows whether there is anything to watch; it is resolved against
+  // the database at press time there, as it is here.
+  const handleProgrammePress = useCallback(
+    (programme: EpgProgramme) => {
+      const channel = effectiveChannels.find((ch) => ch.tvg?.id === programme.channelId);
 
-  const handleCloseDetail = useCallback(() => {
-    setDetailModalVisible(false);
-  }, []);
+      router.push({
+        pathname: '/programme',
+        params: {
+          playlistId: playlistId ?? '',
+          programme: epgProgrammeParam.encode(programme),
+          ...(channel ? { channel: channelParam.encode(channel) } : {}),
+        },
+      });
+    },
+    [router, playlistId, effectiveChannels]
+  );
 
-  // Find channel for the selected programme (for "Watch Channel" action)
-  const selectedProgrammeChannel = useMemo(() => {
-    if (!selectedProgramme) return null;
-    return effectiveChannels.find(
-      (ch) => ch.tvg?.id === selectedProgramme.channelId
-    ) ?? null;
-  }, [selectedProgramme, effectiveChannels]);
-
-  const handleWatchChannel = useCallback(() => {
-    if (selectedProgrammeChannel) {
-      setDetailModalVisible(false);
-      onChannelPress(selectedProgrammeChannel);
-    }
-  }, [selectedProgrammeChannel, onChannelPress]);
+  /**
+   * Search results can include channels that pagination hasn't loaded, which
+   * `useEpgSearch` represents with a url-less placeholder — resolved against the
+   * database before the channel is handed on (see `resolvePlayableChannel`).
+   */
+  const handleChannelPress = useCallback(
+    (channel: Channel) => {
+      void resolvePlayableChannel(playlistId, channel).then((resolved) => {
+        if (resolved) onChannelPress(resolved);
+      });
+    },
+    [onChannelPress, playlistId]
+  );
 
   const handleFilterPress = useCallback(() => {
     setFilterModalVisible(true);
@@ -198,6 +290,14 @@ export function EpgGuide({
   const handleFilterClose = useCallback(() => {
     setFilterModalVisible(false);
   }, []);
+
+  const handleRefresh = useCallback(() => {
+    onRefresh();
+    refreshChannels();
+    refreshProgrammes();
+  }, [onRefresh, refreshChannels, refreshProgrammes]);
+
+  const errorMessage = channelsError;
 
   return (
     <View style={styles.container}>
@@ -222,22 +322,37 @@ export function EpgGuide({
       {/* Loading state — only show skeleton on initial load, not when loading more */}
       {effectiveLoading && programmesByChannel.size === 0 && <EpgSkeleton />}
 
-      {/* Empty state */}
-      {!effectiveLoading && effectiveChannels.length === 0 && sortedChannels.length === 0 && (
+      {/* Channels couldn't be loaded at all — say so instead of "no channels" */}
+      {!effectiveLoading && errorMessage && effectiveChannels.length === 0 && (
         <ThemedView style={styles.emptyContainer}>
-          <IconSymbol name="tv" size={48} color={iconColor} />
-          <ThemedText style={styles.emptyText}>No channels available</ThemedText>
+          <IconSymbol name="exclamationmark.triangle" size={48} color={iconColor} />
+          <ThemedText style={styles.emptyText}>{errorMessage}</ThemedText>
+          <ThemedText style={styles.retryText} onPress={retryChannels}>
+            Tap to retry
+          </ThemedText>
         </ThemedView>
       )}
 
-      {!effectiveLoading && !isSearchActive && sortedChannels.length > 0 && programmesByChannel.size === 0 && (
+      {/* Empty state */}
+      {!effectiveLoading && !errorMessage && effectiveChannels.length === 0 && sortedChannels.length === 0 && (
+        <ThemedView style={styles.emptyContainer}>
+          <IconSymbol name="tv" size={48} color={iconColor} />
+          <ThemedText style={styles.emptyText}>
+            {channelGroups?.length === 0
+              ? 'None of your favorite groups are in this playlist'
+              : 'No channels available'}
+          </ThemedText>
+        </ThemedView>
+      )}
+
+      {!effectiveLoading && !errorMessage && !isSearchActive && sortedChannels.length > 0 && programmesByChannel.size === 0 && (
         <ThemedView style={styles.emptyContainer}>
           <IconSymbol name="calendar" size={48} color={iconColor} />
           <ThemedText style={styles.emptyText}>No EPG data available for this day</ThemedText>
         </ThemedView>
       )}
 
-      {!effectiveLoading && effectiveChannels.length === 0 && (isSearchActive || (sortedChannels.length > 0 && programmesByChannel.size > 0)) && (
+      {!effectiveLoading && !errorMessage && effectiveChannels.length === 0 && (isSearchActive || (sortedChannels.length > 0 && programmesByChannel.size > 0)) && (
         <ThemedView style={styles.emptyContainer}>
           <IconSymbol name="magnifyingglass" size={48} color={iconColor} />
           <ThemedText style={styles.emptyText}>No matching channels found</ThemedText>
@@ -256,7 +371,7 @@ export function EpgGuide({
               channels={effectiveChannels}
               favoriteChannels={favoriteChannels}
               scrollY={scrollY}
-              onChannelPress={onChannelPress}
+              onChannelPress={handleChannelPress}
             />
 
             <View style={styles.gridWrapper}>
@@ -272,22 +387,16 @@ export function EpgGuide({
                 scrollX={scrollX}
                 scrollY={scrollY}
                 onProgrammePress={handleProgrammePress}
-                onLoadMore={isSearchActive ? undefined : loadMoreChannels}
+                onLoadMore={isSearchActive ? undefined : requestMoreChannels}
                 hasMore={isSearchActive ? false : hasMoreChannels}
                 isLoadingMore={isSearchActive ? false : isLoadingMoreChannels}
+                refreshing={isRefreshing || isRefreshingChannels}
+                onRefresh={handleRefresh}
               />
             </View>
           </View>
         </View>
       )}
-
-      {/* Programme Detail Modal */}
-      <EpgProgrammeDetailModal
-        visible={detailModalVisible}
-        onClose={handleCloseDetail}
-        programme={selectedProgramme}
-        onWatchChannel={selectedProgrammeChannel ? handleWatchChannel : undefined}
-      />
 
       {/* Filter Modal */}
       <EpgFilterModal
@@ -306,20 +415,24 @@ export function EpgGuide({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    minHeight: 400,
   },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 32,
-    minHeight: 200,
   },
   emptyText: {
     fontSize: 14,
     opacity: 0.6,
     marginTop: 12,
     textAlign: 'center',
+  },
+  retryText: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 16,
+    textDecorationLine: 'underline',
   },
   gridContainer: {
     flex: 1,

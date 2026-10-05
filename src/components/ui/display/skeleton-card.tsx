@@ -1,11 +1,6 @@
-import { useEffect } from 'react';
 import { StyleSheet, useColorScheme, View } from 'react-native';
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withTiming,
-} from 'react-native-reanimated';
+
+import { SkeletonBlock, skeletonColor, useSkeletonPulse } from './skeleton';
 
 type SkeletonVariant = 'channel' | 'movie' | 'series';
 
@@ -21,37 +16,28 @@ const ASPECT_RATIOS: Record<SkeletonVariant, number> = {
 
 export function SkeletonCard({ variant }: SkeletonCardProps) {
   const colorScheme = useColorScheme();
-  const placeholderColor = colorScheme === 'dark' ? '#2a2a2a' : '#e0e0e0';
-
-  const opacity = useSharedValue(0.3);
-
-  useEffect(() => {
-    opacity.value = withRepeat(withTiming(0.7, { duration: 600 }), -1, true);
-  }, [opacity]);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    opacity: opacity.value,
-  }));
+  const color = skeletonColor(colorScheme === 'dark');
+  const pulse = useSkeletonPulse();
 
   return (
     <View style={styles.container}>
-      <Animated.View
-        style={[
-          styles.imagePlaceholder,
-          { aspectRatio: ASPECT_RATIOS[variant], backgroundColor: placeholderColor },
-          animatedStyle,
-        ]}
+      {/* The poster is sized by its aspect ratio rather than a fixed height. */}
+      <SkeletonBlock
+        width="100%"
+        borderRadius={6}
+        color={color}
+        pulse={pulse}
+        style={[styles.imagePlaceholder, { aspectRatio: ASPECT_RATIOS[variant] }]}
       />
-      <Animated.View
-        style={[styles.textPlaceholder, { backgroundColor: placeholderColor }, animatedStyle]}
-      />
+      <SkeletonBlock width="100%" height={26} borderRadius={3} color={color} pulse={pulse} />
       {variant === 'series' && (
-        <Animated.View
-          style={[
-            styles.episodePlaceholder,
-            { backgroundColor: placeholderColor },
-            animatedStyle,
-          ]}
+        <SkeletonBlock
+          width="60%"
+          height={11}
+          borderRadius={3}
+          color={color}
+          pulse={pulse}
+          style={styles.episodePlaceholder}
         />
       )}
     </View>
@@ -64,19 +50,9 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   imagePlaceholder: {
-    width: '100%',
-    borderRadius: 6,
     marginBottom: 4,
   },
-  textPlaceholder: {
-    height: 26,
-    borderRadius: 3,
-    width: '100%',
-  },
   episodePlaceholder: {
-    height: 11,
-    borderRadius: 3,
-    width: '60%',
     alignSelf: 'center',
     marginTop: 2,
   },

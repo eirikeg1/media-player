@@ -1,9 +1,9 @@
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { isChannelFavorite } from '@/lib/channel-utils';
+import { getChannelId, isChannelFavorite } from '@/lib/channel-utils';
 import type { Channel } from '@/types/playlist.types';
 import { Image } from 'expo-image';
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import Animated, {
   type SharedValue,
@@ -41,14 +41,19 @@ function EpgChannelColumnInner({
     }
   );
 
+  // Every visible row asks whether it is a favourite, so build the lookup once.
+  const favoriteIds = useMemo(() => new Set(favoriteChannels), [favoriteChannels]);
+
   const renderItem = useCallback(
-    ({ item: channel, index }: { item: Channel; index: number }) => {
-      const isFav = isChannelFavorite(channel, favoriteChannels);
+    ({ item: channel }: { item: Channel }) => {
+      const isFav = isChannelFavorite(channel, favoriteIds);
       return (
         <TouchableOpacity
           style={[styles.row, { borderBottomColor: borderColor }]}
           activeOpacity={0.7}
           onPress={() => onChannelPress(channel)}
+          accessibilityRole="button"
+          accessibilityLabel={`Play ${channel.name}`}
         >
           {channel.tvg?.logo ? (
             <Image
@@ -69,7 +74,7 @@ function EpgChannelColumnInner({
         </TouchableOpacity>
       );
     },
-    [favoriteChannels, borderColor, tintColor, onChannelPress]
+    [favoriteIds, borderColor, tintColor, onChannelPress]
   );
 
   const getItemLayout = useCallback(
@@ -81,10 +86,7 @@ function EpgChannelColumnInner({
     []
   );
 
-  const keyExtractor = useCallback(
-    (item: Channel, index: number) => `${item.name}-${index}`,
-    []
-  );
+  const keyExtractor = useCallback((item: Channel) => getChannelId(item), []);
 
   return (
     <View style={[styles.container, { borderRightColor: borderColor }]}>

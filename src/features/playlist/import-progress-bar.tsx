@@ -1,9 +1,6 @@
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { GlassColors } from '@/lib/theme';
-import {
-  PHASE_WEIGHTS,
-  useImportProgressStore,
-} from '@/stores/playlist/import-progress-store';
+import { GlassColors, TINT } from '@/lib/theme';
+import { PHASE_WEIGHTS, useImportProgress } from '@/stores/playlist/import-progress-store';
 import { memo, useEffect, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, {
@@ -15,35 +12,27 @@ import Animated, {
 } from 'react-native-reanimated';
 
 interface ImportProgressBarProps {
-  /** Only show progress for this playlist */
-  playlistId?: string;
+  /** The playlist whose import to show. */
+  playlistId: string;
   /** Compact mode: thin bar without label */
   compact?: boolean;
-  /** Always render the track (even at 0%), used when parent controls visibility */
-  showAlways?: boolean;
 }
 
 export const ImportProgressBar = memo(function ImportProgressBar({
   playlistId,
   compact = false,
-  showAlways = false,
 }: ImportProgressBarProps) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
 
-  const activePlaylistId = useImportProgressStore((s) => s.activePlaylistId);
-  const overallProgress = useImportProgressStore((s) => s.overallProgress);
-  const phase = useImportProgressStore((s) => s.phase);
+  const entry = useImportProgress(playlistId);
+  const phase = entry?.phase ?? null;
+  const overallProgress = entry?.overallProgress ?? 0;
 
   const animatedProgress = useSharedValue(0);
   const prevPhaseRef = useRef(phase);
 
-  // Only show if actively importing the specified playlist (or any playlist if no ID given)
-  const isActive =
-    showAlways ||
-    (phase !== null &&
-      phase !== 'complete' &&
-      (!playlistId || activePlaylistId === playlistId));
+  const isActive = phase !== null && phase !== 'complete';
 
   useEffect(() => {
     const phaseChanged = phase !== prevPhaseRef.current;
@@ -52,29 +41,22 @@ export const ImportProgressBar = memo(function ImportProgressBar({
     if (overallProgress < 100 && phase) {
       const weights = PHASE_WEIGHTS[phase];
       if (weights) {
-        if (phaseChanged) {
-          // Catch up to real progress, then immediately resume trickle
-          const phaseCeiling = weights[1] - 2;
-          const target = Math.min(Math.max(phaseCeiling, overallProgress + 1), 99);
-          animatedProgress.value = withSequence(
-            withTiming(overallProgress, {
-              duration: 400,
-              easing: Easing.out(Easing.cubic),
-            }),
-            withTiming(target, {
-              duration: 8000,
-              easing: Easing.out(Easing.quad),
-            }),
-          );
-        } else {
-          // Same phase — trickle toward ceiling
-          const phaseCeiling = weights[1] - 2;
-          const target = Math.min(Math.max(phaseCeiling, overallProgress + 1), 99);
-          animatedProgress.value = withTiming(target, {
-            duration: 8000,
-            easing: Easing.out(Easing.quad),
-          });
-        }
+        // Catch up to real progress, then trickle toward the phase ceiling.
+        const phaseCeiling = weights[1] - 2;
+        const target = Math.min(Math.max(phaseCeiling, overallProgress + 1), 99);
+        const trickle = withTiming(target, {
+          duration: 8000,
+          easing: Easing.out(Easing.quad),
+        });
+        animatedProgress.value = phaseChanged
+          ? withSequence(
+              withTiming(overallProgress, {
+                duration: 400,
+                easing: Easing.out(Easing.cubic),
+              }),
+              trickle,
+            )
+          : trickle;
       } else {
         animatedProgress.value = withTiming(overallProgress, {
           duration: 400,
@@ -107,9 +89,7 @@ export const ImportProgressBar = memo(function ImportProgressBar({
           compact && styles.trackCompact,
         ]}
       >
-        <Animated.View
-          style={[styles.fill, { height: barHeight }, barAnimatedStyle]}
-        />
+        <Animated.View style={[styles.fill, { height: barHeight }, barAnimatedStyle]} />
       </View>
     </View>
   );
@@ -132,7 +112,7 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   fill: {
-    backgroundColor: '#007AFF',
+    backgroundColor: TINT,
     borderRadius: 4,
   },
 });

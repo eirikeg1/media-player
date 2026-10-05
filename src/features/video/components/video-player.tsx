@@ -1,16 +1,18 @@
 import type { Fixture } from 'expo-m3u-parser';
 import { VideoView } from 'expo-video';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View } from 'react-native';
+import { Platform, View } from 'react-native';
 import { useSharedValue } from 'react-native-reanimated';
 
 import { useLiveMatchScore } from '@/features/sports/hooks/use-match-detail';
+import { mergeLiveScore } from '@/features/sports/live-score';
 import { MatchWidgetOverlay } from '@/features/sports/match-widget-overlay';
 import { isMatchConcluded, supportsMatchWidgets } from '@/features/sports/match-widgets';
 import { useGestureStore } from '@/stores/video/gesture-store';
 import { usePlaybackSessionStore } from '@/stores/video/playback-session-store';
 import { useVideoPlayerStore } from '@/stores/video/player-store';
 import type { Channel } from '@/types/playlist.types';
+import { VIDEO_COLORS } from '../constants';
 import { useCastPlayback } from '../hooks/use-cast-playback';
 import { useVideoPlayerLogic } from '../hooks/use-video-player';
 import { GestureIndicatorOverlay } from './gesture-indicator-overlay';
@@ -21,9 +23,10 @@ import { VideoCastingState, VideoErrorState } from './video-states';
 
 interface VideoPlayerProps {
   channel: Channel;
+  /** What to play; defaults to the channel's own URL (a catch-up window differs). */
+  streamUrl?: string;
   startPosition?: number;
   onBack?: () => void;
-  onStopVideo?: () => void;
   onRegisterStopFunction?: (stopFn: () => void) => void;
   onNext?: () => void;
   onPrevious?: () => void;
@@ -35,12 +38,11 @@ interface VideoPlayerProps {
 /**
  * Video player component with clean, modular state management architecture
  */
-export function VideoPlayer({ channel, startPosition, onBack, onStopVideo, onRegisterStopFunction, onNext, onPrevious, hasNavigation, fixture }: VideoPlayerProps) {
+export function VideoPlayer({ channel, streamUrl = channel.url, startPosition, onBack, onRegisterStopFunction, onNext, onPrevious, hasNavigation, fixture }: VideoPlayerProps) {
   const {
     player,
     isLoading,
     loadingStage,
-    loadingProgress,
     hasError,
     videoError,
     showControls,
@@ -49,7 +51,6 @@ export function VideoPlayer({ channel, startPosition, onBack, onStopVideo, onReg
     togglePlayPause,
     clearHideControlsTimeout,
     isPlaying,
-    networkState,
     retryState,
     toggleControls,
     currentTime,
@@ -60,9 +61,7 @@ export function VideoPlayer({ channel, startPosition, onBack, onStopVideo, onReg
     pauseVideo,
     resyncToLive,
   } = useVideoPlayerLogic({
-    channel,
     startPosition,
-    onStopVideo,
     onRegisterStopFunction,
   });
 
@@ -94,11 +93,16 @@ export function VideoPlayer({ channel, startPosition, onBack, onStopVideo, onReg
     [seekTo, playVideo, showControlsTemporarily],
   );
 
-  const { toggleCastPlayPause, isCastPlaying, resyncCastToLive } = useCastPlayback({ channel });
+  const isSessionCatchup = usePlaybackSessionStore((s) => s.session?.catchup != null);
+  const {
+    toggleCastPlayPause,
+    isCastPlaying,
+    resyncCastToLive,
+    castPosition,
+    castDuration,
+    seekCast,
+  } = useCastPlayback({ channel, streamUrl, isCatchup: isSessionCatchup });
   const isCasting = useVideoPlayerStore(s => s.isCasting);
-  // While casting the local player is unloaded, so its `isLive` is stale;
-  // the session's content type says whether the receiver plays a live stream.
-  const isSessionLive = usePlaybackSessionStore((s) => s.session?.contentType === 'live');
 
   // Tell the session which view holds the player: Android allows only one
   // attached VideoView per player, so the mini bar waits for the screen's
@@ -110,6 +114,19 @@ export function VideoPlayer({ channel, startPosition, onBack, onStopVideo, onReg
     setScreenViewAttached(true);
     return () => setScreenViewAttached(false);
   }, [isCasting, player, setScreenViewAttached]);
+
+  // Picture-in-picture, Android only: the iOS half of expo-video's config
+  // plugin would also enable background audio, which the panel's single
+  // connection forbids (see `app.config.ts`). The manifest side of it lives in
+  // `plugins/with-android-pip.js`.
+  const pipSupported = Platform.OS === 'android';
+  const setPictureInPicture = usePlaybackSessionStore((s) => s.setPictureInPicture);
+  const handlePipStart = useCallback(() => {
+    if (player) setPictureInPicture(player, true);
+  }, [player, setPictureInPicture]);
+  const handlePipStop = useCallback(() => {
+    if (player) setPictureInPicture(player, false);
+  }, [player, setPictureInPicture]);
   const activeGesture = useGestureStore((s) => s.activeGesture);
   const volumeDisplay = useSharedValue(1);
   const brightnessDisplay = useSharedValue(0.5);
@@ -127,18 +144,12 @@ export function VideoPlayer({ channel, startPosition, onBack, onStopVideo, onReg
   // stops itself once the match concludes.
   const liveScore = useLiveMatchScore(
     widgetFixture?.providerId,
-    !!widgetFixture && !isMatchConcluded(widgetFixture.status)
+    !!widgetFixture && !isMatchConcluded(widgetFixture)
   );
-  const liveFixture = useMemo<Fixture | null>(() => {
-    if (!widgetFixture) return null;
-    if (!liveScore) return widgetFixture;
-    return {
-      ...widgetFixture,
-      homeScore: liveScore.homeScore ?? widgetFixture.homeScore,
-      awayScore: liveScore.awayScore ?? widgetFixture.awayScore,
-      status: liveScore.status || widgetFixture.status,
-    };
-  }, [widgetFixture, liveScore]);
+  const liveFixture = useMemo<Fixture | null>(
+    () => (widgetFixture ? mergeLiveScore(widgetFixture, liveScore) : null),
+    [widgetFixture, liveScore]
+  );
   const [matchInfoVisible, setMatchInfoVisible] = useState(false);
   const showMatchInfo = useCallback(() => setMatchInfoVisible(true), []);
   const hideMatchInfo = useCallback(() => setMatchInfoVisible(false), []);
@@ -146,11 +157,11 @@ export function VideoPlayer({ channel, startPosition, onBack, onStopVideo, onReg
   // The route only mounts this component once the session (and its player)
   // exists; this guards the brief window of a channel switch replacing it.
   if (!player) {
-    return <View style={{ flex: 1, backgroundColor: '#000' }} />;
+    return <View style={{ flex: 1, backgroundColor: VIDEO_COLORS.background }} />;
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#000' }}>
+    <View style={{ flex: 1, backgroundColor: VIDEO_COLORS.background }}>
       <View style={{ flex: 1 }}>
         {!isCasting && (
           <VideoView
@@ -158,46 +169,50 @@ export function VideoPlayer({ channel, startPosition, onBack, onStopVideo, onReg
             player={player}
             nativeControls={false}
             fullscreenOptions={{ enable: true }}
-            allowsPictureInPicture
             contentFit="contain"
+            allowsPictureInPicture={pipSupported}
+            // Home press enters PiP, but only while a stream is actually
+            // running: auto-entering on a paused or failed one would hand the
+            // viewer a window showing nothing (PiP hides the app's own UI, so
+            // the error card and its Try Again go with it).
+            startsPictureInPictureAutomatically={pipSupported && isPlaying && !hasError}
+            onPictureInPictureStart={handlePipStart}
+            onPictureInPictureStop={handlePipStop}
           />
         )}
 
-        {isCasting && <VideoCastingState channel={channel} />}
-        {isLoading && !isCasting && (
-          <LoadingProgress
-            channel={channel}
-            stage={loadingStage}
-            progress={loadingProgress}
-            networkType={networkState.type}
-          />
-        )}
+        {isCasting && <VideoCastingState />}
+        {isLoading && !isCasting && <LoadingProgress stage={loadingStage} />}
         {hasError && videoError && !isCasting && (
           <VideoErrorState
-            channel={channel}
             error={videoError}
             onRetry={retryPlayback}
+            onBack={onBack}
             isRetrying={retryState.isRetrying}
           />
         )}
         {isCasting && (
           <VideoControls
             channel={channel}
-            player={player}
             isLoading={false}
             isPlaying={isCastPlaying}
             onBack={onBack}
             onTogglePlayPause={toggleCastPlayPause}
             onClearTimeout={clearHideControlsTimeout}
-            isLive={isSessionLive}
+            isLive={isLive}
+            // The receiver owns the timeline while casting: a buffered stream
+            // reports a duration and gets a seek bar, a live one reports 0.
+            currentTime={castPosition}
+            duration={castDuration}
+            onSeekStart={clearHideControlsTimeout}
+            onSeekEnd={seekCast}
             fixture={liveFixture}
             onShowMatchInfo={widgetFixture ? showMatchInfo : undefined}
-            onResync={isSessionLive ? resyncCastToLive : undefined}
+            onResync={isLive ? resyncCastToLive : undefined}
           />
         )}
         {!hasError && !isCasting && (
           <VideoGestureLayer
-            player={player}
             currentTime={currentTime}
             duration={duration}
             isLive={isLive}
@@ -215,7 +230,6 @@ export function VideoPlayer({ channel, startPosition, onBack, onStopVideo, onReg
         {(showControls || activeGesture === 'fine-seek') && !hasError && !isCasting && (
           <VideoControls
             channel={channel}
-            player={player}
             isLoading={isLoading}
             isPlaying={isPlaying}
             currentTime={currentTime}
@@ -258,4 +272,3 @@ export function VideoPlayer({ channel, startPosition, onBack, onStopVideo, onReg
     </View>
   );
 }
-

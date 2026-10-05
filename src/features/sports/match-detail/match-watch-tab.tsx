@@ -1,18 +1,31 @@
-import { Dropdown } from '@/components/ui/controls/inputs/dropdown';
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
-import { COUNTRY_NAMES, COUNTRY_OPTIONS, getEffectiveSportsCountry } from '@/lib/country-utils';
+import { COUNTRY_NAMES, getEffectiveSportsCountry } from '@/lib/country-utils';
 import { useUserStore } from '@/stores/user/user-store';
 import { Image } from 'expo-image';
-import type { RankedBroadcast } from 'expo-m3u-parser';
-import { memo, useCallback } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import type { Fixture, RankedBroadcast } from 'expo-m3u-parser';
+import { memo, useEffect, useMemo, useState } from 'react';
+import { Text, TouchableOpacity, View } from 'react-native';
 
-import { FAINT, MUTED, SectionMessage } from './match-detail-shared';
+import { catchupBroadcasts, catchupWindow, type CatchupWindow } from '../catchup';
+import { formatKickoffTime } from '../fixture-status';
+import { useLiveTick } from '../hooks/use-live-tick';
+import { isMatchConcluded, isMatchLive } from '../match-widgets';
+import { BroadcastRowsSkeleton } from '../skeletons';
+import { SportsCountryPicker } from '../sports-country-picker';
+import { withAlpha } from '../sports-theme';
+import { SectionMessage } from './match-detail-shared';
+import { createThemedStyles, useMatchDetailTheme } from './match-detail-theme';
+import { WatchModeToggle, type WatchMode } from './watch-mode-toggle';
 
 interface MatchWatchTabProps {
+  fixture: Fixture;
   broadcasts: RankedBroadcast[];
   isLoading: boolean;
-  onPlay: (channelId: string) => void;
+  /** Why the channel match failed, or null; distinct from "no channels carry it". */
+  error: string | null;
+  /** Runs the channel match again after a failure. */
+  onRetry: () => void;
+  onPlay: (channelId: string, catchup: CatchupWindow | null) => void;
 }
 
 function sourceLabel(source: string): string {
@@ -32,44 +45,99 @@ function sourceLabel(source: string): string {
   }
 }
 
+/**
+ * How far either side of kickoff the catch-up reading still moves on its own:
+ * the archive opens shortly after kick-off and the match is over well within it.
+ */
+const CATCHUP_WATCH_WINDOW_SECS = 3 * 3600;
+
 /** Channels carrying the match, best match first, with a country picker. */
-export const MatchWatchTab = memo(function MatchWatchTab({ broadcasts, isLoading, onPlay }: MatchWatchTabProps) {
-  const currentUser = useUserStore((s) => s.currentUser);
-  const updateSettings = useUserStore((s) => s.updateSettings);
-  const sportsCountry = currentUser?.settings?.sportsCountry ?? '';
+export const MatchWatchTab = memo(function MatchWatchTab({
+  fixture,
+  broadcasts,
+  isLoading,
+  error,
+  onRetry,
+  onPlay,
+}: MatchWatchTabProps) {
+  const styles = useStyles();
+  const sportsCountry = useUserStore((s) => s.currentUser?.settings?.sportsCountry ?? '');
   const country = getEffectiveSportsCountry(sportsCountry || undefined);
 
-  const handleCountryChange = useCallback(
-    (value: string) => {
-      if (!currentUser) return;
-      void updateSettings(currentUser.id, { sportsCountry: value || undefined });
-    },
-    [currentUser, updateSettings]
-  );
+  // Catch-up becomes available as the match runs, so the reading has to advance
+  // while the surface is open on one — otherwise a tab opened before kickoff keeps
+  // saying "match hasn't started yet" through the whole first half. Only around
+  // kickoff, though: on a match tomorrow (or last week) nothing this tab shows
+  // changes, and the timer would re-render the surface every 30 s for nothing.
+  const nearKickoff =
+    Math.abs(Date.now() / 1000 - fixture.kickoffTime) <= CATCHUP_WATCH_WINDOW_SECS;
+  const tick = useLiveTick(isMatchLive(fixture) || (nearKickoff && !isMatchConcluded(fixture)));
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- `tick` is the clock
+  const now = useMemo(() => Math.floor(Date.now() / 1000), [tick]);
+  const archived = catchupBroadcasts(broadcasts, fixture, now);
+  const canCatchup = archived.length > 0;
+
+  // The user's explicit pick, or none yet. Kept separate from the default so
+  // the default still applies once the broadcasts finish loading, and reset per
+  // fixture, so a surface opened on the next match starts from the default.
+  const [chosenMode, setChosenMode] = useState<WatchMode | null>(null);
+  useEffect(() => {
+    setChosenMode(null);
+  }, [fixture.providerId]);
+  const mode: WatchMode = canCatchup
+    ? (chosenMode ?? (isMatchConcluded(fixture) ? 'catchup' : 'live'))
+    : 'live';
+
+  // While the channels are still being found nothing qualifies yet, so catch-up
+  // stays off — but without claiming a reason that isn't settled.
+  const catchupDisabledReason =
+    canCatchup || isLoading
+      ? null
+      : fixture.kickoffTime > now
+        ? "Match hasn't started yet"
+        : 'No channel has this match in its archive';
+
+  const archiveWindow = mode === 'catchup' ? catchupWindow(fixture) : null;
+  const listed = mode === 'catchup' ? archived : broadcasts;
 
   return (
     <View style={styles.container}>
       <View style={styles.headerRow}>
         <Text style={styles.sectionTitle}>Channels · {COUNTRY_NAMES[country] ?? country}</Text>
       </View>
-      <Dropdown<string>
-        label="Country"
-        options={COUNTRY_OPTIONS}
-        value={sportsCountry}
-        onSelect={handleCountryChange}
-        accessibilityLabel="TV channel country"
+      <SportsCountryPicker accessibilityLabel="TV channel country" />
+      <WatchModeToggle
+        mode={mode}
+        onChange={setChosenMode}
+        catchupDisabled={!canCatchup}
+        catchupDisabledReason={catchupDisabledReason}
       />
 
       {isLoading ? (
-        <View style={styles.loading}>
-          <ActivityIndicator size="small" color="#FFFFFF" />
-          <Text style={styles.loadingText}>Finding channels…</Text>
+        <BroadcastRowsSkeleton />
+      ) : error ? (
+        <View style={styles.errorBox}>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={onRetry}
+            accessibilityRole="button"
+            accessibilityLabel="Retry finding channels"
+          >
+            <Text style={styles.retryText}>Retry</Text>
+          </TouchableOpacity>
         </View>
-      ) : broadcasts.length === 0 ? (
+      ) : listed.length === 0 ? (
         <SectionMessage text="No channels in your playlist carry this match." />
       ) : (
-        broadcasts.map((broadcast, index) => (
-          <BroadcastRow key={broadcast.channelId} broadcast={broadcast} isBest={index === 0} onPlay={onPlay} />
+        listed.map((broadcast, index) => (
+          <BroadcastRow
+            key={broadcast.channelId}
+            broadcast={broadcast}
+            isBest={index === 0}
+            catchup={archiveWindow}
+            onPlay={onPlay}
+          />
         ))
       )}
     </View>
@@ -79,40 +147,46 @@ export const MatchWatchTab = memo(function MatchWatchTab({ broadcasts, isLoading
 const BroadcastRow = memo(function BroadcastRow({
   broadcast,
   isBest,
+  catchup,
   onPlay,
 }: {
   broadcast: RankedBroadcast;
   isBest: boolean;
-  onPlay: (channelId: string) => void;
+  /** The archive window this row plays, or null for the live stream. */
+  catchup: CatchupWindow | null;
+  onPlay: (channelId: string, catchup: CatchupWindow | null) => void;
 }) {
-  const start = broadcast.programmeStart
-    ? new Date(broadcast.programmeStart * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    : null;
+  const styles = useStyles();
+  const theme = useMatchDetailTheme();
+  const start = broadcast.programmeStart ? formatKickoffTime(broadcast.programmeStart) : null;
   const confidence = Math.round(broadcast.confidence * 100);
+  const channelName = broadcast.tvgName || broadcast.title;
 
   return (
     <TouchableOpacity
       style={[styles.channelRow, isBest && styles.channelRowBest]}
-      onPress={() => onPlay(broadcast.channelId)}
+      onPress={() => onPlay(broadcast.channelId, catchup)}
       activeOpacity={0.7}
       accessibilityRole="button"
-      accessibilityLabel={`Watch on ${broadcast.tvgName || broadcast.title}`}
+      accessibilityLabel={catchup ? `Watch from the start on ${channelName}` : `Watch on ${channelName}`}
     >
       {broadcast.tvgLogo ? (
         <Image source={{ uri: broadcast.tvgLogo }} style={styles.channelLogo} contentFit="contain" />
       ) : (
         <View style={styles.channelLogoFallback}>
-          <IconSymbol name="tv.fill" size={16} color="#FFFFFF" />
+          <IconSymbol name="tv.fill" size={16} color={theme.text} />
         </View>
       )}
       <View style={styles.channelInfo}>
         <Text style={styles.channelName} numberOfLines={1}>
-          {broadcast.tvgName || broadcast.title}
+          {channelName}
         </Text>
         <Text style={styles.channelMeta} numberOfLines={1}>
-          {broadcast.programmeTitle
-            ? `${broadcast.programmeTitle}${start ? ` · ${start}` : ''}`
-            : `${sourceLabel(broadcast.source)} · ${confidence}%`}
+          {catchup
+            ? `Catch-up · from ${formatKickoffTime(catchup.start)}`
+            : broadcast.programmeTitle
+              ? `${broadcast.programmeTitle}${start ? ` · ${start}` : ''}`
+              : `${sourceLabel(broadcast.source)} · ${confidence}%`}
         </Text>
       </View>
       {isBest && (
@@ -120,35 +194,46 @@ const BroadcastRow = memo(function BroadcastRow({
           <Text style={styles.bestText}>BEST</Text>
         </View>
       )}
-      <IconSymbol name="play.circle.fill" size={26} color="#34C759" />
+      <IconSymbol name={catchup ? 'gobackward' : 'play.circle.fill'} size={26} color={theme.positive} />
     </TouchableOpacity>
   );
 });
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((theme) => ({
   container: {
     gap: 10,
     padding: 16,
+  },
+  errorBox: {
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+  },
+  errorText: {
+    color: theme.muted,
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  retryButton: {
+    paddingHorizontal: 18,
+    paddingVertical: 9,
+    borderRadius: 10,
+    backgroundColor: theme.faint,
+  },
+  retryText: {
+    color: theme.text,
+    fontSize: 14,
+    fontWeight: '700',
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   sectionTitle: {
-    color: '#FFFFFF',
+    color: theme.text,
     fontSize: 15,
     fontWeight: '700',
-  },
-  loading: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    padding: 24,
-  },
-  loadingText: {
-    color: MUTED,
-    fontSize: 14,
   },
   channelRow: {
     flexDirection: 'row',
@@ -156,7 +241,7 @@ const styles = StyleSheet.create({
     gap: 12,
     padding: 12,
     borderRadius: 12,
-    backgroundColor: FAINT,
+    backgroundColor: theme.faint,
   },
   channelRowBest: {
     borderWidth: 1,
@@ -173,31 +258,31 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: theme.faint,
   },
   channelInfo: {
     flex: 1,
     gap: 2,
   },
   channelName: {
-    color: '#FFFFFF',
+    color: theme.text,
     fontSize: 15,
     fontWeight: '600',
   },
   channelMeta: {
-    color: MUTED,
+    color: theme.muted,
     fontSize: 12,
   },
   bestPill: {
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 6,
-    backgroundColor: 'rgba(52, 199, 89, 0.2)',
+    backgroundColor: withAlpha(theme.positive, 0.2),
   },
   bestText: {
-    color: '#34C759',
+    color: theme.positive,
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 0.5,
   },
-});
+}));

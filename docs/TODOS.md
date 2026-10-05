@@ -19,7 +19,8 @@
 * **EPG Guide** - Electronic Program Guide with schedule data. Should include filtering, search, etc.
 * **VOD Library** - Separate Movie and Series browsing with genre filtering, search, season/episode grouping
 * **Sports/Football Schedule** - Match schedules and dedicated sports tracking
-* **Catch-up TV** - Watch previously aired content
+* **Catch-up TV** - Watch previously aired content. *Partially done*: football matches play from the panel's archive via the match surface's Watch tab (see `docs/catchup.md`)
+* Catch-up from the live EPG programme list (play any past programme, not just matches)
 * **User Show Tracking** - Track watch progress per show/movie
 * **Favorite Sports Team Tracking** - Track schedule, results and channels for favorite team
 * **Likes & Recommendations** - User likes feed recommendations for shows, movies, and sports

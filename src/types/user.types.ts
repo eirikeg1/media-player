@@ -69,12 +69,23 @@ export interface UserSettings {
   sportsHideOtherLeagues: boolean;
   /** When sports data refreshes on its own. Absent = {@link DEFAULT_SPORTS_BACKGROUND_REFRESH}. */
   sportsBackgroundRefresh?: SportsBackgroundRefresh;
+  /**
+   * Whether the background playlist and guide sync may run on a metered
+   * (mobile data) connection. Off by default: a playlist is tens of MB and the
+   * download runs unseen. Syncing while the app is open is not affected.
+   */
+  backgroundSyncOnMobileData: boolean;
 }
 
 /**
- * Check if private mode is currently active (not expired)
+ * Check if private mode is currently active (not expired).
+ *
+ * Takes only the field it reads, so callers that subscribe to that one setting
+ * (rather than the whole user) can pass it straight through.
  */
-export function isPrivateModeActive(settings?: UserSettings): boolean {
+export function isPrivateModeActive(
+  settings?: Pick<UserSettings, 'privateModeExpiresAt'>
+): boolean {
   if (!settings?.privateModeExpiresAt) return false;
   return new Date(settings.privateModeExpiresAt).getTime() > Date.now();
 }
@@ -90,29 +101,25 @@ export interface UserFavoriteChannel {
 }
 
 /**
- * User's hidden channel
- */
-export interface UserHiddenChannel {
-  id: string;
-  userId: string;
-  channelId: string;
-  hiddenAt: Date;
-}
-
-/**
- * User's custom channel ordering
- */
-export interface UserChannelOrder {
-  id: string;
-  userId: string;
-  channelId: string;
-  sortOrder: number;
-}
-
-/**
  * Content type for viewing history
  */
 export type ContentType = 'live' | 'movie' | 'series';
+
+/**
+ * Reaction value for movies/series: 1 = like, -1 = dislike
+ */
+export type ContentReactionValue = 1 | -1;
+
+/**
+ * User's like/dislike reaction on a movie or series.
+ * channelId follows the favorites convention: the channel id for movies,
+ * the `series:`-prefixed id for series.
+ */
+export interface ContentReaction {
+  channelId: string;
+  reaction: ContentReactionValue;
+  createdAt: string;
+}
 
 /**
  * A single viewing session (raw event log row)
@@ -160,19 +167,6 @@ export interface ChannelWatchStats {
 }
 
 /**
- * Aggregated watch stats per group (per user + playlist)
- */
-export interface GroupWatchStats {
-  userId: string;
-  playlistId: string;
-  groupTitle: string;
-  watchCount: number;
-  totalTimeWatched: number;
-  uniqueChannelsWatched: number;
-  lastWatchedAt: string;
-}
-
-/**
  * Item for "Continue Watching" row
  */
 export interface ContinueWatchingItem {
@@ -203,6 +197,22 @@ export interface RecentlyWatchedItem {
   nextEpisodeChannelName?: string;
   seriesName?: string;
   seriesPoster?: string;
+}
+
+/**
+ * What a user has watched in one playlist, as the recommender consumes it: the
+ * "seen set" (never recommended again) plus the completed watches it reads as
+ * an implicit "probably liked".
+ */
+export interface WatchedContent {
+  /** Every watched channel id, regardless of content type */
+  channelIds: string[];
+  /** Distinct series names derived from watched episodes */
+  seriesNames: string[];
+  /** Movie channel ids watched to completion at least once */
+  completedChannelIds: string[];
+  /** Series name → number of distinct episodes watched to completion */
+  completedEpisodesBySeries: Record<string, number>;
 }
 
 /**
@@ -241,4 +251,5 @@ export const DEFAULT_USER_SETTINGS: Omit<UserSettings, 'userId'> = {
   playlistSharingEnabled: true,
   shareUploadedBackgrounds: true,
   sportsHideOtherLeagues: false,
+  backgroundSyncOnMobileData: false,
 };

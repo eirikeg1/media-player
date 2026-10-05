@@ -2,13 +2,14 @@ import { ConfirmDialog } from '@/components/ui/containers/modal/confirm-dialog';
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useThemeColor } from '@/hooks/use-theme-color';
 import { extractCleanUrl } from '@/lib/playlist-utils';
-import { GlassColors } from '@/lib/theme';
-import { useImportProgressStore } from '@/stores/playlist/import-progress-store';
+import { GlassColors, TINT } from '@/lib/theme';
+import { useImportProgress, useIsImporting } from '@/stores/playlist/import-progress-store';
 import { usePlaylistStore } from '@/stores/playlist/playlist-store';
 import type { Playlist } from '@/types/playlist.types';
 import { memo, useCallback, useState } from 'react';
-import { Alert, FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Alert, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { ImportProgressBar } from './import-progress-bar';
 import { PlaylistModal } from './playlist-modal';
 
@@ -38,20 +39,16 @@ const PlaylistCard = memo(function PlaylistCard({
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const glass = isDark ? GlassColors.dark : GlassColors.light;
+  const iconColor = useThemeColor({}, 'icon');
 
-  const importPhase = useImportProgressStore((s) => s.phase);
-  const importPlaylistId = useImportProgressStore((s) => s.activePlaylistId);
-  const phaseLabel = useImportProgressStore((s) => s.phaseLabel);
-  const isImporting =
-    importPhase !== null &&
-    importPhase !== 'complete' &&
-    importPlaylistId === item.id;
+  const isImporting = useIsImporting(item.id);
+  const phaseLabel = useImportProgress(item.id)?.phaseLabel ?? '';
 
   const cardStyle = [
     styles.playlistCard,
     {
       backgroundColor: glass.surface,
-      borderColor: isActive ? '#007AFF' : glass.border,
+      borderColor: isActive ? TINT : glass.border,
       borderWidth: isActive ? 2 : 1,
     },
   ];
@@ -78,18 +75,18 @@ const PlaylistCard = memo(function PlaylistCard({
           {isImporting ? (
             <View style={styles.importArea}>
               <ThemedText style={styles.metaText}>{phaseLabel}</ThemedText>
-              <ImportProgressBar playlistId={item.id} compact showAlways />
+              <ImportProgressBar playlistId={item.id} compact />
             </View>
           ) : (
             <View style={styles.metaRow}>
-              <IconSymbol name="tv" size={14} color={isDark ? '#7c869e' : '#5c6477'} />
+              <IconSymbol name="tv" size={14} color={iconColor} />
               <ThemedText style={styles.metaText}>
                 {item.channelCount || 0}
               </ThemedText>
               {!!item.syncInterval && item.syncInterval > 0 && (
                 <>
                   <ThemedText style={styles.separator}>•</ThemedText>
-                  <IconSymbol name="arrow.triangle.2.circlepath" size={12} color={isDark ? '#7c869e' : '#5c6477'} />
+                  <IconSymbol name="arrow.triangle.2.circlepath" size={12} color={iconColor} />
                   <ThemedText style={styles.metaText}>
                     {formatSyncInterval(item.syncInterval)}
                   </ThemedText>
@@ -114,20 +111,22 @@ const PlaylistCard = memo(function PlaylistCard({
             accessibilityLabel="Edit playlist"
             accessibilityHint="Edit playlist details and settings"
           >
-            <IconSymbol name="pencil" size={18} color={isDark ? '#7c869e' : '#5c6477'} />
+            <IconSymbol name="pencil" size={18} color={iconColor} />
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.actionButton}
+            style={[styles.actionButton, isImporting && styles.actionButtonDisabled]}
             onPress={(e) => {
               e.stopPropagation();
               onRefresh(item);
             }}
+            disabled={isImporting}
             accessibilityRole="button"
             accessibilityLabel="Refresh playlist"
             accessibilityHint="Re-fetch and update the playlist channels"
+            accessibilityState={{ disabled: isImporting }}
           >
-            <IconSymbol name="arrow.clockwise" size={18} color={isDark ? '#7c869e' : '#5c6477'} />
+            <IconSymbol name="arrow.clockwise" size={18} color={iconColor} />
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -202,38 +201,28 @@ export const PlaylistList = memo(function PlaylistList() {
     [setActivePlaylist]
   );
 
-  const renderPlaylistCard = useCallback(
-    ({ item }: { item: Playlist }) => (
-      <PlaylistCard
-        item={item}
-        isActive={item.id === activePlaylistId}
-        onSelect={handleSelectPlaylist}
-        onEdit={handleEdit}
-        onRefresh={handleRefresh}
-        onDelete={handleDelete}
-      />
-    ),
-    [activePlaylistId, handleSelectPlaylist, handleEdit, handleRefresh, handleDelete]
-  );
-
-  const keyExtractor = useCallback((item: Playlist) => item.id, []);
-
   if (playlists.length === 0) {
     return null;
   }
 
   return (
     <>
-      <FlatList
-        data={playlists}
-        renderItem={renderPlaylistCard}
-        keyExtractor={keyExtractor}
-        contentContainerStyle={styles.listContainer}
-        scrollEnabled={false}
-        removeClippedSubviews
-        maxToRenderPerBatch={10}
-        windowSize={5}
-      />
+      {/* Plain views, not a FlatList: this list lives inside the settings
+          ParallaxScrollView, and a nested same-axis VirtualizedList cannot
+          virtualize (it has no viewport of its own) while breaking scrolling. */}
+      <View style={styles.listContainer}>
+        {playlists.map((playlist) => (
+          <PlaylistCard
+            key={playlist.id}
+            item={playlist}
+            isActive={playlist.id === activePlaylistId}
+            onSelect={handleSelectPlaylist}
+            onEdit={handleEdit}
+            onRefresh={handleRefresh}
+            onDelete={handleDelete}
+          />
+        ))}
+      </View>
       <PlaylistModal
         visible={showEditModal}
         onClose={handleCloseEditModal}
@@ -304,7 +293,7 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#007AFF',
+    backgroundColor: TINT,
   },
   importArea: {
     gap: 2,
@@ -333,5 +322,8 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     padding: 6,
+  },
+  actionButtonDisabled: {
+    opacity: 0.4,
   },
 });

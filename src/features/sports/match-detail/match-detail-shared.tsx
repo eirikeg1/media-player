@@ -1,9 +1,11 @@
+import { formatTime } from '@/lib/format-time';
 import { Image } from 'expo-image';
-import type { PlayerEntry } from 'expo-m3u-parser';
-import { useState } from 'react';
+import type { MatchDetailMeta, PlayerEntry } from 'expo-m3u-parser';
+import { useState, type ReactNode } from 'react';
 import {
-  ActivityIndicator,
+  Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -12,17 +14,13 @@ import {
   type ViewStyle,
 } from 'react-native';
 
-/**
- * Shared building blocks for the native match-detail tabs. Everything here is
- * rendered on the overlay's dark card, so colours are fixed (not theme-aware)
- * and a single home/away accent pair is reused across every tab for instant
- * visual association.
- */
+import { createThemedStyles, useMatchDetailTheme } from './match-detail-theme';
 
-export const HOME_COLOR = '#4C8DFF';
-export const AWAY_COLOR = '#FF8A3D';
-export const MUTED = 'rgba(255, 255, 255, 0.55)';
-export const FAINT = 'rgba(255, 255, 255, 0.10)';
+/**
+ * Shared building blocks for the native match-detail tabs. Their colours come
+ * from the surface the host provides (see `match-detail-theme`), so the same
+ * block reads on the player overlay's dark card and on the themed match route.
+ */
 
 /** SofaScore-style rating colour ramp (poor → great). */
 export function ratingColor(rating: number): string {
@@ -33,29 +31,94 @@ export function ratingColor(rating: number): string {
   return '#D85A4A';
 }
 
-/** Win/Draw/Loss pill colour. */
+/**
+ * Win/Draw/Loss pill colour. Fixed rather than themed: the letter is written in
+ * white on the pill, so the pill has to carry the contrast on either surface.
+ */
 export function formColor(result: string): string {
   switch (result.toUpperCase()) {
     case 'W':
       return '#1FB66B';
-    case 'D':
-      return '#8E8E93';
     case 'L':
       return '#D85A4A';
+    // A draw, and any letter the provider sends that is none of the three.
     default:
-      return MUTED;
+      return '#8E8E93';
   }
 }
 
-export function SectionLoading() {
+/**
+ * A tab body's scroll container.
+ *
+ * The tabs are hosted in two places. The player overlay gives them a
+ * fixed-height card and expects each to scroll itself; the match surface is one
+ * long scrolling page and owns the only scroller. Nesting two vertical
+ * scrollers inside one another makes the inner one swallow the gesture and
+ * collapses it to a single screenful, so when the host already scrolls this
+ * lays the content out as a plain view and lets the page grow.
+ */
+export function TabScroller({
+  scrollable,
+  contentStyle,
+  children,
+}: {
+  scrollable: boolean;
+  contentStyle?: StyleProp<ViewStyle>;
+  children: ReactNode;
+}) {
+  const styles = useStyles();
+  if (!scrollable) return <View style={contentStyle}>{children}</View>;
   return (
-    <View style={styles.stateBox}>
-      <ActivityIndicator color="#FFFFFF" />
+    <ScrollView
+      style={styles.tabFill}
+      contentContainerStyle={contentStyle}
+      showsVerticalScrollIndicator={false}
+    >
+      {children}
+    </ScrollView>
+  );
+}
+
+/**
+ * "as of 20:41 · Retry" — what a section shows when the native side answered it
+ * from cache because the provider refused.
+ *
+ * The payload underneath is real, just old, so this is a line above it rather
+ * than an error state: hiding a whole half's statistics because the last
+ * refresh failed would be a worse answer than the ones from a minute ago. It
+ * gates itself on `meta.stale` so every tab renders it the same single way.
+ */
+export function StaleNotice({
+  meta,
+  onRetry,
+}: {
+  meta: MatchDetailMeta | undefined;
+  onRetry: () => void;
+}) {
+  const styles = useStyles();
+  if (!meta?.stale) return null;
+  // A section the provider has never answered has no time to name; saying so
+  // beats dressing the epoch up as a fetch at 01:00.
+  const asOf = meta.fetchedAt > 0 ? `as of ${formatTime(meta.fetchedAt)}` : 'not up to date';
+
+  return (
+    <View style={styles.staleRow}>
+      <Text style={styles.staleText}>{asOf}</Text>
+      <Text style={styles.staleText}>·</Text>
+      <TouchableOpacity
+        onPress={onRetry}
+        accessibilityRole="button"
+        accessibilityLabel="Retry loading this section"
+        hitSlop={8}
+      >
+        <Text style={styles.staleRetry}>Retry</Text>
+      </TouchableOpacity>
     </View>
   );
 }
 
 export function SectionMessage({ text }: { text: string }) {
+  const styles = useStyles();
   return (
     <View style={styles.stateBox}>
       <Text style={styles.stateText}>{text}</Text>
@@ -64,6 +127,7 @@ export function SectionMessage({ text }: { text: string }) {
 }
 
 export function RatingBadge({ rating, size = 'md' }: { rating: number; size?: 'sm' | 'md' }) {
+  const styles = useStyles();
   const small = size === 'sm';
   return (
     <View
@@ -79,6 +143,7 @@ export function RatingBadge({ rating, size = 'md' }: { rating: number; size?: 's
 }
 
 export function FormPills({ form }: { form: string[] }) {
+  const styles = useStyles();
   if (!form.length) return null;
   return (
     <View style={styles.formRow}>
@@ -114,13 +179,15 @@ export function ComparisonBar({
   awayValue: number;
   highlight: 'home' | 'away' | 'none';
 }) {
+  const styles = useStyles();
+  const theme = useMatchDetailTheme();
   const total = homeValue + awayValue;
   // Fall back to an even split when both sides are zero (e.g. 0 shots each).
   const homeFraction = total > 0 ? homeValue / total : 0.5;
   const awayFraction = total > 0 ? awayValue / total : 0.5;
 
-  const homeFill = highlight === 'away' ? FAINT : HOME_COLOR;
-  const awayFill = highlight === 'home' ? FAINT : AWAY_COLOR;
+  const homeFill = highlight === 'away' ? theme.faint : theme.homeColor;
+  const awayFill = highlight === 'home' ? theme.faint : theme.awayColor;
 
   return (
     <View style={styles.comparisonRow}>
@@ -163,7 +230,22 @@ export function ComparisonBar({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((theme) => ({
+  staleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  staleText: {
+    color: theme.muted,
+    fontSize: 11,
+  },
+  staleRetry: {
+    color: theme.text,
+    fontSize: 11,
+    fontWeight: '700',
+  },
   stateBox: {
     paddingVertical: 48,
     alignItems: 'center',
@@ -171,7 +253,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   stateText: {
-    color: MUTED,
+    color: theme.muted,
     fontSize: 14,
     textAlign: 'center',
     paddingHorizontal: 24,
@@ -190,7 +272,7 @@ const styles = StyleSheet.create({
     borderRadius: 5,
   },
   ratingText: {
-    color: '#FFFFFF',
+    color: theme.text,
     fontSize: 13,
     fontWeight: '700',
   },
@@ -209,7 +291,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   formPillText: {
-    color: '#FFFFFF',
+    color: theme.text,
     fontSize: 11,
     fontWeight: '700',
   },
@@ -221,7 +303,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   comparisonValue: {
-    color: '#FFFFFF',
+    color: theme.text,
     fontSize: 13,
     fontWeight: '600',
     width: 64,
@@ -234,7 +316,7 @@ const styles = StyleSheet.create({
   },
   comparisonLabel: {
     flex: 1,
-    color: MUTED,
+    color: theme.muted,
     fontSize: 12,
     textAlign: 'center',
   },
@@ -249,19 +331,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row-reverse',
     borderRadius: 3,
     overflow: 'hidden',
-    backgroundColor: FAINT,
+    backgroundColor: theme.faint,
   },
   comparisonTrackAway: {
     flex: 1,
     flexDirection: 'row',
     borderRadius: 3,
     overflow: 'hidden',
-    backgroundColor: FAINT,
+    backgroundColor: theme.faint,
   },
   comparisonFill: {
     borderRadius: 3,
   },
-});
+  tabFill: {
+    flex: 1,
+  },
+}));
 
 // =====================================================================
 // Player detail (shared by the Lineups pitch and the Players list)
@@ -325,6 +410,7 @@ export function StatGrid({
   stats: PlayerStat[];
   style?: StyleProp<ViewStyle>;
 }) {
+  const gridStyles = useGridStyles();
   return (
     <View style={[gridStyles.grid, style]}>
       {stats.map((stat) => (
@@ -337,7 +423,7 @@ export function StatGrid({
   );
 }
 
-const gridStyles = StyleSheet.create({
+const useGridStyles = createThemedStyles((theme) => ({
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -348,15 +434,15 @@ const gridStyles = StyleSheet.create({
     gap: 2,
   },
   value: {
-    color: '#FFFFFF',
+    color: theme.text,
     fontSize: 15,
     fontWeight: '700',
   },
   label: {
-    color: MUTED,
+    color: theme.muted,
     fontSize: 11,
   },
-});
+}));
 
 /** Two-letter fallback shown while (or instead of) a player's portrait. */
 export function playerInitials(name: string): string {
@@ -367,28 +453,43 @@ export function playerInitials(name: string): string {
 }
 
 /**
+ * How the player card is placed over its host.
+ *
+ * - `overlay`: absolutely filling the tab. Right for the player overlay, whose
+ *   card has a fixed height and is counter-rotated in portrait — the card has to
+ *   rotate with it.
+ * - `modal`: a screen-level modal. Right for the match surface, where the tab is
+ *   a section of one long scrolling page: an absolute overlay there is measured
+ *   against the whole scroll content, so it lands wherever the page happens to
+ *   be scrolled rather than in front of the reader.
+ */
+export type PlayerSheetPresentation = 'overlay' | 'modal';
+
+/**
  * A dismissible card with a player's headshot and full per-match stat grid,
- * opened by tapping a player. Rendered as an absolute overlay so it floats above
- * whichever tab opened it (and rotates with the card in portrait).
+ * opened by tapping a player.
  */
 export function PlayerStatsSheet({
   player,
   teamLabel,
   accent,
+  presentation = 'overlay',
   onClose,
 }: {
   player: PlayerEntry;
   teamLabel: string;
   accent: string;
+  presentation?: PlayerSheetPresentation;
   onClose: () => void;
 }) {
+  const sheetStyles = useSheetStyles();
   const [imageFailed, setImageFailed] = useState(false);
   const stats = buildPlayerStats(player);
   // The shirt number leads the name (like every other player row), so the meta
   // line carries only the position.
   const meta = player.position ?? '';
 
-  return (
+  const card = (
     <View style={sheetStyles.overlay}>
       <Pressable style={sheetStyles.backdrop} onPress={onClose} accessibilityLabel="Close player" />
       <View style={sheetStyles.card}>
@@ -443,9 +544,16 @@ export function PlayerStatsSheet({
       </View>
     </View>
   );
+
+  if (presentation === 'overlay') return card;
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      {card}
+    </Modal>
+  );
 }
 
-const sheetStyles = StyleSheet.create({
+const useSheetStyles = createThemedStyles((theme) => ({
   overlay: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
@@ -460,10 +568,10 @@ const sheetStyles = StyleSheet.create({
   card: {
     width: '100%',
     maxWidth: 420,
-    backgroundColor: '#1C1C20',
+    backgroundColor: theme.card,
     borderRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255, 255, 255, 0.14)',
+    borderColor: theme.border,
     padding: 16,
     gap: 14,
   },
@@ -476,14 +584,14 @@ const sheetStyles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: theme.faint,
   },
   avatarFallback: {
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarInitials: {
-    color: '#FFFFFF',
+    color: theme.text,
     fontSize: 18,
     fontWeight: '800',
   },
@@ -498,7 +606,7 @@ const sheetStyles = StyleSheet.create({
   },
   shirtNumber: {
     minWidth: 20,
-    color: MUTED,
+    color: theme.muted,
     fontSize: 15,
     fontWeight: '700',
     fontVariant: ['tabular-nums'],
@@ -506,12 +614,12 @@ const sheetStyles = StyleSheet.create({
   },
   name: {
     flexShrink: 1,
-    color: '#FFFFFF',
+    color: theme.text,
     fontSize: 16,
     fontWeight: '700',
   },
   captain: {
-    color: MUTED,
+    color: theme.muted,
     fontSize: 13,
     fontWeight: '700',
   },
@@ -526,7 +634,7 @@ const sheetStyles = StyleSheet.create({
     borderRadius: 4,
   },
   meta: {
-    color: MUTED,
+    color: theme.muted,
     fontSize: 12,
     flexShrink: 1,
   },
@@ -534,17 +642,17 @@ const sheetStyles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 15,
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    backgroundColor: theme.faint,
     alignItems: 'center',
     justifyContent: 'center',
   },
   closeText: {
-    color: '#FFFFFF',
+    color: theme.text,
     fontSize: 13,
     fontWeight: '700',
   },
   empty: {
-    color: MUTED,
+    color: theme.muted,
     fontSize: 13,
   },
-});
+}));

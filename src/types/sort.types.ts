@@ -1,7 +1,10 @@
+/** Server-side orderings a channel query can ask for; absent means playlist order. */
+export type ChannelSortBy = 'title' | 'group' | 'tvgName';
+
 export interface SortOption {
   id: string;
   label: string;
-  sortBy?: 'title' | 'group' | 'tvgName';
+  sortBy?: ChannelSortBy;
   defaultOrder: 'asc' | 'desc';
 }
 

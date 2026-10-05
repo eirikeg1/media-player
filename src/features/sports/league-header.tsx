@@ -1,18 +1,19 @@
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
+import type { LeagueTab } from '@/lib/route-params';
 import { Image } from 'expo-image';
 import { memo } from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 
-import type { LeagueTab } from './league-sheet';
 import type { MatchGroup } from './match-grouping';
 import { SPORTS_ACCENT, useSportsPalette, withAlpha } from './sports-theme';
 
 interface LeagueHeaderProps {
   group: MatchGroup;
   collapsed: boolean;
-  onToggle: (key: string) => void;
-  /** Opens the competition sheet on `tab`; omitted for Favorites. */
+  /** Receives the state being flipped, so the list never has to look it up. */
+  onToggle: (key: string, collapsed: boolean) => void;
+  /** Opens the competition surface on `tab`; omitted for Favorites. */
   onOpenLeague?: (group: MatchGroup, tab?: LeagueTab) => void;
 }
 
@@ -20,8 +21,9 @@ interface LeagueHeaderProps {
  * Sticky section header: logo, competition, country, live count, collapse
  * chevron.
  *
- * Three targets in one row: the name opens the sheet on the table, the list
- * button opens it on the matches, and the rest of the row collapses the group.
+ * Three targets in one row: the name opens the competition surface on the
+ * table, the list button opens it on the matches, and the rest of the row
+ * collapses the group.
  */
 export const LeagueHeader = memo(function LeagueHeader({ group, collapsed, onToggle, onOpenLeague }: LeagueHeaderProps) {
   const palette = useSportsPalette();
@@ -44,7 +46,7 @@ export const LeagueHeader = memo(function LeagueHeader({ group, collapsed, onTog
     <View style={[styles.container, { backgroundColor: palette.background }]}>
       <TouchableOpacity
         style={[styles.header, { backgroundColor: palette.faint }]}
-        onPress={() => onToggle(group.key)}
+        onPress={() => onToggle(group.key, collapsed)}
         activeOpacity={0.7}
         accessibilityRole="button"
         accessibilityState={{ expanded: !collapsed }}
@@ -55,7 +57,16 @@ export const LeagueHeader = memo(function LeagueHeader({ group, collapsed, onTog
             <IconSymbol name="star.fill" size={18} color={SPORTS_ACCENT.favorite} />
           </View>
         ) : group.logoUrl ? (
-          <Image source={{ uri: group.logoUrl }} style={styles.logo} contentFit="contain" transition={150} />
+          <Image
+            source={{ uri: group.logoUrl }}
+            style={styles.logo}
+            contentFit="contain"
+            transition={150}
+            // Recycled headers keep their crest until the new one decodes
+            // without this; the disk cache keeps it off the network entirely.
+            recyclingKey={group.key}
+            cachePolicy="memory-disk"
+          />
         ) : (
           <View style={styles.logoBox}>
             <IconSymbol name="sportscourt.fill" size={18} color={palette.muted} />

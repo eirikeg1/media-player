@@ -1,4 +1,5 @@
 import { act, renderHook } from '@testing-library/react-native';
+import { AppState, type AppStateStatus } from 'react-native';
 
 import { useIsCurrentlyAiring, useNowSeconds } from '../use-now-seconds';
 
@@ -9,6 +10,7 @@ beforeEach(() => {
 
 afterEach(() => {
   jest.useRealTimers();
+  jest.restoreAllMocks();
 });
 
 describe('useNowSeconds', () => {
@@ -54,6 +56,26 @@ describe('useNowSeconds', () => {
     await unmount();
 
     expect(clearIntervalSpy).toHaveBeenCalledWith(intervalId);
+  });
+
+  it('resyncs when the app returns to the foreground', async () => {
+    // Background timers are throttled, so the interval alone would leave the
+    // clock minutes behind after a return to the foreground.
+    const handlers: ((state: AppStateStatus) => void)[] = [];
+    jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, handler) => {
+      handlers.push(handler as (state: AppStateStatus) => void);
+      return { remove: jest.fn() } as unknown as ReturnType<typeof AppState.addEventListener>;
+    });
+
+    const { result } = await renderHook(() => useNowSeconds());
+    const initial = result.current;
+
+    jest.setSystemTime(new Date(Date.now() + 10 * 60_000));
+    await act(() => {
+      handlers.forEach((handler) => handler('active'));
+    });
+
+    expect(result.current).toBe(initial + 600);
   });
 });
 

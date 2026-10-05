@@ -49,6 +49,7 @@ export const SportsHeader = memo(function SportsHeader({
             <TouchableOpacity
               onPress={onJumpToToday}
               style={[styles.todayButton, { borderColor: palette.border }]}
+              hitSlop={8}
               accessibilityRole="button"
               accessibilityLabel="Jump to today"
             >
@@ -59,6 +60,7 @@ export const SportsHeader = memo(function SportsHeader({
           <TouchableOpacity
             onPress={onOpenFavorites}
             style={[styles.favoritesButton, { borderColor: palette.border }]}
+            hitSlop={8}
             accessibilityRole="button"
             accessibilityLabel="Manage favorite teams"
           >

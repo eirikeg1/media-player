@@ -44,6 +44,9 @@ function EpgProgrammeBlockInner({
       ]}
       activeOpacity={0.7}
       onPress={() => onPress(programme)}
+      accessibilityRole="button"
+      accessibilityLabel={programme.title}
+      accessibilityHint="Show programme details"
     >
       <ThemedText numberOfLines={1} style={styles.title}>
         {programme.title}

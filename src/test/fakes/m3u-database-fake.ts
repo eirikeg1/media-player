@@ -11,7 +11,7 @@
  * exported here and should be imported from `@/test/fakes/m3u-database-fake`.
  */
 import { parse as parseM3u } from 'iptv-playlist-parser';
-import { getRawChannelId } from '@/lib/channel-utils';
+import { getChannelId, getRawChannelId, mapLegacyChannelId } from '@/lib/channel-utils';
 // Same keyword rules as `apply_group_based_adult_flags` in
 // m3u-db/src/operations.rs — one JS source of truth instead of a third copy.
 import { isAdultGroup } from '@/lib/group-utils';
@@ -19,31 +19,51 @@ import { stripEpisodeInfo } from '@/lib/series-utils';
 import type {
   Channel,
   ChannelFilter,
+  ChannelIdMapping,
   ChannelMetadata,
   ChannelProgrammes,
+  ChannelShift,
   ChannelsWithCount,
   Competition,
   ContentType,
   Credentials,
+  Database as RealDatabase,
   EpgProgramme,
   EpgSource,
   Fixture,
+  FixtureWindow,
   ImportCompleteEvent,
   ImportErrorEvent,
   ImportProgressEvent,
   GroupCount,
   GroupedProgrammesResult,
+  MatchDetailMeta,
+  MatchPlayers,
+  MatchPreview,
+  MatchScore,
+  MatchStatistics,
+  MatchTimeline,
   PlaylistMetadata,
+  ProgrammeSearchOptions,
   RankedBroadcast,
+  RecommendationSignals,
   SeriesFilter,
   SeriesInfo,
   SeriesListResult,
+  SportsDatabase as RealSportsDatabase,
   Standing,
   Team,
-  TeamSearchResult,
   TopScorers,
-  TvChannel,
 } from 'expo-m3u-parser';
+
+// Real behaviour, not a native call: re-exported from the module's own source
+// so `instanceof M3uParserError` means the same thing in tests as in the app.
+// The subpath skips `index.ts`, which loads the native module on import.
+export { M3uParserError } from 'expo-m3u-parser/src/errors';
+
+// The sentinel the country filters compare against — a plain constant, so it is
+// re-exported from the module's own type source rather than reproduced here.
+export { ALL_COUNTRIES } from 'expo-m3u-parser/src/M3uParser.types';
 
 // ── Remote-content registry ──
 // fetchAndImportPlaylist / fetchAndImportEpg "download" from here instead of
@@ -106,6 +126,16 @@ function extinfAttr(raw: string, name: string): string | undefined {
   return new RegExp(`${name}="([^"]*)"`).exec(raw)?.[1] || undefined;
 }
 
+/**
+ * `tvg-shift` as whole signed hours, like the Rust parser's `Option<i8>`: a
+ * value that is not an integer is no shift at all rather than a truncated one.
+ */
+function parseTvgShift(raw: string): number | undefined {
+  const value = extinfAttr(raw, 'tvg-shift');
+  if (value === undefined || !/^[+-]?\d+$/.test(value.trim())) return undefined;
+  return Number(value);
+}
+
 export function parsePlaylistString(content: string): Channel[] {
   const parsed = parseM3u(content);
   return parsed.items.map((item) => {
@@ -126,6 +156,7 @@ export function parsePlaylistString(content: string): Channel[] {
       userAgent: item.http?.['user-agent'] || undefined,
       referer: item.http?.referrer || undefined,
       contentType,
+      tvgShift: parseTvgShift(item.raw),
       // Like Rust, adult flags are group-based and applied only after a
       // fetch-and-import (see fetchAndImportPlaylist), never at parse time.
       isAdult: false,
@@ -176,6 +207,35 @@ function extractTag(block: string, tag: string): string | undefined {
   return match[1] != null ? match[1].trim() : unescapeXml(match[2]).trim();
 }
 
+/**
+ * `tvg-shift` is declared in hours and the guide is stored in Unix seconds, as
+ * in the Rust queries this fake stands in for.
+ */
+const SECONDS_PER_HOUR = 3600;
+
+/** A programme as a shifted channel's viewer sees it. */
+function shiftProgramme(programme: EpgProgramme, shiftSeconds: number): EpgProgramme {
+  if (shiftSeconds === 0) return programme;
+  return {
+    ...programme,
+    start: programme.start + shiftSeconds,
+    stop: programme.stop + shiftSeconds,
+  };
+}
+
+/**
+ * The channels of a grid read, one entry per channel: the real queries stage
+ * them keyed by id, so a channel listed twice (an HD/SD pair sharing a tvg-id)
+ * is answered once.
+ */
+function dedupeChannels(channels: ChannelShift[]): ChannelShift[] {
+  const byId = new Map<string, ChannelShift>();
+  for (const channel of channels) {
+    if (!byId.has(channel.channelId)) byId.set(channel.channelId, channel);
+  }
+  return [...byId.values()];
+}
+
 export function parseXmltvString(content: string): EpgProgramme[] {
   const programmes: EpgProgramme[] = [];
   const regex = /<programme\s([^>]*)>([\s\S]*?)<\/programme>/g;
@@ -208,6 +268,19 @@ interface StoredChannel extends Channel {
   playlistId: string;
   /** Insertion order, mirrors the Rust rowid used for playlist-order sorting. */
   position: number;
+}
+
+/**
+ * The id the current rule gives a stored channel, via the one TS implementation
+ * of it — the native side generates ids from the same rule on import.
+ */
+function nativeChannelId(channel: Channel): string {
+  return getChannelId({
+    name: channel.title,
+    url: channel.url,
+    tvg: { id: channel.tvgId ?? undefined },
+    group: {},
+  });
 }
 
 function seriesKey(channel: Channel): string {
@@ -262,6 +335,16 @@ function stripStored(channel: StoredChannel): Channel {
   return rest;
 }
 
+/** Key for one catch-up window of one channel, as the fake's archive is seeded. */
+function catchupKey(
+  playlistId: string,
+  channelId: string,
+  startUnix: number,
+  durationMinutes: number,
+): string {
+  return `${playlistId}|${channelId}|${startUnix}|${durationMinutes}`;
+}
+
 // ── Database fake ──
 
 export class Database {
@@ -273,7 +356,11 @@ export class Database {
   private metadata: ChannelMetadata[] = [];
   private epgSources = new Map<string, EpgSource>();
   private programmes = new Map<string, EpgProgramme[]>(); // keyed by sourceId
+  /** Seeded catch-up archive: window key → stream URL. Empty means no archive. */
+  private catchupUrls = new Map<string, string>();
   private nextPosition = 1;
+  /** Path of the last loaded recommendation model, or null when none is loaded. */
+  __recommendationModelPath: string | null = null;
 
   static async open(path: string): Promise<Database> {
     let instance = Database.__instances.get(path);
@@ -299,7 +386,9 @@ export class Database {
     this.metadata = [];
     this.epgSources.clear();
     this.programmes.clear();
+    this.catchupUrls.clear();
     this.nextPosition = 1;
+    this.__recommendationModelPath = null;
   }
 
   __seedChannels(playlistId: string, channels: Channel[]): void {
@@ -310,6 +399,17 @@ export class Database {
 
   __seedMetadata(metadata: ChannelMetadata[]): void {
     this.metadata.push(...metadata);
+  }
+
+  /** Register the archive URL the panel serves for one channel + window. */
+  __seedCatchupUrl(
+    playlistId: string,
+    channelId: string,
+    startUnix: number,
+    durationMinutes: number,
+    url: string,
+  ): void {
+    this.catchupUrls.set(catchupKey(playlistId, channelId, startUnix, durationMinutes), url);
   }
 
   __seedProgrammes(sourceId: string, programmes: EpgProgramme[]): void {
@@ -368,6 +468,61 @@ export class Database {
       (c) => c.playlistId === playlistId && c.channelId === channelId,
     );
     return found ? stripStored(found) : null;
+  }
+
+  /** Like Rust, an unseeded channel/window simply has no archive to serve. */
+  async getCatchupStreamUrl(
+    playlistId: string,
+    channelId: string,
+    startUnix: number,
+    durationMinutes: number,
+  ): Promise<string | null> {
+    return this.catchupUrls.get(catchupKey(playlistId, channelId, startUnix, durationMinutes)) ?? null;
+  }
+
+  /**
+   * Like Rust: recompute every stored id with the current rule, collapse the
+   * rows that now share one (the unique constraint on `(playlist, channelId)`),
+   * and re-link movie metadata, whose join column follows the channel.
+   */
+  async rewritePlaylistChannelIds(playlistId: string): Promise<number> {
+    let changed = 0;
+    for (const channel of this.channels) {
+      if (channel.playlistId !== playlistId) continue;
+      const channelId = nativeChannelId(channel);
+      if (channelId === channel.channelId) continue;
+      channel.channelId = channelId;
+      changed += 1;
+    }
+
+    const kept = new Map<string, StoredChannel>();
+    for (const channel of this.channels) {
+      kept.set(`${channel.playlistId}|${channel.channelId}`, channel);
+    }
+    this.channels = [...kept.values()];
+
+    for (const meta of this.metadata) {
+      // A movie's metadata joins on the channel carrying its stream id, which
+      // under the current rule is exactly what that channel's id spells out.
+      if (meta.playlistId !== playlistId || meta.streamId == null) continue;
+      const channelId = `movie:${meta.streamId}`;
+      if (this.channels.some((c) => c.playlistId === playlistId && c.channelId === channelId)) {
+        meta.channelId = channelId;
+      }
+    }
+
+    return changed;
+  }
+
+  /** Like Rust: a parse of the URL inside each id, with unmappable ids left out. */
+  async mapLegacyChannelIds(
+    _playlistId: string,
+    legacyIds: string[],
+  ): Promise<ChannelIdMapping[]> {
+    return legacyIds.flatMap((legacyId) => {
+      const channelId = mapLegacyChannelId(legacyId);
+      return channelId ? [{ legacyId, channelId }] : [];
+    });
   }
 
   async deleteChannelsByPlaylist(playlistId: string): Promise<void> {
@@ -459,6 +614,9 @@ export class Database {
     }
 
     let series = [...seriesMap.values()];
+    if (filter?.exactName) {
+      series = series.filter((s) => s.seriesName === filter.exactName);
+    }
     if (filter?.search) {
       const needle = filter.search.toLowerCase();
       series = series.filter((s) => s.seriesName.toLowerCase().includes(needle));
@@ -526,6 +684,63 @@ export class Database {
     limit: number,
   ): Promise<SeriesInfo[]> {
     return this.getSeriesRecommendations(playlistId, excludeAdult, limit);
+  }
+
+  // ── Personalized recommendations ──
+  // No taste model here: the fake keeps the parts the app is responsible for
+  // (a loaded model path, the seen set) and otherwise returns the same
+  // deterministic first-N selection as the random recommender.
+
+  async loadRecommendationModel(path: string): Promise<void> {
+    this.__recommendationModelPath = path;
+  }
+
+  async isRecommendationModelLoaded(): Promise<boolean> {
+    return this.__recommendationModelPath !== null;
+  }
+
+  async getPersonalizedMovieRecommendations(
+    playlistId: string,
+    userKey: string,
+    excludeAdult: boolean,
+    limit: number,
+    signals: RecommendationSignals,
+  ): Promise<Channel[]> {
+    const seen = new Set(signals.seenChannelIds ?? []);
+    const movies = await this.getChannels({ playlistId, contentType: 'movie', excludeAdult });
+    return movies.filter((channel) => !seen.has(channel.channelId)).slice(0, limit);
+  }
+
+  async regeneratePersonalizedMovieRecommendations(
+    _playlistId: string,
+    _userKey: string,
+    _excludeAdult: boolean,
+    _limit: number,
+    _signals: RecommendationSignals,
+  ): Promise<void> {
+    // Generation is a background side effect with no observable result here.
+  }
+
+  async getPersonalizedSeriesRecommendations(
+    playlistId: string,
+    userKey: string,
+    excludeAdult: boolean,
+    limit: number,
+    signals: RecommendationSignals,
+  ): Promise<SeriesInfo[]> {
+    const seen = new Set(signals.seenSeriesNames ?? []);
+    const { series } = await this.getSeriesList({ playlistId, excludeAdult });
+    return series.filter((entry) => !seen.has(entry.seriesName)).slice(0, limit);
+  }
+
+  async regeneratePersonalizedSeriesRecommendations(
+    _playlistId: string,
+    _userKey: string,
+    _excludeAdult: boolean,
+    _limit: number,
+    _signals: RecommendationSignals,
+  ): Promise<void> {
+    // Generation is a background side effect with no observable result here.
   }
 
   // ── Metadata ──
@@ -605,8 +820,19 @@ export class Database {
 
   // ── EPG sources ──
 
-  async upsertEpgSource(source: EpgSource): Promise<void> {
-    this.epgSources.set(source.id, { ...source });
+  /**
+   * Stores the source and reports the id it is stored under.
+   *
+   * The URL is the real table's unique key and the stored id is never rewritten
+   * (it is what `epg_programmes.source_id` points at), so a caller that made up
+   * a different id for a URL already registered gets the existing row's id back
+   * — which is the one its programmes are keyed by.
+   */
+  async upsertEpgSource(source: EpgSource): Promise<string> {
+    const existing = [...this.epgSources.values()].find((s) => s.url === source.url);
+    const id = existing?.id ?? source.id;
+    this.epgSources.set(id, { ...source, id });
+    return id;
   }
 
   async getAllEpgSources(): Promise<EpgSource[]> {
@@ -664,46 +890,74 @@ export class Database {
 
   // ── EPG programmes ──
 
-  async getCurrentProgramme(channelId: string, now?: number): Promise<EpgProgramme | null> {
-    const at = now ?? Math.floor(Date.now() / 1000);
-    return (
-      this.allProgrammes().find((p) => p.channelId === channelId && p.start <= at && p.stop > at) ??
-      null
+  async getCurrentProgramme(
+    channelId: string,
+    now?: number,
+    shiftHours: number = 0,
+  ): Promise<EpgProgramme | null> {
+    const shift = shiftHours * SECONDS_PER_HOUR;
+    const at = (now ?? Math.floor(Date.now() / 1000)) - shift;
+    const current = this.allProgrammes().find(
+      (p) => p.channelId === channelId && p.start <= at && p.stop > at,
     );
+    return current ? shiftProgramme(current, shift) : null;
   }
 
-  async getNextProgramme(channelId: string, now?: number): Promise<EpgProgramme | null> {
-    const at = now ?? Math.floor(Date.now() / 1000);
-    return (
-      this.allProgrammes()
-        .filter((p) => p.channelId === channelId && p.start > at)
-        .sort((a, b) => a.start - b.start)[0] ?? null
-    );
+  async getNextProgramme(
+    channelId: string,
+    now?: number,
+    shiftHours: number = 0,
+  ): Promise<EpgProgramme | null> {
+    const shift = shiftHours * SECONDS_PER_HOUR;
+    const at = (now ?? Math.floor(Date.now() / 1000)) - shift;
+    const next = this.allProgrammes()
+      .filter((p) => p.channelId === channelId && p.start > at)
+      .sort((a, b) => a.start - b.start)[0];
+    return next ? shiftProgramme(next, shift) : null;
   }
 
-  async getChannelSchedule(channelId: string, from: number, to: number): Promise<EpgProgramme[]> {
+  /**
+   * A channel's schedule for a window, with its `tvg-shift` applied as the real
+   * query applies it: the window is matched against the stored guide times and
+   * the programmes come back with the shift added, so the caller's window is the
+   * one it gets.
+   */
+  async getChannelSchedule(
+    channelId: string,
+    from: number,
+    to: number,
+    shiftHours: number = 0,
+  ): Promise<EpgProgramme[]> {
+    const shift = shiftHours * SECONDS_PER_HOUR;
     return this.allProgrammes()
-      .filter((p) => p.channelId === channelId && p.stop > from && p.start < to)
-      .sort((a, b) => a.start - b.start);
+      .filter((p) => p.channelId === channelId && p.stop > from - shift && p.start < to - shift)
+      .sort((a, b) => a.start - b.start)
+      .map((p) => shiftProgramme(p, shift));
   }
 
+  /** "On now" per channel, on each channel's own (shifted) clock. */
   async getCurrentProgrammesForChannels(
-    channelIds: string[],
+    channels: ChannelShift[],
     now?: number,
   ): Promise<EpgProgramme[]> {
-    const results = await Promise.all(channelIds.map((id) => this.getCurrentProgramme(id, now)));
+    const at = now ?? Math.floor(Date.now() / 1000);
+    const results = await Promise.all(
+      dedupeChannels(channels).map(({ channelId, shiftHours }) =>
+        this.getCurrentProgramme(channelId, at, shiftHours),
+      ),
+    );
     return results.filter((p): p is EpgProgramme => p !== null);
   }
 
   async getProgrammesForChannels(
-    channelIds: string[],
+    channels: ChannelShift[],
     from: number,
     to: number,
   ): Promise<ChannelProgrammes[]> {
     const groups = await Promise.all(
-      channelIds.map(async (channelId) => ({
+      dedupeChannels(channels).map(async ({ channelId, shiftHours }) => ({
         channelId,
-        programmes: await this.getChannelSchedule(channelId, from, to),
+        programmes: await this.getChannelSchedule(channelId, from, to, shiftHours),
       })),
     );
     return groups.filter((g) => g.programmes.length > 0);
@@ -711,12 +965,19 @@ export class Database {
 
   async searchProgrammes(
     query: string,
-    options?: { from?: number; to?: number; category?: string; limit?: number; offset?: number },
+    options?: ProgrammeSearchOptions,
   ): Promise<GroupedProgrammesResult> {
     const needle = query.toLowerCase();
+    // Sparse, like the real query's map: a channel it does not name is searched
+    // and returned on the guide's own clock.
+    const shiftOf = new Map(
+      (options?.shifts ?? []).map((s) => [s.channelId, s.shiftHours * SECONDS_PER_HOUR]),
+    );
+    const shift = (programme: EpgProgramme) => shiftOf.get(programme.channelId) ?? 0;
+
     let matches = this.allProgrammes().filter((p) => p.title.toLowerCase().includes(needle));
-    if (options?.from != null) matches = matches.filter((p) => p.stop > options.from!);
-    if (options?.to != null) matches = matches.filter((p) => p.start < options.to!);
+    if (options?.from != null) matches = matches.filter((p) => p.stop > options.from! - shift(p));
+    if (options?.to != null) matches = matches.filter((p) => p.start < options.to! - shift(p));
     if (options?.category) matches = matches.filter((p) => p.category === options.category);
 
     const limit = options?.limit ?? matches.length;
@@ -725,7 +986,10 @@ export class Database {
 
     const byChannel = new Map<string, EpgProgramme[]>();
     for (const programme of page) {
-      byChannel.set(programme.channelId, [...(byChannel.get(programme.channelId) ?? []), programme]);
+      byChannel.set(programme.channelId, [
+        ...(byChannel.get(programme.channelId) ?? []),
+        shiftProgramme(programme, shift(programme)),
+      ]);
     }
     return {
       groups: [...byChannel.entries()].map(([channelId, programmes]) => ({
@@ -757,13 +1021,62 @@ export class Database {
 
 // ── SportsDatabase fake (favorites in memory, network-backed queries empty) ──
 
-export class SportsDatabase {
+/**
+ * Every method a class exposes to its callers, with the real signatures.
+ *
+ * A mapped type over `keyof` drops the private members, so a fake can declare
+ * `implements PublicApi<Real>` and be held to the whole public surface without
+ * having to reproduce any of the internals. Without it, a method the real class
+ * gains (or a signature it changes) leaves the fake quietly behind and the
+ * tests keep passing against an API that no longer exists.
+ */
+type PublicApi<T> = { [K in keyof T]: T[K] };
+
+/**
+ * The five match-detail sections as `index.ts` hands them to the app: the
+ * section's own fields flattened together with its freshness stamp.
+ */
+export interface SeededMatchDetail {
+  score: MatchScore & MatchDetailMeta;
+  statistics: MatchStatistics & MatchDetailMeta;
+  players: MatchPlayers & MatchDetailMeta;
+  timeline: MatchTimeline & MatchDetailMeta;
+  preview: MatchPreview & MatchDetailMeta;
+}
+
+/**
+ * What every section looks like for an event nobody seeded: the "nothing has
+ * happened yet" shape the provider itself returns before kickoff, stamped as
+ * just fetched. Never `stale` — a fake that has no cache cannot be serving one.
+ */
+function emptyMatchDetail(): SeededMatchDetail {
+  const meta: MatchDetailMeta = { fetchedAt: Math.floor(Date.now() / 1000), stale: false };
+  return {
+    score: { status: 'scheduled', live: false, ...meta },
+    statistics: { available: false, facts: {}, groups: [], momentum: [], ...meta },
+    players: {
+      available: false,
+      confirmed: false,
+      home: { players: [] },
+      away: { players: [] },
+      ...meta,
+    },
+    timeline: { available: false, incidents: [], ...meta },
+    preview: { available: false, ...meta },
+  };
+}
+
+export class SportsDatabase implements PublicApi<RealSportsDatabase> {
   static __instances = new Map<string, SportsDatabase>();
 
   private favoriteTeams: Team[] = [];
+  /** Seeded match-detail sections, keyed by the fixture's `providerId`. */
+  private matchDetails = new Map<number, Partial<SeededMatchDetail>>();
   __competitions: Competition[] = [];
   __fixtures: Fixture[] = [];
   __standings: Standing[] = [];
+  /** What `getFixturesForWindow` reports as `stale`; see the method's note. */
+  __staleWindow = false;
 
   static async open(path: string): Promise<SportsDatabase> {
     let instance = SportsDatabase.__instances.get(path);
@@ -776,31 +1089,24 @@ export class SportsDatabase {
 
   __clear(): void {
     this.favoriteTeams = [];
+    this.matchDetails.clear();
     this.__competitions = [];
     this.__fixtures = [];
     this.__standings = [];
+    this.__staleWindow = false;
+  }
+
+  /** Seed one or more match-detail sections for an event; merges with any already seeded. */
+  __seedMatchDetail(eventId: number, sections: Partial<SeededMatchDetail>): void {
+    this.matchDetails.set(eventId, { ...this.matchDetails.get(eventId), ...sections });
   }
 
   async getCompetitions(_maxAgeSecs = 86400): Promise<Competition[]> {
     return this.__competitions;
   }
 
-  async getCompetitionTeams(_compId: number, _maxAgeSecs = 86400): Promise<TeamSearchResult[]> {
+  async getCompetitionTeams(_compId: number, _maxAgeSecs = 86400): Promise<Team[]> {
     return [];
-  }
-
-  async searchTeams(query: string): Promise<TeamSearchResult[]> {
-    const needle = query.toLowerCase();
-    return this.favoriteTeams
-      .filter((t) => t.name.toLowerCase().includes(needle))
-      .map(({ providerId, provider, name, shortName, tla, crestUrl }) => ({
-        providerId,
-        provider,
-        name,
-        shortName,
-        tla,
-        crestUrl,
-      }));
   }
 
   async addFavoriteTeam(team: Team): Promise<void> {
@@ -834,16 +1140,25 @@ export class SportsDatabase {
     );
   }
 
-  /** Merge/dedup/sort happens in Rust; over seeded fixtures a filtered sort is equivalent. */
-  async getFixturesForDate(
-    _date: string,
+  /**
+   * Merge/dedup/sort happens in Rust; over seeded fixtures a filtered sort is
+   * equivalent.
+   *
+   * `stale` is whatever `__staleWindow` was set to: the real backend reports a
+   * schedule fan-out still running behind the rows it just served, which the
+   * fake has no way to have.
+   */
+  async getFixturesForWindow(
     fromTs: number,
     toTs: number,
     _maxAgeSecs: number,
-  ): Promise<Fixture[]> {
-    return this.__fixtures
-      .filter((f) => f.kickoffTime >= fromTs && f.kickoffTime <= toTs)
-      .sort((a, b) => a.kickoffTime - b.kickoffTime);
+  ): Promise<FixtureWindow> {
+    return {
+      fixtures: this.__fixtures
+        .filter((f) => f.kickoffTime >= fromTs && f.kickoffTime <= toTs)
+        .sort((a, b) => a.kickoffTime - b.kickoffTime),
+      stale: this.__staleWindow,
+    };
   }
 
   /** Returns the number of live fixtures refreshed; the fake never fetches. */
@@ -871,22 +1186,63 @@ export class SportsDatabase {
       .sort((a, b) => a.kickoffTime - b.kickoffTime);
   }
 
-  async getStandings(compId: number): Promise<Standing[]> {
+  async getStandings(compId: number, _maxAgeSecs = 3600): Promise<Standing[]> {
     return this.__standings.filter((s) => s.competitionId === compId);
   }
 
-  async getScorers(compId: number): Promise<TopScorers> {
+  async getScorers(compId: number, _maxAgeSecs = 3600): Promise<TopScorers> {
     return { competitionId: compId, competitionName: '', season: 0, scorers: [] };
   }
 
-  async findBroadcastsForFixture(): Promise<never[]> {
-    return [];
+  // ── Match detail ──
+  // The real calls cross the bridge as a JSON envelope that `index.ts` unwraps
+  // into payload + freshness stamp; these return the unwrapped shape, which is
+  // what the app ever sees. `maxAgeSecs` is kept in the arity so a caller that
+  // passes its cache policy is still type-checked against the real signature.
+
+  async getMatchScore(eventId: number, _maxAgeSecs?: number): Promise<MatchScore & MatchDetailMeta> {
+    return this.section(eventId, 'score');
+  }
+
+  async getMatchStatistics(
+    eventId: number,
+    _maxAgeSecs?: number,
+  ): Promise<MatchStatistics & MatchDetailMeta> {
+    return this.section(eventId, 'statistics');
+  }
+
+  async getMatchPlayers(
+    eventId: number,
+    _maxAgeSecs?: number,
+  ): Promise<MatchPlayers & MatchDetailMeta> {
+    return this.section(eventId, 'players');
+  }
+
+  async getMatchTimeline(
+    eventId: number,
+    _maxAgeSecs?: number,
+  ): Promise<MatchTimeline & MatchDetailMeta> {
+    return this.section(eventId, 'timeline');
+  }
+
+  async getMatchPreview(
+    eventId: number,
+    _maxAgeSecs?: number,
+  ): Promise<MatchPreview & MatchDetailMeta> {
+    return this.section(eventId, 'preview');
+  }
+
+  private section<K extends keyof SeededMatchDetail>(
+    eventId: number,
+    key: K,
+  ): SeededMatchDetail[K] {
+    return this.matchDetails.get(eventId)?.[key] ?? emptyMatchDetail()[key];
   }
 
   /** The staleness marks live in the Rust cache; the fake has nothing to age. */
   async invalidateSportsCaches(): Promise<void> {}
 
-  async getAllCachedCompetitionTeams(): Promise<TeamSearchResult[]> {
+  async getAllCachedCompetitionTeams(): Promise<Team[]> {
     return [];
   }
 
@@ -895,25 +1251,24 @@ export class SportsDatabase {
     return 0;
   }
 
-  async cleanupOldFixtures(cutoff: number): Promise<number> {
+  /** Only the fixtures are stored here, so the row count is what the prune removed. */
+  async pruneSportsData(cutoff: number): Promise<number> {
     const before = this.__fixtures.length;
     this.__fixtures = this.__fixtures.filter((f) => f.kickoffTime >= cutoff);
     return before - this.__fixtures.length;
   }
 
-  async fetchAndStoreTvChannels(_countryCode: string): Promise<number> {
-    return 0;
-  }
-
-  async fetchAndStoreFixtureBroadcasts(_fixtureProviderId: number): Promise<number> {
-    return 0;
-  }
-
-  async getFixtureBroadcasts(_fixtureProviderId: number, _countryCode: string): Promise<TvChannel[]> {
-    return [];
-  }
-
-  async findPlayableChannelsForFixture(): Promise<RankedBroadcast[]> {
+  /**
+   * Never matches anything — the ranking engine is Rust. The real parameter
+   * list is kept so a spy on this sees what the hook actually passes, and so a
+   * change to it fails the fake instead of quietly passing the tests.
+   */
+  async findPlayableChannelsForFixture(
+    _fixture: Fixture,
+    _playlistId: string,
+    _countryCode: string,
+    _m3uDb: RealDatabase
+  ): Promise<RankedBroadcast[]> {
     return [];
   }
 

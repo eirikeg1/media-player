@@ -14,9 +14,15 @@ export const TTL_PAST_SECS = 24 * 3600;
 /** Cache lifetime of a favorite team's own fixture list. */
 export const TTL_FAVORITES_SECS = 6 * 3600;
 /**
- * Read a cached dataset without ever triggering its fetch: the Rust side only
- * fetches when `now - lastFetch > maxAgeSecs`, so no finite age can expire
- * this one. A never-fetched (empty) dataset is always stale regardless.
+ * Read a cached dataset without ever triggering its fetch.
+ *
+ * The Rust side only fetches when `now - lastFetch > maxAgeSecs`, so no finite
+ * age can expire this one, and the day schedule's own freshness check treats it
+ * as an explicit sentinel: a cached day is left alone under it even when the
+ * copy is incomplete, which is what keeps a poll off the schedule fan-out.
+ *
+ * A dataset that was never fetched at all still fetches: there is no stamp to
+ * compare against, so nothing about it can be described as fresh.
  */
 export const CACHE_ONLY_SECS = Number.MAX_SAFE_INTEGER;
 

@@ -3,9 +3,10 @@ import { RefreshControl, StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedRef } from 'react-native-reanimated';
 
 import { ThemedView } from '@/components/ui/display/themed-view';
+import { useChromeInsets } from '@/hooks/use-chrome-insets';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { HEADER_BACKGROUND } from '@/lib/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
@@ -16,7 +17,11 @@ import {
 
 type Props = PropsWithChildren<{
   headerImage: ReactElement;
-  headerBackgroundColor: { dark: string; light: string };
+  /**
+   * Fill behind {@link headerImage}. Defaults to {@link HEADER_BACKGROUND} — only
+   * pass this for a header whose image genuinely needs a different backdrop.
+   */
+  headerBackgroundColor?: { dark: string; light: string };
   stickyHeaderIndices?: number[];
   padding?: number;
   showsVerticalScrollIndicator?: boolean;
@@ -27,7 +32,7 @@ type Props = PropsWithChildren<{
 export default function ParallaxScrollView({
   children,
   headerImage,
-  headerBackgroundColor,
+  headerBackgroundColor = HEADER_BACKGROUND,
   stickyHeaderIndices,
   padding = 8,
   showsVerticalScrollIndicator = true,
@@ -37,7 +42,7 @@ export default function ParallaxScrollView({
   const colorScheme = useColorScheme() ?? 'light';
   const tintColor = useThemeColor({}, 'tint');
   const insets = useSafeAreaInsets();
-  const tabBarHeight = useBottomTabBarHeight();
+  const chromeInsets = useChromeInsets();
   const scrollRef = useAnimatedRef<Animated.ScrollView>();
   const { headerAnimatedStyle } = useParallaxHeader(scrollRef);
 
@@ -77,7 +82,9 @@ export default function ParallaxScrollView({
         }
       >
         <View style={parallaxStyles.headerSpacer} />
-        <ThemedView style={[styles.content, { padding, paddingBottom: padding + tabBarHeight }]}>{children}</ThemedView>
+        <ThemedView style={[styles.content, { padding, paddingBottom: padding + chromeInsets.bottom }]}>
+          {children}
+        </ThemedView>
       </Animated.ScrollView>
     </ThemedView>
   );

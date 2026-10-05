@@ -1,15 +1,28 @@
 import { AddUserCard, UserProfileCard } from '@/features/user/user-profile-card';
 import { AnimatedModal } from '@/components/ui/containers/modal/animated-modal';
 import { ConfirmDialog } from '@/components/ui/containers/modal/confirm-dialog';
+import { ThemedText } from '@/components/ui/display/themed-text';
+import { getInitials } from '@/features/user/get-initials';
+import { firstVisibleTabHref } from '@/features/user/visible-tabs';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useHaptics } from '@/hooks/use-haptics';
+import { useThemeColor } from '@/hooks/use-theme-color';
+import { GlassColors, TINT } from '@/lib/theme';
 import { useUserStore } from '@/stores/user/user-store';
 import type { UpdateUserInput, User } from '@/types/user.types';
 import { router } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-// Constants
-const PLACEHOLDER_COLOR = '#9CA3AF';
 const PROFILE_ICON = '👤';
 
 // Types
@@ -37,46 +50,60 @@ interface UserSelectionScreenProps {
 }
 
 /**
+ * The colours this screen's surfaces need. Grouped in one hook so every panel,
+ * field and button on the screen reads them the same way.
+ */
+function useSelectPalette() {
+  const colorScheme = useColorScheme();
+  const glass = colorScheme === 'dark' ? GlassColors.dark : GlassColors.light;
+
+  return {
+    background: useThemeColor({}, 'background'),
+    card: useThemeColor({}, 'card'),
+    border: useThemeColor({}, 'border'),
+    muted: useThemeColor({}, 'muted'),
+    destructive: useThemeColor({}, 'destructive'),
+    surface: glass.surface,
+    surfaceBorder: glass.border,
+  };
+}
+
+/**
  * First-time user creation screen
  */
 function FirstUserScreen({ username, isCreating, onUsernameChange, onSubmit }: UserFormProps) {
+  const palette = useSelectPalette();
+
   return (
-    <SafeAreaView className="flex-1 bg-white dark:bg-gray-950" edges={['top']}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior="padding"
-      >
-        <ScrollView
-          contentContainerStyle={{ flexGrow: 1 }}
-          keyboardShouldPersistTaps="always"
-        >
-          <View className="flex-1" />
-          <View className="px-8">
-            <View className="mb-12">
-              <Text className="text-5xl font-bold text-center mb-4 text-gray-900 dark:text-white">
-                Welcome!
-              </Text>
-              <Text className="text-lg text-center text-gray-600 dark:text-gray-400">
+    <SafeAreaView style={[styles.screen, { backgroundColor: palette.background }]} edges={['top']}>
+      <KeyboardAvoidingView style={styles.fill} behavior="padding">
+        <ScrollView contentContainerStyle={styles.centeredScroll} keyboardShouldPersistTaps="always">
+          <View style={styles.fill} />
+          <View style={styles.gutter}>
+            <View style={styles.welcomeBlock}>
+              <ThemedText style={styles.welcomeTitle}>Welcome!</ThemedText>
+              <ThemedText style={[styles.welcomeSubtitle, { color: palette.muted }]}>
                 Let&apos;s create your profile to get started
-              </Text>
+              </ThemedText>
             </View>
 
-            <View className="items-center mb-8">
-              <View className="w-32 h-32 rounded-full bg-blue-600 items-center justify-center">
-                <Text className="text-6xl">{PROFILE_ICON}</Text>
+            <View style={styles.avatarRow}>
+              <View style={[styles.largeAvatar, { backgroundColor: TINT }]}>
+                <ThemedText style={styles.largeAvatarGlyph}>{PROFILE_ICON}</ThemedText>
               </View>
             </View>
 
-            <View className="max-w-md w-full mx-auto">
-              <Text className="text-lg font-semibold mb-3 text-gray-900 dark:text-white">
-                Your Name
-              </Text>
+            <View style={styles.formColumn}>
+              <ThemedText style={styles.fieldLabelLarge}>Your Name</ThemedText>
 
               <TextInput
                 testID="first-user-username-input"
-                className="bg-gray-100 dark:bg-gray-800 px-5 py-4 rounded-xl text-lg text-gray-900 dark:text-white mb-6 border border-gray-200 dark:border-gray-700"
+                style={[
+                  styles.textInputLarge,
+                  { backgroundColor: palette.card, borderColor: palette.border },
+                ]}
                 placeholder="Enter your name"
-                placeholderTextColor={PLACEHOLDER_COLOR}
+                placeholderTextColor={palette.muted}
                 value={username}
                 onChangeText={onUsernameChange}
                 autoFocus
@@ -89,23 +116,29 @@ function FirstUserScreen({ username, isCreating, onUsernameChange, onSubmit }: U
                 testID="first-user-submit-button"
                 onPress={onSubmit}
                 disabled={isCreating || !username.trim()}
-                className="bg-blue-600 py-4 rounded-xl disabled:opacity-50"
+                style={({ pressed }) => [
+                  styles.primaryButtonLarge,
+                  { backgroundColor: TINT },
+                  (isCreating || !username.trim()) && styles.disabled,
+                  pressed && styles.pressed,
+                ]}
                 accessibilityRole="button"
                 accessibilityLabel="Create profile and continue"
+                accessibilityState={{ disabled: isCreating || !username.trim() }}
               >
-                <Text className="text-center text-lg font-semibold text-white">
+                <ThemedText style={styles.onAccentLabelLarge}>
                   {isCreating ? 'Creating Profile...' : 'Continue'}
-                </Text>
+                </ThemedText>
               </Pressable>
             </View>
 
-            <View className="mt-12">
-              <Text className="text-center text-sm text-gray-500 dark:text-gray-400">
+            <View style={styles.footnote}>
+              <ThemedText style={[styles.footnoteText, { color: palette.muted }]}>
                 You can add more profiles later in settings
-              </Text>
+              </ThemedText>
             </View>
           </View>
-          <View className="flex-1" />
+          <View style={styles.fill} />
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -117,7 +150,7 @@ function FirstUserScreen({ username, isCreating, onUsernameChange, onSubmit }: U
  */
 function UserGridItem({ user, isCurrentUser, onSelect }: UserGridItemProps) {
   return (
-    <View className="w-32">
+    <View style={styles.gridCell}>
       <UserProfileCard user={user} isCurrentUser={isCurrentUser} onPress={() => onSelect(user.id)} />
     </View>
   );
@@ -134,16 +167,16 @@ function UserSelectionScreen({
   onEditUser,
   onBack,
 }: UserSelectionScreenProps) {
+  const palette = useSelectPalette();
+
   return (
-    <ScrollView contentContainerClassName="flex-grow justify-center py-8">
-      <View className="px-8">
-        <View className="mb-16">
-          <Text className="text-5xl font-bold text-center text-gray-900 dark:text-white">
-            Who&apos;s watching?
-          </Text>
+    <ScrollView contentContainerStyle={styles.gridScroll}>
+      <View style={styles.gutter}>
+        <View style={styles.gridHeading}>
+          <ThemedText style={styles.welcomeTitle}>Who&apos;s watching?</ThemedText>
         </View>
 
-        <View className="flex-row flex-wrap justify-center gap-8 mb-8">
+        <View style={styles.grid}>
           {users.map((user) => (
             <UserGridItem
               key={user.id}
@@ -153,34 +186,36 @@ function UserSelectionScreen({
             />
           ))}
 
-          <View className="w-32">
+          <View style={styles.gridCell}>
             <AddUserCard onPress={onAddUser} />
           </View>
         </View>
 
-        <View className="items-center mt-8">
-          <View className="flex-row gap-4">
-            <Pressable
-              onPress={onBack}
-              className="px-6 py-3 border border-gray-300 dark:border-gray-700 rounded-lg"
-              accessibilityRole="button"
-              accessibilityLabel="Back to settings"
-            >
-              <Text className="text-base font-medium text-gray-700 dark:text-gray-300">
-                Back to Settings
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={onEditUser}
-              className="px-6 py-3 bg-blue-600 rounded-lg"
-              accessibilityRole="button"
-              accessibilityLabel="Edit profiles"
-            >
-              <Text className="text-base font-medium text-white">
-                Edit
-              </Text>
-            </Pressable>
-          </View>
+        <View style={styles.gridActions}>
+          <Pressable
+            onPress={onBack}
+            style={({ pressed }) => [
+              styles.pillButton,
+              { borderWidth: 1, borderColor: palette.border },
+              pressed && styles.pressed,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Back to settings"
+          >
+            <ThemedText style={styles.pillButtonLabel}>Back to Settings</ThemedText>
+          </Pressable>
+          <Pressable
+            onPress={onEditUser}
+            style={({ pressed }) => [
+              styles.pillButton,
+              { backgroundColor: TINT },
+              pressed && styles.pressed,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Edit profiles"
+          >
+            <ThemedText style={[styles.pillButtonLabel, styles.onAccentLabel]}>Edit</ThemedText>
+          </Pressable>
         </View>
       </View>
     </ScrollView>
@@ -188,60 +223,137 @@ function UserSelectionScreen({
 }
 
 /**
- * Modal for creating a new user profile with smooth keyboard animation
+ * Name field plus avatar, shared by the create and edit profile dialogs.
  */
-function CreateUserModal({ username, isCreating, onUsernameChange, onSubmit, onCancel }: UserFormProps) {
-  return (
-    <AnimatedModal visible={true}>
-      <Text className="text-2xl font-bold mb-6 text-gray-900 dark:text-white text-center">
-        Create New Profile
-      </Text>
+function ProfileFormFields({
+  heading,
+  value,
+  onChangeText,
+  editable,
+  onSubmitEditing,
+}: {
+  heading: string;
+  value: string;
+  onChangeText: (text: string) => void;
+  editable: boolean;
+  onSubmitEditing: () => void;
+}) {
+  const palette = useSelectPalette();
 
-      <View className="items-center mb-6">
-        <View className="w-24 h-24 rounded-full bg-blue-600 items-center justify-center">
-          <Text className="text-5xl">{PROFILE_ICON}</Text>
+  return (
+    <>
+      <ThemedText style={styles.dialogTitle}>{heading}</ThemedText>
+
+      <View style={styles.avatarRow}>
+        <View style={[styles.mediumAvatar, { backgroundColor: TINT }]}>
+          <ThemedText style={styles.mediumAvatarGlyph}>{PROFILE_ICON}</ThemedText>
         </View>
       </View>
 
-      <Text className="text-base font-semibold mb-3 text-gray-900 dark:text-white">Name</Text>
+      <ThemedText style={styles.fieldLabel}>Name</ThemedText>
 
       <TextInput
-        className="bg-gray-100 dark:bg-gray-800 px-4 py-3 rounded-xl text-base text-gray-900 dark:text-white mb-6 border border-gray-200 dark:border-gray-700"
+        style={[styles.textInput, { backgroundColor: palette.card, borderColor: palette.border }]}
         placeholder="Enter name"
-        placeholderTextColor={PLACEHOLDER_COLOR}
+        placeholderTextColor={palette.muted}
+        value={value}
+        onChangeText={onChangeText}
+        autoFocus
+        editable={editable}
+        returnKeyType="done"
+        onSubmitEditing={onSubmitEditing}
+      />
+    </>
+  );
+}
+
+/** Cancel / confirm pair used by the create and edit profile dialogs. */
+function DialogActions({
+  onCancel,
+  cancelLabel,
+  onConfirm,
+  confirmLabel,
+  confirmDisabled,
+  cancelDisabled,
+  confirmAccessibilityLabel,
+}: {
+  onCancel: () => void;
+  cancelLabel: string;
+  onConfirm: () => void;
+  confirmLabel: string;
+  confirmDisabled: boolean;
+  cancelDisabled: boolean;
+  confirmAccessibilityLabel: string;
+}) {
+  const palette = useSelectPalette();
+
+  return (
+    <View style={styles.dialogActions}>
+      <Pressable
+        onPress={onCancel}
+        disabled={cancelDisabled}
+        style={({ pressed }) => [
+          styles.dialogButton,
+          { backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.surfaceBorder },
+          cancelDisabled && styles.disabled,
+          pressed && styles.pressed,
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel={cancelLabel}
+        accessibilityState={{ disabled: cancelDisabled }}
+      >
+        <ThemedText style={styles.dialogButtonLabel}>Cancel</ThemedText>
+      </Pressable>
+
+      <Pressable
+        onPress={onConfirm}
+        disabled={confirmDisabled}
+        style={({ pressed }) => [
+          styles.dialogButton,
+          { backgroundColor: TINT },
+          confirmDisabled && styles.disabled,
+          pressed && styles.pressed,
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel={confirmAccessibilityLabel}
+        accessibilityState={{ disabled: confirmDisabled }}
+      >
+        <ThemedText style={[styles.dialogButtonLabel, styles.onAccentLabel]}>
+          {confirmLabel}
+        </ThemedText>
+      </Pressable>
+    </View>
+  );
+}
+
+/**
+ * Modal for creating a new user profile with smooth keyboard animation
+ */
+function CreateUserModal({
+  username,
+  isCreating,
+  onUsernameChange,
+  onSubmit,
+  onCancel,
+}: UserFormProps) {
+  return (
+    <AnimatedModal visible={true} onClose={isCreating ? undefined : onCancel}>
+      <ProfileFormFields
+        heading="Create New Profile"
         value={username}
         onChangeText={onUsernameChange}
-        autoFocus
         editable={!isCreating}
-        returnKeyType="done"
         onSubmitEditing={onSubmit}
       />
-
-      <View className="flex-row gap-3">
-        <Pressable
-          onPress={onCancel}
-          disabled={isCreating}
-          className="flex-1 bg-gray-200 dark:bg-gray-700 py-3 rounded-xl disabled:opacity-50"
-          accessibilityRole="button"
-          accessibilityLabel="Cancel profile creation"
-        >
-          <Text className="text-center text-base font-semibold text-gray-900 dark:text-white">
-            Cancel
-          </Text>
-        </Pressable>
-
-        <Pressable
-          onPress={onSubmit}
-          disabled={isCreating || !username.trim()}
-          className="flex-1 bg-blue-600 py-3 rounded-xl disabled:opacity-50"
-          accessibilityRole="button"
-          accessibilityLabel="Create new profile"
-        >
-          <Text className="text-center text-base font-semibold text-white">
-            {isCreating ? 'Creating...' : 'Create'}
-          </Text>
-        </Pressable>
-      </View>
+      <DialogActions
+        onCancel={() => onCancel?.()}
+        cancelLabel="Cancel profile creation"
+        cancelDisabled={isCreating}
+        onConfirm={onSubmit}
+        confirmLabel={isCreating ? 'Creating...' : 'Create'}
+        confirmDisabled={isCreating || !username.trim()}
+        confirmAccessibilityLabel="Create new profile"
+      />
     </AnimatedModal>
   );
 }
@@ -260,6 +372,8 @@ function EditUserModal({
   onDeleteUser: (userId: string) => Promise<void>;
   onCancel: () => void;
 }) {
+  const palette = useSelectPalette();
+  const haptics = useHaptics();
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [newUsername, setNewUsername] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
@@ -287,107 +401,90 @@ function EditUserModal({
   };
 
   const handleDeleteUser = (user: User) => {
+    haptics.warning();
     setPendingDeleteUser(user);
   };
 
+  const cancelEditing = useCallback(() => setEditingUser(null), []);
+
   if (editingUser) {
     return (
-      <AnimatedModal visible={true}>
-        <Text className="text-2xl font-bold mb-6 text-gray-900 dark:text-white text-center">
-          Edit Profile
-        </Text>
-
-        <View className="items-center mb-6">
-          <View className="w-24 h-24 rounded-full bg-blue-600 items-center justify-center">
-            <Text className="text-5xl">{PROFILE_ICON}</Text>
-          </View>
-        </View>
-
-        <Text className="text-base font-semibold mb-3 text-gray-900 dark:text-white">Name</Text>
-
-        <TextInput
-          className="bg-gray-100 dark:bg-gray-800 px-4 py-3 rounded-xl text-base text-gray-900 dark:text-white mb-6 border border-gray-200 dark:border-gray-700"
-          placeholder="Enter name"
-          placeholderTextColor={PLACEHOLDER_COLOR}
+      <AnimatedModal visible={true} onClose={isUpdating ? undefined : cancelEditing}>
+        <ProfileFormFields
+          heading="Edit Profile"
           value={newUsername}
           onChangeText={setNewUsername}
-          autoFocus
           editable={!isUpdating}
-          returnKeyType="done"
           onSubmitEditing={handleUpdateUser}
         />
-
-        <View className="flex-row gap-3">
-          <Pressable
-            onPress={() => setEditingUser(null)}
-            disabled={isUpdating}
-            className="flex-1 bg-gray-200 dark:bg-gray-700 py-3 rounded-xl disabled:opacity-50"
-            accessibilityRole="button"
-            accessibilityLabel="Cancel editing"
-          >
-            <Text className="text-center text-base font-semibold text-gray-900 dark:text-white">
-              Cancel
-            </Text>
-          </Pressable>
-
-          <Pressable
-            onPress={handleUpdateUser}
-            disabled={isUpdating || !newUsername.trim()}
-            className="flex-1 bg-blue-600 py-3 rounded-xl disabled:opacity-50"
-            accessibilityRole="button"
-            accessibilityLabel="Save changes"
-          >
-            <Text className="text-center text-base font-semibold text-white">
-              {isUpdating ? 'Saving...' : 'Save'}
-            </Text>
-          </Pressable>
-        </View>
+        <DialogActions
+          onCancel={cancelEditing}
+          cancelLabel="Cancel editing"
+          cancelDisabled={isUpdating}
+          onConfirm={handleUpdateUser}
+          confirmLabel={isUpdating ? 'Saving...' : 'Save'}
+          confirmDisabled={isUpdating || !newUsername.trim()}
+          confirmAccessibilityLabel="Save changes"
+        />
       </AnimatedModal>
     );
   }
 
   return (
-    <View className="absolute inset-0 bg-black/80 justify-center items-center px-8">
-      <View className="bg-white dark:bg-gray-900 rounded-2xl p-8 w-full max-w-md max-h-[80%]">
-        <Text className="text-2xl font-bold mb-6 text-gray-900 dark:text-white text-center">
-          Edit Profiles
-        </Text>
+    // A dialog rather than the in-screen overlay it used to be: anything back
+    // has to close before it leaves the screen belongs in a `Modal`, which
+    // receives back in its own window (see `AnimatedModal`) instead of
+    // competing with navigation for the press.
+    //
+    // It steps aside for the delete confirmation instead of sitting behind it:
+    // two dialog windows open at once is not something Android stacks reliably,
+    // and the confirmation is about the row that was just tapped anyway.
+    <>
+      <AnimatedModal visible={pendingDeleteUser === null} onClose={onCancel}>
+        <ThemedText style={styles.dialogTitle}>Edit Profiles</ThemedText>
 
-        <ScrollView className="mb-6" showsVerticalScrollIndicator={false}>
+        <ScrollView style={styles.editList} showsVerticalScrollIndicator={false}>
           {users.map((user) => (
-            <View key={user.id} className="flex-row items-center justify-between py-3 border-b border-gray-200 dark:border-gray-700">
-              <View className="flex-row items-center flex-1">
-                <View className="w-12 h-12 rounded-full bg-blue-600 items-center justify-center mr-3">
-                  <Text className="text-white font-bold">
-                    {user.username
-                      .split(' ')
-                      .map((n) => n[0])
-                      .join('')
-                      .toUpperCase()
-                      .slice(0, 2)}
-                  </Text>
+            <View key={user.id} style={[styles.editRow, { borderBottomColor: palette.border }]}>
+              <View style={styles.editRowUser}>
+                <View style={[styles.smallAvatar, { backgroundColor: TINT }]}>
+                  <ThemedText style={styles.smallAvatarLabel}>
+                    {getInitials(user.username)}
+                  </ThemedText>
                 </View>
-                <Text className="text-base font-medium text-gray-900 dark:text-white flex-1">
+                <ThemedText style={styles.editRowName} numberOfLines={1}>
                   {user.username}
-                </Text>
+                </ThemedText>
               </View>
-              <View className="flex-row gap-2">
+              <View style={styles.editRowActions}>
                 <Pressable
                   onPress={() => handleEditUser(user)}
-                  className="px-3 py-2 bg-blue-600 rounded-lg"
+                  style={({ pressed }) => [
+                    styles.chipButton,
+                    { backgroundColor: TINT },
+                    pressed && styles.pressed,
+                  ]}
                   accessibilityRole="button"
                   accessibilityLabel={`Edit ${user.username}`}
                 >
-                  <Text className="text-sm font-medium text-white">Edit</Text>
+                  <ThemedText style={[styles.chipButtonLabel, styles.onAccentLabel]}>
+                    Edit
+                  </ThemedText>
                 </Pressable>
                 {users.length > 1 && (
                   <Pressable
                     onPress={() => handleDeleteUser(user)}
-                    className="px-3 py-2 bg-red-600 rounded-lg"
+                    style={({ pressed }) => [
+                      styles.chipButton,
+                      { backgroundColor: palette.destructive },
+                      pressed && styles.pressed,
+                    ]}
                     accessibilityRole="button"
                     accessibilityLabel={`Delete ${user.username}`}
                   >
-                    <Text className="text-sm font-medium text-white">Delete</Text>
+                    <ThemedText style={[styles.chipButtonLabel, styles.onAccentLabel]}>
+                      Delete
+                    </ThemedText>
                   </Pressable>
                 )}
               </View>
@@ -397,15 +494,17 @@ function EditUserModal({
 
         <Pressable
           onPress={onCancel}
-          className="bg-gray-200 dark:bg-gray-700 py-3 rounded-xl"
+          style={({ pressed }) => [
+            styles.dialogButton,
+            { backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.surfaceBorder },
+            pressed && styles.pressed,
+          ]}
           accessibilityRole="button"
           accessibilityLabel="Close edit profiles"
         >
-          <Text className="text-center text-base font-semibold text-gray-900 dark:text-white">
-            Done
-          </Text>
+          <ThemedText style={styles.dialogButtonLabel}>Done</ThemedText>
         </Pressable>
-      </View>
+      </AnimatedModal>
 
       <ConfirmDialog
         visible={pendingDeleteUser !== null}
@@ -433,7 +532,7 @@ function EditUserModal({
           },
         ]}
       />
-    </View>
+    </>
   );
 }
 
@@ -443,11 +542,13 @@ function EditUserModal({
 export default function UserSelectScreen() {
   // Store state
   const users = useUserStore((state) => state.users);
-  const currentUser = useUserStore((state) => state.currentUser);
+  const currentUserId = useUserStore((state) => state.currentUser?.id);
   const switchUser = useUserStore((state) => state.switchUser);
   const createUser = useUserStore((state) => state.createUser);
   const updateUser = useUserStore((state) => state.updateUser);
   const deleteUser = useUserStore((state) => state.deleteUser);
+
+  const backgroundColor = useThemeColor({}, 'background');
 
   // Local state
   const [newUsername, setNewUsername] = useState('');
@@ -460,7 +561,7 @@ export default function UserSelectScreen() {
   // Event handlers
   const handleSelectUser = useCallback(
     async (userId: string) => {
-      if (userId === currentUser?.id) {
+      if (userId === currentUserId) {
         router.back();
         return;
       }
@@ -473,7 +574,7 @@ export default function UserSelectScreen() {
         Alert.alert('Error', 'Failed to switch user. Please try again.');
       }
     },
-    [currentUser?.id, switchUser]
+    [currentUserId, switchUser]
   );
 
   const handleCreateUser = useCallback(async () => {
@@ -493,10 +594,11 @@ export default function UserSelectScreen() {
       setNewUsername('');
       setShowCreateForm(false);
 
-      // For first user, switch to them and navigate to tabs
+      // For first user, switch to them and navigate to tabs — to the first tab
+      // they can actually see, since Home is hideable.
       if (isFirstUser) {
         await switchUser(newUser.id);
-        router.replace('/(tabs)');
+        router.replace(firstVisibleTabHref(newUser.settings));
       }
     } catch (error) {
       console.error('[UserSelect] Failed to create user:', error);
@@ -530,14 +632,14 @@ export default function UserSelectScreen() {
 
   const handleDeleteUser = useCallback(async (userId: string) => {
     // If deleting current user, switch to another user first
-    if (userId === currentUser?.id && users.length > 1) {
+    if (userId === currentUserId && users.length > 1) {
       const otherUser = users.find(u => u.id !== userId);
       if (otherUser) {
         await switchUser(otherUser.id);
       }
     }
     await deleteUser(userId);
-  }, [deleteUser, currentUser?.id, users, switchUser]);
+  }, [deleteUser, currentUserId, users, switchUser]);
 
   const handleCancelEdit = useCallback(() => {
     setShowEditModal(false);
@@ -557,10 +659,10 @@ export default function UserSelectScreen() {
 
   // Render user selection screen with optional create modal
   return (
-    <SafeAreaView className="flex-1 bg-white dark:bg-gray-950" edges={['top']}>
+    <SafeAreaView style={[styles.screen, { backgroundColor }]} edges={['top']}>
       <UserSelectionScreen
         users={users}
-        currentUserId={currentUser?.id}
+        currentUserId={currentUserId}
         onSelectUser={handleSelectUser}
         onAddUser={handleAddUserPress}
         onEditUser={handleEditUser}
@@ -588,3 +690,238 @@ export default function UserSelectScreen() {
     </SafeAreaView>
   );
 }
+
+const ON_ACCENT = '#FFFFFF';
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+  },
+  fill: {
+    flex: 1,
+  },
+  gutter: {
+    paddingHorizontal: 32,
+  },
+  centeredScroll: {
+    flexGrow: 1,
+  },
+  gridScroll: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingVertical: 32,
+  },
+
+  // First-run screen
+  welcomeBlock: {
+    marginBottom: 48,
+    gap: 16,
+  },
+  welcomeTitle: {
+    fontSize: 48,
+    lineHeight: 56,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  welcomeSubtitle: {
+    fontSize: 18,
+    textAlign: 'center',
+  },
+  formColumn: {
+    width: '100%',
+    maxWidth: 448,
+    alignSelf: 'center',
+  },
+  footnote: {
+    marginTop: 48,
+  },
+  footnoteText: {
+    fontSize: 14,
+    textAlign: 'center',
+  },
+
+  // Avatars
+  avatarRow: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  largeAvatar: {
+    width: 128,
+    height: 128,
+    borderRadius: 64,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  largeAvatarGlyph: {
+    fontSize: 60,
+    lineHeight: 72,
+  },
+  mediumAvatar: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mediumAvatarGlyph: {
+    fontSize: 48,
+    lineHeight: 58,
+  },
+  smallAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  smallAvatarLabel: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: ON_ACCENT,
+  },
+
+  // Fields
+  fieldLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  fieldLabelLarge: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  textInput: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    fontSize: 16,
+    marginBottom: 24,
+  },
+  textInputLarge: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    fontSize: 18,
+    marginBottom: 24,
+  },
+
+  // Buttons
+  pressed: {
+    opacity: 0.7,
+  },
+  disabled: {
+    opacity: 0.5,
+  },
+  onAccentLabel: {
+    color: ON_ACCENT,
+  },
+  onAccentLabelLarge: {
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+    color: ON_ACCENT,
+  },
+  primaryButtonLarge: {
+    paddingVertical: 16,
+    borderRadius: 12,
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  pillButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  pillButtonLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  dialogActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  dialogButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  dialogButtonLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  chipButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    minHeight: 36,
+    justifyContent: 'center',
+  },
+  chipButtonLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+
+  // Selection grid
+  gridHeading: {
+    marginBottom: 64,
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 32,
+    marginBottom: 32,
+  },
+  gridCell: {
+    width: 128,
+  },
+  gridActions: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 16,
+    marginTop: 32,
+  },
+
+  // Dialogs
+  dialogTitle: {
+    fontSize: 24,
+    lineHeight: 32,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  editList: {
+    marginBottom: 24,
+  },
+  editRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  editRowUser: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  editRowName: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  editRowActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+});

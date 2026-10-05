@@ -3,7 +3,15 @@ import { Button } from '@/components/ui/controls/button';
 import { Input } from '@/components/ui/controls/inputs/input';
 import { ChannelGroupButton } from '@/features/live/channel-group-button';
 import type { SortOption } from '@/types/sort.types';
+import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
+
+/**
+ * How long the field waits before publishing a keystroke upwards. Short on
+ * purpose: this only coalesces a burst of typing into one screen render — the
+ * query itself is debounced again by `usePaginatedResource`.
+ */
+const SEARCH_INPUT_DEBOUNCE_MS = 150;
 
 interface GroupOption {
   name: string;
@@ -41,6 +49,30 @@ export function VideosTopBar({
   sortOrder,
   onSortSelect,
 }: VideosTopBarProps) {
+  // The text being typed lives here, not at the screen root: every keystroke
+  // there re-rendered the whole grid.
+  const [draftText, setDraftText] = useState(searchText);
+
+  // Adopt an external reset. The screen only ever *clears* the search - on a
+  // playlist or content-type change - so that is the one incoming value worth
+  // reacting to; anything else it sends is the echo of what this field just
+  // published, which must not overwrite what is being typed now. The content
+  // type is part of the key because switching it clears a search that may
+  // already have been empty.
+  const resetKey = contentType + '|' + searchText;
+  const [prevResetKey, setPrevResetKey] = useState(resetKey);
+  if (resetKey !== prevResetKey) {
+    setPrevResetKey(resetKey);
+    if (searchText === '') setDraftText('');
+  }
+
+  // Publish only what the screen doesn't have yet, once the typing pauses.
+  useEffect(() => {
+    if (draftText === searchText) return;
+    const timer = setTimeout(() => onSearchTextChange(draftText), SEARCH_INPUT_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [draftText, searchText, onSearchTextChange]);
+
   return (
     <View style={styles.container}>
       <View style={styles.content}>
@@ -75,8 +107,8 @@ export function VideosTopBar({
         <View style={styles.searchRow}>
           <Input
             placeholder="Search videos..."
-            value={searchText}
-            onChangeText={onSearchTextChange}
+            value={draftText}
+            onChangeText={setDraftText}
             style={styles.searchInput}
           />
           <SortButton

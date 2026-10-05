@@ -1,5 +1,33 @@
+import { redactCredentials } from '@/lib/url-utils';
 import { getRustDatabase } from '@/services/rust-channel-service';
-import type { EpgProgramme, EpgSource, GroupedProgrammesResult } from 'expo-m3u-parser';
+import type {
+  ChannelShift,
+  EpgProgramme,
+  EpgSource,
+  GroupedProgrammesResult,
+  ProgrammeSearchOptions,
+} from 'expo-m3u-parser';
+
+/** Outcome of one detect-and-fetch pass over a playlist's EPG sources. */
+export interface EpgFetchResult {
+  /** Sources detected or configured, whatever their download did. */
+  sources: EpgSource[];
+  /** Sources whose guide was downloaded and imported. */
+  succeeded: number;
+  /** Sources whose download failed — their programmes are missing. */
+  failed: number;
+}
+
+/**
+ * Whether the playlist's guide data is as current as its sources allow, and a
+ * fetch stamp may therefore be recorded.
+ *
+ * A playlist with no source has nothing to download and is complete; one whose
+ * every source failed is not, and must be retried rather than stamped.
+ */
+export function isEpgFetchComplete(result: EpgFetchResult): boolean {
+  return result.succeeded > 0 || result.failed === 0;
+}
 
 /**
  * Service for managing EPG (Electronic Programme Guide) data via Rust backend.
@@ -21,19 +49,23 @@ export class EpgService {
    *
    * @param playlistId Playlist to scan for EPG URLs
    * @param epgUrl Optional user-configured EPG/XMLTV URL
-   * @returns Array of detected EPG sources
+   * @returns The detected sources and how many of them downloaded successfully
    */
-  static async detectAndFetchEpgSources(playlistId: string, epgUrl?: string): Promise<EpgSource[]> {
+  static async detectAndFetchEpgSources(
+    playlistId: string,
+    epgUrl?: string,
+  ): Promise<EpgFetchResult> {
     const pipelineStart = Date.now();
     if (__DEV__) {
-      console.log(`[EpgService] detectAndFetchEpgSources started for playlist: ${playlistId}`, epgUrl ? `(user EPG URL: ${epgUrl})` : '');
+      console.log(`[EpgService] detectAndFetchEpgSources started for playlist: ${playlistId}`, epgUrl ? `(user EPG URL: ${redactCredentials(epgUrl)})` : '');
     }
 
     const db = await getRustDatabase();
 
     // 1. User-provided EPG URL — upsert as a source first
+    let userSource: EpgSource | null = null;
     if (epgUrl) {
-      const userSource: EpgSource = {
+      const draft: EpgSource = {
         id: `user-${playlistId}`,
         url: epgUrl,
         name: 'User-configured XMLTV',
@@ -41,9 +73,14 @@ export class EpgService {
         programmeCount: 0,
         playlistId,
       };
-      await db.upsertEpgSource(userSource);
+      // A URL already registered — auto-detected from a tvg_url by an earlier
+      // import, say — keeps the id its programmes are keyed by. Fetching under
+      // any other id would import a second copy of the same guide.
+      userSource = { ...draft, id: await db.upsertEpgSource(draft) };
       if (__DEV__) {
-        console.log(`[EpgService] Upserted user-provided EPG source: ${epgUrl}`);
+        console.log(
+          `[EpgService] Upserted user-provided EPG source: ${redactCredentials(epgUrl)}`,
+        );
       }
     }
 
@@ -54,16 +91,10 @@ export class EpgService {
       console.log(`[EpgService] tvg_url scan found ${sources.length} source(s)`);
     }
 
-    // Ensure user source is in the list (detectEpgSources may have returned it)
-    if (epgUrl && !sources.some((s) => s.url === epgUrl)) {
-      sources.unshift({
-        id: `user-${playlistId}`,
-        url: epgUrl,
-        name: 'User-configured XMLTV',
-        autoDetected: false,
-        programmeCount: 0,
-        playlistId,
-      });
+    // Ensure user source is in the list (detectEpgSources may have returned it),
+    // as stored — under the id the upsert reported.
+    if (userSource && !sources.some((s) => s.url === userSource.url)) {
+      sources.unshift(userSource);
     }
 
     // 3. Fallback: derive EPG URL from Xtream playlist URL pattern
@@ -71,9 +102,11 @@ export class EpgService {
       const xtreamUrl = await this.deriveXtreamEpgUrl(db, playlistId);
       if (xtreamUrl) {
         if (__DEV__) {
-          console.log(`[EpgService] Xtream fallback derived EPG URL: ${xtreamUrl}`);
+          console.log(
+            `[EpgService] Xtream fallback derived EPG URL: ${redactCredentials(xtreamUrl)}`,
+          );
         }
-        const source: EpgSource = {
+        const draft: EpgSource = {
           id: `xtream-${playlistId}`,
           url: xtreamUrl,
           name: 'Xtream XMLTV',
@@ -81,8 +114,8 @@ export class EpgService {
           programmeCount: 0,
           playlistId,
         };
-        await db.upsertEpgSource(source);
-        sources.push(source);
+        // Stored id again, for the same reason as the user source above.
+        sources.push({ ...draft, id: await db.upsertEpgSource(draft) });
       }
     }
 
@@ -90,7 +123,7 @@ export class EpgService {
       if (__DEV__) {
         console.log(`[EpgService] No EPG sources found (${Date.now() - pipelineStart}ms)`);
       }
-      return [];
+      return { sources, succeeded: 0, failed: 0 };
     }
 
     // Fetch programmes for each detected source in parallel
@@ -102,23 +135,24 @@ export class EpgService {
         .then((count) => {
           if (__DEV__) {
             console.log(
-              `[EpgService] Fetched ${count} programme(s) from ${source.url} (${Date.now() - fetchStart}ms)`
+              `[EpgService] Fetched ${count} programme(s) from ${redactCredentials(source.url)} (${Date.now() - fetchStart}ms)`
             );
           }
           return count;
         })
         .catch((err) => {
-          failedSources.push(source.name || source.url);
+          failedSources.push(source.name || redactCredentials(source.url));
           console.error(
-            `[EpgService] Failed to fetch EPG source "${source.name}" (${source.url}):`,
+            `[EpgService] Failed to fetch EPG source "${source.name}" (${redactCredentials(source.url)}):`,
             err instanceof Error ? err.message : err
           );
-          return 0;
+          return null;
         });
     });
 
     const results = await Promise.all(fetchPromises);
-    const totalProgrammes = results.reduce((sum, count) => sum + count, 0);
+    const imported = results.filter((count): count is number => count !== null);
+    const totalProgrammes = imported.reduce((sum, count) => sum + count, 0);
 
     if (failedSources.length > 0) {
       console.warn(
@@ -132,7 +166,7 @@ export class EpgService {
       );
     }
 
-    return sources;
+    return { sources, succeeded: imported.length, failed: failedSources.length };
   }
 
   /**
@@ -180,16 +214,20 @@ export class EpgService {
   /**
    * Get currently airing programmes for multiple channels.
    * Returns a Map keyed by channelId for O(1) lookups in the grid.
+   *
+   * Each channel carries its `tvg-shift`, which decides which of its programmes
+   * counts as current as well as the times returned — the native side applies
+   * both (see `ChannelShift`).
    */
   static async getCurrentProgrammesForChannels(
-    channelIds: string[]
+    channels: ChannelShift[]
   ): Promise<Map<string, EpgProgramme>> {
-    if (channelIds.length === 0) {
+    if (channels.length === 0) {
       return new Map();
     }
 
     const db = await getRustDatabase();
-    const programmes = await db.getCurrentProgrammesForChannels(channelIds);
+    const programmes = await db.getCurrentProgrammesForChannels(channels);
 
     const map = new Map<string, EpgProgramme>();
     for (const programme of programmes) {
@@ -199,49 +237,64 @@ export class EpgService {
   }
 
   /**
-   * Get the schedule for a single channel within a time range
+   * Get the schedule for a single channel within a time range.
+   *
+   * `shiftHours` is the channel's `tvg-shift`; the window is the caller's own
+   * hours either way, because the shift is applied inside the query.
    */
   static async getChannelSchedule(
     channelId: string,
     from: number,
-    to: number
+    to: number,
+    shiftHours: number = 0
   ): Promise<EpgProgramme[]> {
     const db = await getRustDatabase();
-    return db.getChannelSchedule(channelId, from, to);
+    return db.getChannelSchedule(channelId, from, to, shiftHours);
   }
 
   /**
-   * Get the currently airing programme for a single channel
+   * Get the currently airing programme for a single channel.
+   *
+   * `shiftHours` is the channel's `tvg-shift`: it decides which programme counts
+   * as current, so this agrees with the schedule shown beside it.
    */
-  static async getCurrentProgramme(channelId: string): Promise<EpgProgramme | null> {
+  static async getCurrentProgramme(
+    channelId: string,
+    shiftHours: number = 0
+  ): Promise<EpgProgramme | null> {
     const db = await getRustDatabase();
-    return db.getCurrentProgramme(channelId);
+    return db.getCurrentProgramme(channelId, undefined, shiftHours);
   }
 
   /**
-   * Get the next programme for a single channel
+   * Get the next programme for a single channel, shifted like
+   * {@link EpgService.getCurrentProgramme}.
    */
-  static async getNextProgramme(channelId: string): Promise<EpgProgramme | null> {
+  static async getNextProgramme(
+    channelId: string,
+    shiftHours: number = 0
+  ): Promise<EpgProgramme | null> {
     const db = await getRustDatabase();
-    return db.getNextProgramme(channelId);
+    return db.getNextProgramme(channelId, undefined, shiftHours);
   }
 
   /**
    * Get programmes for multiple channels in a time range (for EPG guide grid).
    * Returns a Map keyed by channelId with sorted programme arrays.
-   * Grouping and sorting is done in Rust — this just converts to Map.
+   * Grouping, sorting and each channel's `tvg-shift` are handled in Rust — this
+   * just converts to Map.
    */
   static async getProgrammesForChannels(
-    channelIds: string[],
+    channels: ChannelShift[],
     from: number,
     to: number
   ): Promise<Map<string, EpgProgramme[]>> {
-    if (channelIds.length === 0) {
+    if (channels.length === 0) {
       return new Map();
     }
 
     const db = await getRustDatabase();
-    const groups = await db.getProgrammesForChannels(channelIds, from, to);
+    const groups = await db.getProgrammesForChannels(channels, from, to);
 
     const map = new Map<string, EpgProgramme[]>();
     for (const group of groups) {
@@ -253,16 +306,14 @@ export class EpgService {
   /**
    * Search programmes by title with optional filters.
    * Returns results pre-grouped by channel with a has_more pagination flag.
+   *
+   * Search covers the whole guide, including channels the caller has not
+   * loaded, so `shifts` is a sparse map: list the channels that have a
+   * `tvg-shift` and every other channel is matched and returned unshifted.
    */
   static async searchProgrammes(
     query: string,
-    options?: {
-      from?: number;
-      to?: number;
-      category?: string;
-      limit?: number;
-      offset?: number;
-    }
+    options?: ProgrammeSearchOptions
   ): Promise<GroupedProgrammesResult> {
     const db = await getRustDatabase();
     return db.searchProgrammes(query, options);

@@ -155,18 +155,25 @@ One focused PR, ideally done before starting EPG/VOD development.
 
 This reflects the resolved decisions — `features/` replaces `components/domain/`, and `states/` was renamed to `stores/`.
 
+Refreshed to the tree as it stands. Two things drifted from the plan above and
+stayed that way deliberately: a feature's own components sit flat in its
+directory (no `components/` subfolder — only `hooks/` earns one), and no feature
+has a `services/` directory. `features/video/services/` in particular is gone:
+what it held moved into the video stores.
+
 ```
 src/
-├── app/                                    # Expo Router screens (UNCHANGED)
+├── app/                                    # Expo Router screens
 │   ├── _layout.tsx
 │   ├── index.tsx
-│   ├── modal.tsx
 │   ├── user-select.tsx
 │   ├── video-player.tsx
 │   └── (tabs)/
 │       ├── _layout.tsx
-│       ├── index.tsx
+│       ├── index.tsx                       # Home
 │       ├── live.tsx
+│       ├── videos.tsx
+│       ├── sports.tsx
 │       └── settings.tsx
 │
 ├── components/
@@ -176,42 +183,51 @@ src/
 │       └── display/
 │
 ├── features/                               # Domain modules (replaces components/domain/)
+│   ├── home/
+│   │   └── hooks/
 │   ├── live/
-│   │   ├── components/                     # From components/domain/live/
-│   │   ├── hooks/                          # From hooks/live/ (minus usePlaylistChannels)
-│   │   └── index.ts
+│   │   ├── guide/                          # EPG guide
+│   │   └── hooks/
 │   ├── playlist/
-│   │   ├── components/                     # From components/domain/playlist/
-│   │   └── index.ts
+│   ├── sports/
+│   │   ├── match-detail/
+│   │   └── hooks/
+│   ├── theme/
 │   ├── user/
-│   │   ├── components/                     # From components/domain/user/
-│   │   └── index.ts
-│   ├── video/                              # Preserved structure (was components/domain/video/)
-│   │   ├── components/                     # Video .tsx files moved into components/
-│   │   ├── hooks/
-│   │   │   ├── use-video-player.ts
-│   │   │   └── specialized/
-│   │   ├── services/
-│   │   ├── types/
-│   │   ├── utils/
-│   │   ├── constants.ts
-│   │   └── index.ts
-│   └── home/
-│       └── components/                     # From general-placeholder-components/
+│   ├── videos/
+│   │   └── hooks/
+│   └── video/                              # Playback (was components/domain/video/)
+│       ├── hooks/
+│       │   ├── use-video-player.ts
+│       │   └── specialized/
+│       ├── types/
+│       ├── utils/
+│       ├── constants.ts
+│       └── index.ts
 │
 ├── stores/                                 # Zustand stores (renamed from states/)
 │   ├── index.ts
+│   ├── app/                                # App-readiness gate
+│   ├── header-background/
 │   ├── playlist/
 │   │   ├── playlist-store.ts
+│   │   ├── import-progress-store.ts
 │   │   └── index.ts
 │   ├── user/
 │   │   ├── user-store.ts
 │   │   └── index.ts
-│   └── video/
+│   ├── cache/                              # Pre-fetched first page per tab
+│   │   ├── first-page-cache-store.ts
+│   │   └── index.ts
+│   └── video/                              # One store per playback concern
+│       ├── playback-session-store.ts
+│       ├── playback-time-store.ts
 │       ├── player-store.ts
 │       ├── ui-store.ts
-│       ├── error-store.ts
-│       ├── network-store.ts
+│       ├── gesture-store.ts
+│       ├── queue-store.ts
+│       ├── retry-store.ts
+│       ├── cast-mini-player-store.ts
 │       └── index.ts
 │
 ├── services/                               # Shared cross-domain services (UNCHANGED)
@@ -220,10 +236,12 @@ src/
 ├── lib/                                    # Shared utilities (UNCHANGED)
 │
 ├── hooks/                                  # Shared app-level hooks
+│   ├── use-chrome-insets.ts                # Space the floating bottom chrome covers
 │   ├── use-color-scheme.ts
 │   ├── use-color-scheme.web.ts
-│   ├── use-playlist-channels.ts            # Promoted from hooks/live/
+│   ├── use-paginated-resource.ts           # Engine behind every paginated list
 │   ├── use-playlist-init.ts
+│   ├── use-sync-scheduler.ts
 │   └── use-theme-color.ts
 │
 ├── constants/
@@ -303,7 +321,7 @@ These should be written into a project pattern guide (e.g., `CLAUDE.md` or a `do
 
 5. **New feature checklist**: Choose complexity tier (simple/medium/complex), create only the directories you need, put domain-specific code inside the feature, put shared code in top-level directories.
 
-6. **Barrel exports**: Only at feature boundaries (`features/*/index.ts`, `states/video/index.ts`). No barrel files for `types/`, `lib/`, `services/`, `db/`, `hooks/` — direct imports are clearer and avoid Metro module evaluation overhead.
+6. **Barrel exports**: Only at feature boundaries (`features/*/index.ts`, `stores/*/index.ts`). No barrel files for `types/`, `lib/`, `services/`, `db/`, `hooks/` — direct imports are clearer and avoid Metro module evaluation overhead.
 
 ---
 

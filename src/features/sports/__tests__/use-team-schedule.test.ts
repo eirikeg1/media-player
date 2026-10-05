@@ -92,14 +92,24 @@ describe('useTeamSchedule', () => {
     expect(result.current.isLoading).toBe(false);
   });
 
-  it('surfaces a failed read as an error', async () => {
-    jest.spyOn(db, 'getTeamFixtures').mockRejectedValue(new Error('provider down'));
+  it('surfaces a failed read as an error, without the raw backend message', async () => {
+    jest.spyOn(db, 'getTeamFixtures').mockRejectedValue(new Error('FfiException: sqlite busy'));
 
     const { result } = await renderHook(() => useTeamSchedule(ARSENAL));
 
-    await waitFor(() => expect(result.current.error).toBe('provider down'));
+    await waitFor(() =>
+      expect(result.current.error).toBe("Couldn't load this team's matches.")
+    );
     expect(result.current.fixtures).toEqual([]);
     expect(result.current.isLoading).toBe(false);
+  });
+
+  it('names a rate limit the user can wait out', async () => {
+    jest.spyOn(db, 'getTeamFixtures').mockRejectedValue(new Error('HttpError: rate limited (429)'));
+
+    const { result } = await renderHook(() => useTeamSchedule(ARSENAL));
+
+    await waitFor(() => expect(result.current.error).toMatch(/rate-limiting/));
   });
 
   it('refetches for another team', async () => {

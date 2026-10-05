@@ -1,39 +1,26 @@
+import { createJsonFileState } from '@/background/json-file-state';
 import {
   DEFAULT_SPORTS_BACKGROUND_REFRESH,
   type SportsBackgroundRefresh,
   type SportsRefreshMode,
 } from '@/types/user.types';
-import { File, Paths } from 'expo-file-system';
 
 import type { RefreshStateStore } from './ports';
 
 /**
  * File-backed {@link RefreshStateStore}.
  *
- * An OS wake starts the app headless: no SQLite connection, no zustand store
- * and no signed-in user. A single small JSON file next to the databases is the
- * one thing the task can always read, so the preference is mirrored here
- * alongside the last run.
- *
- * Every read is total — a missing, unreadable or corrupt file reads as "nothing
- * stored" rather than throwing, because a broken file must not stop the app
- * from starting or the task from falling back to the defaults.
+ * A headless wake has no signed-in user to read the preference from, so it is
+ * mirrored into a small JSON file alongside the last run (see
+ * {@link createJsonFileState} for why a file, and what makes it safe).
  */
-
-const FILE_NAME = 'sports-refresh-state.json';
 
 interface PersistedState {
   lastRunAt: number | null;
   preference: SportsBackgroundRefresh | null;
 }
 
-const EMPTY_STATE: PersistedState = { lastRunAt: null, preference: null };
-
 const REFRESH_MODES: readonly SportsRefreshMode[] = ['off', 'interval', 'daily', 'night'];
-
-function stateFile(): File {
-  return new File(Paths.document, FILE_NAME);
-}
 
 /**
  * The file is written by an older (or newer) build as much as by this one, so
@@ -62,50 +49,28 @@ function parsePreference(value: unknown): SportsBackgroundRefresh | null {
   };
 }
 
-async function read(): Promise<PersistedState> {
-  try {
-    const file = stateFile();
-    if (!file.exists) return EMPTY_STATE;
-    const parsed: unknown = JSON.parse(await file.text());
-    if (typeof parsed !== 'object' || parsed === null) return EMPTY_STATE;
-    const raw = parsed as Partial<Record<keyof PersistedState, unknown>>;
-    return {
-      lastRunAt:
-        typeof raw.lastRunAt === 'number' && Number.isFinite(raw.lastRunAt) ? raw.lastRunAt : null,
-      preference: parsePreference(raw.preference),
-    };
-  } catch (err) {
-    console.warn('[sports-refresh] Could not read refresh state:', err);
-    return EMPTY_STATE;
-  }
-}
-
-/**
- * Read-modify-write, so storing one field never drops the other: the settings
- * screen writes the preference and the task writes the last run.
- */
-async function update(patch: Partial<PersistedState>): Promise<void> {
-  const next: PersistedState = { ...(await read()), ...patch };
-  try {
-    // `write` creates the file when it is missing; the document directory the
-    // databases live in is always there.
-    stateFile().write(JSON.stringify(next));
-  } catch (err) {
-    console.warn('[sports-refresh] Could not write refresh state:', err);
-  }
-}
+const state = createJsonFileState<PersistedState>({
+  fileName: 'sports-refresh-state.json',
+  empty: { lastRunAt: null, preference: null },
+  parse: (raw) => ({
+    lastRunAt:
+      typeof raw.lastRunAt === 'number' && Number.isFinite(raw.lastRunAt) ? raw.lastRunAt : null,
+    preference: parsePreference(raw.preference),
+  }),
+  tag: '[sports-refresh]',
+});
 
 export const refreshStateStore: RefreshStateStore = {
   async getLastRunAt() {
-    return (await read()).lastRunAt;
+    return (await state.read()).lastRunAt;
   },
   async setLastRunAt(ts: number) {
-    await update({ lastRunAt: ts });
+    await state.update({ lastRunAt: ts });
   },
   async getPreference() {
-    return (await read()).preference;
+    return (await state.read()).preference;
   },
   async setPreference(pref: SportsBackgroundRefresh) {
-    await update({ preference: pref });
+    await state.update({ preference: pref });
   },
 };

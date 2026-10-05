@@ -2,23 +2,24 @@
  * Video Playback State Management
  *
  * All video-related state unified in one domain:
- * - Player state (play/pause, loading)
- * - Error handling and retry logic
+ * - The playback session (owner of the native player) and its timeline
+ * - Retry bookkeeping for the video screen
  * - UI controls state
- * - Network monitoring for video
+ * - Playback queue (next/previous)
  * - Cast mini-player state
  */
 export { useVideoPlayerStore } from './player-store';
-export { useVideoErrorStore } from './error-store';
+export { useVideoRetryStore } from './retry-store';
 export { useVideoUIStore } from './ui-store';
-export { useVideoNetworkStore } from './network-store';
 export { useCastMiniPlayerStore } from './cast-mini-player-store';
 export { useGestureStore } from './gesture-store';
-export { usePlaybackQueueStore } from './queue-store';
+export { usePlaybackQueueStore, type QueueHandover } from './queue-store';
+export { usePlaybackTimeStore } from './playback-time-store';
 export {
   usePlaybackSessionStore,
   buildVideoSource,
   sessionMatches,
   type PlaybackSession,
   type PlaybackMode,
+  type SessionTarget,
 } from './playback-session-store';

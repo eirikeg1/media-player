@@ -2,9 +2,17 @@ import type { Fixture } from 'expo-m3u-parser';
 
 import { FAVORITES_GROUP_KEY, groupFixturesByLeague, involvesFavorite } from '../match-grouping';
 
+/** Deterministic provider ids: `byKickoff` tie-breaks on them, so a random id
+ *  would make the order of two same-minute fixtures vary between runs. */
+let nextProviderId = 1;
+
+beforeEach(() => {
+  nextProviderId = 1;
+});
+
 function fixture(overrides: Partial<Fixture>): Fixture {
   return {
-    providerId: Math.floor(Math.random() * 1_000_000),
+    providerId: nextProviderId++,
     provider: 'sofascore',
     competitionName: 'Premier League',
     competitionId: 17,
@@ -19,7 +27,12 @@ function fixture(overrides: Partial<Fixture>): Fixture {
   };
 }
 
-const ucl = { competitionName: 'UEFA Champions League', competitionId: 7, competitionCountry: 'Europe' };
+const ucl = {
+  competitionName: 'UEFA Champions League',
+  competitionId: 7,
+  competitionCountry: 'Europe',
+  competitionEmblemUrl: 'https://img.example/ucl.png',
+};
 const laLiga = { competitionName: 'La Liga', competitionId: 8, competitionCountry: 'Spain' };
 const obscure = { competitionName: 'Veikkausliiga', competitionId: 999, competitionCountry: 'Finland' };
 const obscure2 = { competitionName: 'Allsvenskan', competitionId: 998, competitionCountry: 'Sweden' };
@@ -43,8 +56,24 @@ describe('groupFixturesByLeague', () => {
       'Veikkausliiga',
       'Allsvenskan',
     ]);
-    expect(groups[0].logoUrl).toContain('/unique-tournament/7/');
+    expect(groups[0].logoUrl).toBe('https://img.example/ucl.png');
     expect(groups[0].subtitle).toBe('Europe');
+  });
+
+  it('falls back to the provider emblem for a row cached before the column existed', () => {
+    const groups = groupFixturesByLeague([fixture(laLiga)], {
+      favoriteTeamIds: new Set(),
+      leagueOrder: [8],
+    });
+    expect(groups[0].logoUrl).toContain('/unique-tournament/8/');
+  });
+
+  it('leaves a league with no id badgeless', () => {
+    const groups = groupFixturesByLeague(
+      [fixture({ competitionName: 'Friendly', competitionId: undefined })],
+      { favoriteTeamIds: new Set(), leagueOrder: [] }
+    );
+    expect(groups[0].logoUrl).toBeUndefined();
   });
 
   it('puts a Favorites group first with matches of favorite teams, keeping them in their league too', () => {
@@ -75,6 +104,17 @@ describe('groupFixturesByLeague', () => {
     expect(groups).toHaveLength(1);
     expect(groups[0].fixtures).toEqual([live]);
     expect(groups[0].liveCount).toBe(1);
+  });
+
+  it('marks favorites and the ranked leagues, so the list knows what to expand', () => {
+    const groups = groupFixturesByLeague([fixture({}), fixture({ ...obscure })], {
+      favoriteTeamIds: new Set([42]),
+      leagueOrder: [17],
+    });
+    const ranked = new Map(groups.map((g) => [g.title, g.isRanked]));
+    expect(ranked.get('Favorites')).toBe(true);
+    expect(ranked.get('Premier League')).toBe(true);
+    expect(ranked.get('Veikkausliiga')).toBe(false);
   });
 
   it('groups fixtures without a competition id by name', () => {

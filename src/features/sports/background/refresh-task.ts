@@ -38,6 +38,9 @@ export type RefreshOutcome = 'ran' | 'skipped' | 'failed';
  * stores rather than the ones from before the wake. Invalidating first (not
  * last) lets the run's own day fetch stamp itself fresh — zeroing that stamp
  * after the fact would repeat the day fan-out on the next foreground open.
+ *
+ * It ends by pruning fixtures that are long past, which is the only thing that
+ * bounds the sports database (see {@link pruneOldSportsData}).
  */
 export async function performBackgroundRefresh(deps: RefreshTaskDeps): Promise<RefreshOutcome> {
   const { stateStore, getFavoriteTeamIds, now } = deps;
@@ -61,21 +64,44 @@ export async function performBackgroundRefresh(deps: RefreshTaskDeps): Promise<R
     await fetchFavoriteTeamFixtures(db, at, teamIds);
 
     const window = dayWindow(at);
-    const fixtures = await db.getFixturesForDate(
-      window.providerDate,
-      window.fromTs,
-      window.toTs,
-      TTL_TODAY_SECS
-    );
+    // The caches were dropped above, so this day has no stamp left and the
+    // fan-out runs here rather than behind the answer — the wake has to have
+    // the schedule before it reports itself done.
+    const { fixtures } = await db.getFixturesForWindow(window.fromTs, window.toTs, TTL_TODAY_SECS);
 
     if (fixtures.some(isMatchLive)) {
       await db.refreshLiveFixtures();
     }
+
+    await pruneOldSportsData(db, at);
 
     await stateStore.setLastRunAt(at.getTime());
     return 'ran';
   } catch (err) {
     console.warn('[sports-refresh] Background refresh failed:', err);
     return 'failed';
+  }
+}
+
+/**
+ * How far back fixtures are kept. Long enough that a user paging back through
+ * the date strip still finds results, short enough that the tables the prune
+ * cascades into — broadcaster lists and cached match detail — stay bounded.
+ */
+const RETENTION_DAYS = 30;
+
+/**
+ * Drop fixtures older than {@link RETENTION_DAYS} and everything keyed on them.
+ *
+ * Best-effort on purpose: housekeeping is not what the wake was scheduled for,
+ * and a failed prune must not cost the run its `lastRunAt` stamp and make the
+ * next wake repeat the whole fan-out.
+ */
+async function pruneOldSportsData(db: SportsDatabase, at: Date): Promise<void> {
+  const cutoff = Math.floor(at.getTime() / 1000) - RETENTION_DAYS * 86_400;
+  try {
+    await db.pruneSportsData(cutoff);
+  } catch (err) {
+    console.warn('[sports-refresh] Prune failed:', err);
   }
 }

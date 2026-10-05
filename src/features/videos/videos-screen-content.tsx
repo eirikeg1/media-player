@@ -1,13 +1,18 @@
 import InfiniteParallaxGrid from '@/components/ui/containers/infinite-parallax-grid';
-import { IconSymbol } from '@/components/ui/display/icon-symbol';
-import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
 import { SkeletonGrid } from '@/components/ui/display/skeleton-grid';
+import { EmptyState, Spinner } from '@/components/ui/display/state';
 import { MovieItem } from '@/features/videos/movie-item';
 import { SeriesItem } from '@/features/videos/series-item';
 import { VideosEmptyState } from '@/features/videos/videos-empty-state';
 import { VideosTopBar } from '@/features/videos/videos-top-bar';
-import { isChannelFavorite, isSeriesFavorite } from '@/lib/channel-utils';
+import {
+  getChannelId,
+  getSeriesId,
+  isChannelFavorite,
+  isSeriesFavorite,
+  type FavoriteIds,
+} from '@/lib/channel-utils';
 import { useHeaderBackground } from '@/hooks/use-header-background';
 import type { GroupOption } from '@/lib/group-utils';
 import type { SortOption } from '@/types/sort.types';
@@ -16,7 +21,7 @@ import type { ListRenderItemInfo } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import type { SeriesInfo } from 'expo-m3u-parser';
 import { useCallback, useMemo } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 const DEFAULT_VIDEOS_HEADER = require('../../../assets/images/parallax-headers/general/green-paper-cut-abstract.jpg');
 
@@ -26,11 +31,17 @@ interface VideosScreenContentProps {
   isLoading: boolean;
   playlist: Playlist | null;
   channels: Channel[];
-  favoriteChannels: string[];
+  /** Favorite ids as a set, so the grid can check every visible cell in O(1). */
+  favoriteChannels: FavoriteIds;
   groups: GroupOption[];
   selectedGroup: string;
   searchText: string;
   isRefreshing: boolean;
+  /** Message from a failed content or group query, if any. */
+  error?: string | null;
+  onRetry?: () => void;
+  /** Favorites filter is on, but none of the favorite groups exist here. */
+  hasUnmatchedFavoriteGroups?: boolean;
   onGroupSelect: (group: string) => void;
   onSearchChange: (text: string) => void;
   onChannelPress: (channel: Channel) => void;
@@ -39,8 +50,6 @@ interface VideosScreenContentProps {
   isLoadingMore?: boolean;
   hasMore?: boolean;
   backgroundColor: string;
-  iconColor: string;
-  tintColor: string;
   favoriteGroups: string[];
   onToggleFavoriteGroup: (name: string) => void;
   seriesList?: SeriesInfo[];
@@ -62,6 +71,9 @@ export function VideosScreenContent({
   selectedGroup,
   searchText,
   isRefreshing,
+  error,
+  onRetry,
+  hasUnmatchedFavoriteGroups,
   onGroupSelect,
   onSearchChange,
   onChannelPress,
@@ -70,8 +82,6 @@ export function VideosScreenContent({
   isLoadingMore = false,
   hasMore = true,
   backgroundColor,
-  iconColor,
-  tintColor,
   favoriteGroups,
   onToggleFavoriteGroup,
   seriesList,
@@ -85,13 +95,11 @@ export function VideosScreenContent({
   const customMoviesHeader = useHeaderBackground('movies');
   const customSeriesHeader = useHeaderBackground('series');
 
-  const channelKeyExtractor = useCallback((item: Channel, index: number) => {
-    return `channel-${item.name}-${index}`;
-  }, []);
+  // Stable identities, not list positions: an index-based key re-binds every
+  // cell to a different item as soon as a page is appended or re-ordered.
+  const channelKeyExtractor = useCallback((item: Channel) => getChannelId(item), []);
 
-  const seriesKeyExtractor = useCallback((item: SeriesInfo, index: number) => {
-    return `series-${item.seriesName}-${index}`;
-  }, []);
+  const seriesKeyExtractor = useCallback((item: SeriesInfo) => getSeriesId(item), []);
 
   const renderChannelItem = useCallback(({ item: channel }: ListRenderItemInfo<Channel>) => {
     const isFavorite = isChannelFavorite(channel, favoriteChannels);
@@ -118,26 +126,31 @@ export function VideosScreenContent({
     );
   }, [favoriteChannels, onSeriesPress]);
 
-  const EmptyComponent = useCallback(() => {
-    return (
+  // An element, not a component type: FlashList remounts the latter on every
+  // render, throwing away the empty state's own state each time.
+  const emptyComponent = useMemo(
+    () => (
       <VideosEmptyState
         searchText={searchText}
         selectedGroupName={selectedGroup}
-        iconColor={iconColor}
+        hasUnmatchedFavoriteGroups={hasUnmatchedFavoriteGroups}
+        error={error}
+        onRetry={onRetry}
         contentType={contentType}
       />
-    );
-  }, [searchText, selectedGroup, iconColor, contentType]);
+    ),
+    [searchText, selectedGroup, hasUnmatchedFavoriteGroups, error, onRetry, contentType]
+  );
 
   // Loading more indicator for pagination
   const LoadingMoreComponent = useMemo(() => {
     if (!isLoadingMore) return undefined;
     return (
       <View style={styles.loadingMoreContainer}>
-        <ActivityIndicator size="small" color={tintColor} />
+        <Spinner />
       </View>
     );
-  }, [isLoadingMore, tintColor]);
+  }, [isLoadingMore]);
 
   // Handler for end reached - only trigger if we have more to load and not already loading
   const handleEndReached = useCallback(() => {
@@ -178,6 +191,9 @@ export function VideosScreenContent({
     />
   );
 
+  // Shared by every branch below. Each grid also carries `key={contentType}`:
+  // movies and series render at the same position in the tree, so without it the
+  // series list inherits the movie list's recycled cells and scroll offset.
   const gridProps = {
     headerBackgroundColor: { light: '#D0D0D0' as const, dark: '#353636' as const },
     headerImage,
@@ -194,6 +210,7 @@ export function VideosScreenContent({
       <View style={[styles.container, { backgroundColor }]}>
         {isSeries ? (
           <InfiniteParallaxGrid
+            key={contentType}
             data={[] as SeriesInfo[]}
             renderItem={renderSeriesItem}
             keyExtractor={seriesKeyExtractor}
@@ -202,6 +219,7 @@ export function VideosScreenContent({
           />
         ) : (
           <InfiniteParallaxGrid
+            key={contentType}
             data={[] as Channel[]}
             renderItem={renderChannelItem}
             keyExtractor={channelKeyExtractor}
@@ -217,15 +235,12 @@ export function VideosScreenContent({
   if (!playlist) {
     return (
       <View style={[styles.container, { backgroundColor }]}>
-        <ThemedView style={styles.emptyContainer}>
-          <IconSymbol name="film.fill" size={64} color={iconColor} />
-          <ThemedText style={styles.emptyTitle}>
-            No Active Playlist
-          </ThemedText>
-          <ThemedText style={styles.emptyText} type="subtitle">
-            Please add and select a playlist from the settings
-          </ThemedText>
-        </ThemedView>
+        <EmptyState
+          icon="film.fill"
+          title="No Active Playlist"
+          message="Please add and select a playlist from the settings"
+          safeArea
+        />
       </View>
     );
   }
@@ -235,11 +250,12 @@ export function VideosScreenContent({
     return (
       <View style={[styles.container, { backgroundColor }]}>
         <InfiniteParallaxGrid
+          key={contentType}
           data={seriesList ?? []}
           renderItem={renderSeriesItem}
           keyExtractor={seriesKeyExtractor}
           {...gridProps}
-          ListEmptyComponent={<EmptyComponent />}
+          ListEmptyComponent={emptyComponent}
           ListFooterComponent={LoadingMoreComponent}
           onEndReached={handleEndReached}
           onEndReachedThreshold={0.5}
@@ -251,11 +267,12 @@ export function VideosScreenContent({
   return (
     <View style={[styles.container, { backgroundColor }]}>
       <InfiniteParallaxGrid
+        key={contentType}
         data={channels}
         renderItem={renderChannelItem}
         keyExtractor={channelKeyExtractor}
         {...gridProps}
-        ListEmptyComponent={<EmptyComponent />}
+        ListEmptyComponent={emptyComponent}
         ListFooterComponent={LoadingMoreComponent}
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
@@ -278,24 +295,6 @@ const styles = StyleSheet.create({
   gridBackground: {
     flex: 1,
     minHeight: '100%',
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 32,
-    minHeight: 200,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptyText: {
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
   },
   loadingMoreContainer: {
     paddingVertical: 16,

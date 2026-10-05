@@ -2,7 +2,7 @@ import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
 import type { SeriesInfo } from 'expo-m3u-parser';
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { Image, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 interface SeriesItemProps {
@@ -11,9 +11,12 @@ interface SeriesItemProps {
   onPress: (series: SeriesInfo) => void;
 }
 
-export function SeriesItem({ series, isFavorite, onPress }: SeriesItemProps) {
-  const [imageError, setImageError] = useState(false);
-  const hasPoster = !!series.poster && !imageError;
+export const SeriesItem = memo(function SeriesItem({ series, isFavorite, onPress }: SeriesItemProps) {
+  // Keyed by URL rather than a boolean: a recycled cell showing a different
+  // poster must start out trusting it again.
+  const [failedPosterUrl, setFailedPosterUrl] = useState<string | null>(null);
+  const posterUrl = series.poster;
+  const hasPoster = !!posterUrl && failedPosterUrl !== posterUrl;
   const initial = series.seriesName.charAt(0).toUpperCase();
 
   return (
@@ -28,10 +31,10 @@ export function SeriesItem({ series, isFavorite, onPress }: SeriesItemProps) {
       >
         {hasPoster ? (
           <Image
-            source={{ uri: series.poster }}
+            source={{ uri: posterUrl }}
             style={styles.poster}
             resizeMode="cover"
-            onError={() => setImageError(true)}
+            onError={() => setFailedPosterUrl(posterUrl)}
           />
         ) : (
           <ThemedView style={[styles.poster, styles.fallbackPoster]}>
@@ -55,7 +58,7 @@ export function SeriesItem({ series, isFavorite, onPress }: SeriesItemProps) {
       </TouchableOpacity>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {

@@ -26,20 +26,27 @@ export interface DayWindow {
   fromTs: number;
   /** Unix seconds, inclusive (last second of the day). */
   toTs: number;
-  /** The UTC calendar date to ask SofaScore for — the one local noon falls on. */
-  providerDate: string;
 }
 
-/** The fetch window for a local calendar day. */
+/**
+ * The fetch window for a local calendar day.
+ *
+ * The end is derived from the *next* day's midnight rather than by adding 24 h:
+ * a DST day is 23 or 25 hours long, and the fixed offset would either cut an
+ * hour of fixtures off the end of the day or pull the next day's first hour in.
+ *
+ * The window is all the backend needs: it resolves the one or two UTC dates the
+ * span touches itself, so a local day never loses the fixtures on the far side
+ * of midnight UTC.
+ */
 export function dayWindow(date: Date): DayWindow {
   const start = startOfLocalDay(date);
-  const end = new Date(start.getTime() + DAY_MS - 1000);
-  const noon = new Date(start.getTime() + DAY_MS / 2);
+  const nextStart = startOfLocalDay(addDays(start, 1));
+  const end = new Date(nextStart.getTime() - 1000);
   return {
     key: localDateKey(start),
     fromTs: Math.floor(start.getTime() / 1000),
     toTs: Math.floor(end.getTime() / 1000),
-    providerDate: noon.toISOString().slice(0, 10),
   };
 }
 

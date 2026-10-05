@@ -26,9 +26,22 @@ interface HeaderBackgroundState {
   /** Register an uploaded URI (after upload or load) */
   registerUploadedUri: (id: string, uri: string) => void;
 
-  /** Remove an uploaded URI (after deletion) */
-  removeUploadedUri: (id: string) => void;
+  /**
+   * Delete an uploaded image from the shared pool and drop every reference to
+   * it. The repository removes the selections of *all* users (the image is gone
+   * for everyone it was shared with); this also clears them in memory so the
+   * current user's pages fall back to their default immediately.
+   */
+  deleteUploadedImage: (id: string) => Promise<void>;
 }
+
+/**
+ * Guards against a load for the user who is no longer current finishing last:
+ * every `loadSelections` call takes the next token and only writes while it is
+ * still the latest, so switching users quickly cannot leave the previous
+ * profile's backgrounds on screen.
+ */
+let loadGeneration = 0;
 
 export const useHeaderBackgroundStore = create<HeaderBackgroundState>((set, get) => ({
   selections: {},
@@ -36,28 +49,31 @@ export const useHeaderBackgroundStore = create<HeaderBackgroundState>((set, get)
   isLoaded: false,
 
   loadSelections: async (userId: string) => {
+    const generation = ++loadGeneration;
     try {
-      const rows = await headerBackgroundRepository.getAllSelections(userId);
-      const selections: Partial<Record<PageId, SelectionEntry>> = {};
-      const uploadedUris = { ...get().uploadedUris };
+      // Two queries regardless of how many pages have a selection: the
+      // selections, and the pool of uploads they can point at.
+      const [rows, uploads] = await Promise.all([
+        headerBackgroundRepository.getAllSelections(userId),
+        headerBackgroundRepository.getAvailableUploads(userId),
+      ]);
 
+      if (generation !== loadGeneration) return;
+
+      const selections: Partial<Record<PageId, SelectionEntry>> = {};
       for (const row of rows) {
         selections[row.pageId] = { type: row.type, value: row.value };
+      }
 
-        // If uploaded, pre-load the URI
-        if (row.type === 'uploaded') {
-          const uploads = await headerBackgroundRepository.getUploadedImages(userId, row.pageId);
-          const shared = await headerBackgroundRepository.getSharedUploadedImages(row.pageId, userId);
-          for (const u of [...uploads, ...shared]) {
-            uploadedUris[u.id] = u.fileUri;
-          }
-        }
+      const uploadedUris = { ...get().uploadedUris };
+      for (const upload of uploads) {
+        uploadedUris[upload.id] = upload.fileUri;
       }
 
       set({ selections, uploadedUris, isLoaded: true });
     } catch (error) {
       console.error('[HeaderBackgroundStore] Error loading selections:', error);
-      set({ isLoaded: true });
+      if (generation === loadGeneration) set({ isLoaded: true });
     }
   },
 
@@ -93,9 +109,27 @@ export const useHeaderBackgroundStore = create<HeaderBackgroundState>((set, get)
     set({ uploadedUris: { ...get().uploadedUris, [id]: uri } });
   },
 
-  removeUploadedUri: (id: string) => {
-    const updated = { ...get().uploadedUris };
-    delete updated[id];
-    set({ uploadedUris: updated });
+  deleteUploadedImage: async (id: string) => {
+    try {
+      await headerBackgroundRepository.deleteUploadedImage(id);
+    } catch (error) {
+      console.error('[HeaderBackgroundStore] Error deleting uploaded image:', error);
+      throw error;
+    }
+
+    const uploadedUris = { ...get().uploadedUris };
+    delete uploadedUris[id];
+
+    const selections = { ...get().selections };
+    for (const [pageId, selection] of Object.entries(selections) as [
+      PageId,
+      SelectionEntry,
+    ][]) {
+      if (selection.type === 'uploaded' && selection.value === id) {
+        delete selections[pageId];
+      }
+    }
+
+    set({ uploadedUris, selections });
   },
 }));

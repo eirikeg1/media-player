@@ -1,17 +1,21 @@
 import { ThemedText } from '@/components/ui/display/themed-text';
+import { ErrorState } from '@/components/ui/display/state';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { GlassColors, THEME } from '@/lib/theme';
+import { GlassColors } from '@/lib/theme';
 import { Image } from 'expo-image';
 import type { Standing, StandingEntry } from 'expo-m3u-parser';
 import { memo, useMemo } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 
+import { StandingsSkeleton } from './skeletons';
 import { SPORTS_ACCENT, withAlpha } from './sports-theme';
 
 interface StandingsTableProps {
   standings: Standing[];
   isLoading: boolean;
   error: string | null;
+  /** Load the table again after a failure. */
+  onRetry?: () => void;
   /** Provider ids of the user's favorite teams; their rows are highlighted. */
   favoriteTeamIds?: ReadonlySet<number>;
 }
@@ -29,6 +33,10 @@ const StandingRow = memo(function StandingRow({
 }) {
   return (
     <View
+      // One announcement per team instead of eight bare numbers whose column
+      // headers scrolled off the side long ago.
+      accessible
+      accessibilityLabel={`${entry.position}. ${entry.teamName}, ${entry.playedGames} played, ${entry.won} won, ${entry.draw} drawn, ${entry.lost} lost, ${entry.points} points`}
       style={[
         styles.row,
         { borderBottomColor: isDark ? GlassColors.dark.border : GlassColors.light.border },
@@ -58,11 +66,11 @@ export const StandingsTable = memo(function StandingsTable({
   standings,
   isLoading,
   error,
+  onRetry,
   favoriteTeamIds,
 }: StandingsTableProps) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
-  const destructiveColor = THEME[colorScheme ?? 'light'].destructive;
 
   const activeStanding = useMemo(
     () => standings.find((s) => s.standingType === 'TOTAL') ?? standings[0],
@@ -72,13 +80,9 @@ export const StandingsTable = memo(function StandingsTable({
   return (
     <View style={styles.container}>
       {isLoading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator />
-        </View>
+        <StandingsSkeleton />
       ) : error ? (
-        <View style={styles.emptyContainer}>
-          <ThemedText style={[styles.errorText, { color: destructiveColor }]}>{error}</ThemedText>
-        </View>
+        <ErrorState inline message={error} onRetry={onRetry} />
       ) : activeStanding ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <View>
@@ -123,20 +127,12 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingHorizontal: 16,
   },
-  loadingContainer: {
-    padding: 32,
-    alignItems: 'center',
-  },
   emptyContainer: {
     padding: 32,
     alignItems: 'center',
   },
   emptyText: {
     opacity: 0.6,
-  },
-  errorText: {
-    opacity: 0.7,
-    textAlign: 'center',
   },
   headerRow: {
     flexDirection: 'row',

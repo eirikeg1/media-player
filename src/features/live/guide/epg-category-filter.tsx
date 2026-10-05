@@ -42,6 +42,9 @@ function EpgCategoryFilterInner({
         ]}
         activeOpacity={0.7}
         onPress={() => handlePress(null)}
+        accessibilityRole="button"
+        accessibilityLabel="Show all categories"
+        accessibilityState={{ selected: selectedCategory === null }}
       >
         <ThemedText
           style={[
@@ -67,6 +70,9 @@ function EpgCategoryFilterInner({
             ]}
             activeOpacity={0.7}
             onPress={() => handlePress(category)}
+            accessibilityRole="button"
+            accessibilityLabel={`Show ${category} programmes`}
+            accessibilityState={{ selected: isSelected }}
           >
             <ThemedText
               numberOfLines={1}

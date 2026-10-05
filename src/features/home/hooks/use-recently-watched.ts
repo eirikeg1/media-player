@@ -1,159 +1,132 @@
-import { stripEpisodeInfo } from '@/lib/series-utils';
-import { RustChannelService } from '@/services/rust-channel-service';
 import { usePlaylistStore } from '@/stores/playlist/playlist-store';
-import { useUserStore } from '@/stores/user/user-store';
+import {
+  HOME_CACHE_SLOT,
+  useFirstPageCacheStore,
+  type RecentlyWatchedKey,
+} from '@/stores/cache';
+import { selectExcludeAdult, useUserStore } from '@/stores/user/user-store';
 import type { RecentlyWatchedItem } from '@/types/user.types';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
-/** Substring search can return neighbours ("Office Wars" for "Office"); fetch enough rows to find the exact name. */
-const SERIES_POSTER_SEARCH_LIMIT = 50;
+import { clearPosterCache, loadRecentlyWatched } from './load-recently-watched';
+import { useSeededLoad } from './use-seeded-load';
 
-export function useRecentlyWatched(limit = 20) {
-  const currentUser = useUserStore((s) => s.currentUser);
+/**
+ * The home page's "Continue Watching" carousel.
+ *
+ * Renders from the launch pre-fetch's slice on the first frame (see
+ * `first-page-cache-store`) and revalidates behind it, so arriving on the home
+ * page never costs a skeleton for data that is already in hand. Both sides run
+ * the same {@link loadRecentlyWatched}, and every successful load writes the
+ * slice back for the next mount.
+ */
+export function useRecentlyWatched(limit: number = HOME_CACHE_SLOT.recentlyWatchedLimit) {
+  const userId = useUserStore((s) => s.currentUser?.id);
   const activePlaylistId = usePlaylistStore((s) => s.activePlaylistId);
-  const getRecentlyWatched = useUserStore((s) => s.getRecentlyWatched);
-  const excludeAdult = useUserStore(
-    (s) => s.currentUser?.settings?.parentalControlEnabled ?? true
-  );
+  const excludeAdult = useUserStore((s) => selectExcludeAdult(s.currentUser));
   const recentlyWatchedVersion = useUserStore((s) => s.recentlyWatchedVersion);
 
-  const [items, setItems] = useState<RecentlyWatchedItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  const fetch = useCallback(async () => {
-    if (!currentUser?.id || !activePlaylistId) {
-      setItems([]);
-      setIsLoading(false);
-      return;
-    }
-
-    try {
-      setIsLoading(true);
-
-      // Overfetch to have enough items after series dedup
-      const rawItems = await getRecentlyWatched(currentUser.id, activePlaylistId, limit * 3);
-      const filtered = rawItems.filter((item) => item.contentType !== 'live');
-
-      // Phase 1: Look up channel data for series items to get series names
-      const seriesItems = filtered.filter((item) => item.contentType === 'series');
-      const channelLookups = await Promise.all(
-        seriesItems.map(async (item) => {
-          try {
-            const channel = await RustChannelService.getChannelById(
-              activePlaylistId,
-              item.channelId
-            );
-            return { channelId: item.channelId, seriesName: channel?.tvg?.name ? stripEpisodeInfo(channel.tvg.name) : null };
-          } catch {
-            return { channelId: item.channelId, seriesName: null };
-          }
-        })
-      );
-
-      const seriesNameMap = new Map<string, string>();
-      for (const { channelId, seriesName } of channelLookups) {
-        if (seriesName) {
-          seriesNameMap.set(channelId, seriesName);
+  const cacheKey: RecentlyWatchedKey | null =
+    userId && activePlaylistId
+      ? {
+          playlistId: activePlaylistId,
+          userId,
+          excludeAdult,
+          limit,
+          version: recentlyWatchedVersion,
         }
-      }
+      : null;
 
-      // Deduplicate: keep only the most recent episode per series
-      const seenSeries = new Set<string>();
-      const deduped: RecentlyWatchedItem[] = [];
+  // Read once, during the very first render: what the cache holds later is this
+  // hook's own writing, and re-seeding from it would fight the state below.
+  const [seed] = useState(() =>
+    cacheKey ? useFirstPageCacheStore.getState().getCachedRecentlyWatched(cacheKey) : null
+  );
 
-      for (const item of filtered) {
-        if (item.contentType === 'series') {
-          const seriesName = seriesNameMap.get(item.channelId);
-          if (seriesName) {
-            if (seenSeries.has(seriesName)) continue;
-            seenSeries.add(seriesName);
-            deduped.push({ ...item, seriesName });
-          } else {
-            // No series name found — pass through without dedup
-            deduped.push(item);
-          }
-        } else {
-          deduped.push(item);
-        }
-      }
+  const [items, setItems] = useState<RecentlyWatchedItem[]>(seed?.value ?? []);
+  const [isLoading, setIsLoading] = useState(seed === null);
 
-      // Swap in next-episode data for completed series items
-      for (let i = 0; i < deduped.length; i++) {
-        const item = deduped[i];
-        if (item.nextEpisodeChannelId && item.nextEpisodeChannelName) {
-          deduped[i] = {
-            ...item,
-            channelId: item.nextEpisodeChannelId,
-            channelName: item.nextEpisodeChannelName,
-            lastPosition: undefined,
-            totalDuration: undefined,
-            nextEpisodeChannelId: undefined,
-            nextEpisodeChannelName: undefined,
-          };
-        }
-      }
+  // Every fetch takes the next generation; only the newest one may write state,
+  // so an unmount or a superseding refresh discards the in-flight run's result.
+  const generationRef = useRef(0);
 
-      // Phase 2: Look up series posters for unique series names. The search is a
-      // substring match, so pick the exact series rather than the first hit
-      // ("Office" must not resolve to "Office Wars").
-      const uniqueSeriesNames = [...seenSeries];
-      const posterLookups = await Promise.all(
-        uniqueSeriesNames.map(async (name) => {
-          try {
-            const result = await RustChannelService.getSeriesList(activePlaylistId, {
-              search: name,
-              limit: SERIES_POSTER_SEARCH_LIMIT,
-              excludeAdult,
-            });
-            const poster = result.series.find((s) => s.seriesName === name)?.poster ?? null;
-            return { name, poster };
-          } catch {
-            return { name, poster: null };
-          }
-        })
-      );
+  /** Supersede whatever run is in flight, so its result is discarded. */
+  const cancelInFlightFetch = useCallback(() => {
+    generationRef.current += 1;
+  }, []);
 
-      const posterMap = new Map<string, string>();
-      for (const { name, poster } of posterLookups) {
-        if (poster) {
-          posterMap.set(name, poster);
-        }
-      }
+  // A re-import can hand the same series a different poster, so the memoised
+  // ones are keyed by the import as well as by the playlist.
+  const playlistRevision = usePlaylistStore((s) => {
+    const active = s.playlists.find((p) => p.id === s.activePlaylistId);
+    return active?.lastFetchedAt?.getTime() ?? null;
+  });
 
-      // Enrich series items with poster URLs
-      const enriched = deduped.map((item) => {
-        if (item.seriesName) {
-          const poster = posterMap.get(item.seriesName);
-          if (poster) {
-            return { ...item, seriesPoster: poster };
-          }
-        }
-        return item;
-      });
-
-      // Dedupe by channelId, keeping the first (most recent) occurrence. The
-      // next-episode swap above can map two different items onto the same next
-      // episode (e.g. a completed S01E03 and an already-present S01E04), which
-      // would otherwise produce duplicate React keys in the carousel.
-      const seenChannelIds = new Set<string>();
-      const unique = enriched.filter((item) => {
-        if (seenChannelIds.has(item.channelId)) return false;
-        seenChannelIds.add(item.channelId);
-        return true;
-      });
-
-      setItems(unique.slice(0, limit));
-    } catch (error) {
-      console.error('[useRecentlyWatched] Error:', error);
-      setItems([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [currentUser?.id, activePlaylistId, limit, getRecentlyWatched, excludeAdult]);
-
+  // Declared before the fetch effect so the stale posters are gone before the
+  // first fetch for the new playlist starts.
+  const loadedPlaylistKeyRef = useRef(`${activePlaylistId}|${playlistRevision}`);
   useEffect(() => {
-    fetch();
-  }, [fetch, recentlyWatchedVersion]);
+    const key = `${activePlaylistId}|${playlistRevision}`;
+    if (loadedPlaylistKeyRef.current === key) return;
+    loadedPlaylistKeyRef.current = key;
+    clearPosterCache();
+  }, [activePlaylistId, playlistRevision]);
 
-  return { items, isLoading, refresh: fetch };
+  const fetch = useCallback(
+    async ({ silent = false }: { silent?: boolean } = {}) => {
+      const generation = ++generationRef.current;
+      const isCurrent = () => generationRef.current === generation;
+
+      if (!userId || !activePlaylistId) {
+        setItems([]);
+        setIsLoading(false);
+        return;
+      }
+
+      const key: RecentlyWatchedKey = {
+        playlistId: activePlaylistId,
+        userId,
+        excludeAdult,
+        limit,
+        version: recentlyWatchedVersion,
+      };
+
+      try {
+        // A revalidation runs behind rows that are already on screen: raising
+        // the flag would put the page back into its skeleton for real data.
+        if (!silent) setIsLoading(true);
+
+        const loaded = await loadRecentlyWatched(key);
+
+        if (!isCurrent()) return;
+        // Below the guard: a superseded run must not overwrite the slice the
+        // run that superseded it has already written.
+        useFirstPageCacheStore.getState().setCachedRecentlyWatched(key, loaded);
+        setItems(loaded);
+      } catch (error) {
+        if (!isCurrent()) return;
+        console.error('[useRecentlyWatched] Error:', error);
+        setItems([]);
+      } finally {
+        if (isCurrent()) {
+          setIsLoading(false);
+        }
+      }
+    },
+    [userId, activePlaylistId, limit, excludeAdult, recentlyWatchedVersion]
+  );
+
+  useSeededLoad(seed, fetch, cancelInFlightFetch);
+
+  // Pull-to-refresh, and the revalidation a tab focus triggers: both say the
+  // cards on screen are stale, so the slice behind them is dropped before the
+  // load that replaces it — see `invalidateHomeSlice`.
+  const refresh = useCallback(() => {
+    if (activePlaylistId) {
+      useFirstPageCacheStore.getState().invalidateHomeSlice(activePlaylistId, 'recentlyWatched');
+    }
+    return fetch();
+  }, [activePlaylistId, fetch]);
+
+  return { items, isLoading, refresh };
 }

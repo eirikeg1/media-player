@@ -101,17 +101,3 @@ export function extractCleanUrl(url: string): string {
     return url;
   }
 }
-
-/**
- * Check if a URL is valid HTTP or HTTPS
- * @param url - The URL to validate
- * @returns True if valid HTTP/HTTPS URL, false otherwise
- */
-export function isValidUrl(url: string): boolean {
-  try {
-    const urlObj = new URL(url);
-    return urlObj.protocol === 'http:' || urlObj.protocol === 'https:';
-  } catch {
-    return false;
-  }
-}

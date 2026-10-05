@@ -1,5 +1,11 @@
+import { Pressable, StyleSheet, View } from 'react-native';
+
+import { ThemedText } from '@/components/ui/display/themed-text';
+import { getInitials } from '@/features/user/get-initials';
+import { useThemeColor } from '@/hooks/use-theme-color';
 import type { User } from '@/types/user.types';
-import { Pressable, Text, View } from 'react-native';
+
+const AVATAR_SIZE = 128;
 
 interface UserProfileCardProps {
   user: User;
@@ -11,52 +17,37 @@ interface UserProfileCardProps {
  * User profile card component for selection screen
  */
 export function UserProfileCard({ user, isCurrentUser, onPress }: UserProfileCardProps) {
-  // Get initials from username
-  const getInitials = (name: string) => {
-    return name
-      .split(' ')
-      .map(word => word[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
-  };
+  const tintColor = useThemeColor({}, 'tint');
+  const mutedColor = useThemeColor({}, 'muted');
 
   return (
     <Pressable
       onPress={onPress}
-      className="items-center"
-      style={({ pressed }) => [
-        { opacity: pressed ? 0.7 : 1 },
-      ]}
+      style={({ pressed }) => [styles.card, { opacity: pressed ? 0.7 : 1 }]}
+      accessibilityRole="button"
+      accessibilityLabel={
+        isCurrentUser ? `${user.username} (current profile)` : `Switch to ${user.username}`
+      }
+      accessibilityState={{ selected: isCurrentUser }}
     >
-      <View className="mb-3">
-        {user.avatarUrl ? (
-          <View className="w-32 h-32 rounded-2xl overflow-hidden bg-gray-700">
-            {/* TODO: Add Image component when avatar URL is supported */}
-            <View className="w-full h-full items-center justify-center">
-              <Text className="text-4xl font-bold text-white">
-                {getInitials(user.username)}
-              </Text>
-            </View>
-          </View>
-        ) : (
-          <View className="w-32 h-32 rounded-2xl bg-blue-600 items-center justify-center">
-            <Text className="text-4xl font-bold text-white">
-              {getInitials(user.username)}
-            </Text>
-          </View>
-        )}
+      <View
+        style={[
+          styles.avatar,
+          // An avatar image is not supported yet, so the placeholder for one is
+          // deliberately neutral rather than the accent used for initials.
+          { backgroundColor: user.avatarUrl ? mutedColor : tintColor },
+        ]}
+      >
+        <ThemedText style={styles.initials}>{getInitials(user.username)}</ThemedText>
       </View>
       {isCurrentUser ? (
-        <View className="px-3 py-1 bg-blue-600 rounded-full">
-          <Text className="text-lg font-semibold text-white">
+        <View style={[styles.currentBadge, { backgroundColor: tintColor }]}>
+          <ThemedText style={[styles.username, styles.usernameOnAccent]}>
             {user.username}
-          </Text>
+          </ThemedText>
         </View>
       ) : (
-        <Text className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-          {user.username}
-        </Text>
+        <ThemedText style={styles.username}>{user.username}</ThemedText>
       )}
     </Pressable>
   );
@@ -66,22 +57,61 @@ export function UserProfileCard({ user, isCurrentUser, onPress }: UserProfileCar
  * Add new user card component
  */
 export function AddUserCard({ onPress }: { onPress: () => void }) {
+  const mutedColor = useThemeColor({}, 'muted');
+
   return (
     <Pressable
       onPress={onPress}
-      className="items-center"
-      style={({ pressed }) => [
-        { opacity: pressed ? 0.7 : 1 },
-      ]}
+      style={({ pressed }) => [styles.card, { opacity: pressed ? 0.7 : 1 }]}
+      accessibilityRole="button"
+      accessibilityLabel="Add user profile"
     >
-      <View className="mb-3">
-        <View className="w-32 h-32 rounded-2xl border-2 border-dashed border-gray-400 dark:border-gray-600 items-center justify-center">
-          <Text className="text-6xl text-gray-400 dark:text-gray-600">+</Text>
-        </View>
+      <View style={[styles.avatar, styles.addAvatar, { borderColor: mutedColor }]}>
+        <ThemedText style={[styles.addGlyph, { color: mutedColor }]}>+</ThemedText>
       </View>
-      <Text className="text-lg font-semibold text-gray-600 dark:text-gray-400">
-        Add User
-      </Text>
+      <ThemedText style={[styles.username, { color: mutedColor }]}>Add User</ThemedText>
     </Pressable>
   );
 }
+
+const styles = StyleSheet.create({
+  card: {
+    alignItems: 'center',
+    gap: 12,
+  },
+  avatar: {
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  addAvatar: {
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderStyle: 'dashed',
+  },
+  addGlyph: {
+    fontSize: 60,
+    lineHeight: 68,
+  },
+  initials: {
+    fontSize: 36,
+    lineHeight: 44,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  username: {
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  usernameOnAccent: {
+    color: '#FFFFFF',
+  },
+  currentBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+});

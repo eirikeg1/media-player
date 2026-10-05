@@ -1,6 +1,5 @@
-import type { Playlist, Channel } from '@/types/playlist.types';
+import type { Playlist } from '@/types/playlist.types';
 import { executeQuery, executeQuerySingle, executeStatement } from './sqlite-client';
-import { RustChannelService } from '@/services/rust-channel-service';
 
 /**
  * Repository interface for playlist data access
@@ -12,12 +11,6 @@ export interface IPlaylistRepository {
   create(playlist: Playlist): Promise<Playlist>;
   update(id: string, updates: Partial<Playlist>): Promise<Playlist>;
   delete(id: string): Promise<void>;
-  clear(): Promise<void>;
-
-  // Channel operations
-  getChannelsByPlaylistId(playlistId: string): Promise<Channel[]>;
-  saveChannels(playlistId: string, channels: Channel[]): Promise<void>;
-  deleteChannelsByPlaylistId(playlistId: string): Promise<void>;
 }
 
 /**
@@ -40,20 +33,23 @@ interface PlaylistRow {
   lastEpgFetchedAt: string | null;
 }
 
-interface ChannelRow {
-  id: string;
-  playlistId: string;
-  name: string;
-  url: string;
-  tvgId: string | null;
-  tvgName: string | null;
-  tvgLogo: string | null;
-  tvgCountry: string | null;
-  tvgLanguage: string | null;
-  tvgUrl: string | null;
-  groupTitle: string | null;
-  httpReferrer: string | null;
-  httpUserAgent: string | null;
+/**
+ * Parse a stored timestamp, falling back to the epoch.
+ *
+ * An unparseable value used to become an `Invalid Date`, whose NaN timestamp
+ * silently failed every "is it time to sync?" comparison, so the playlist never
+ * synced again. The epoch reads as "infinitely stale" instead, which triggers a
+ * sync that rewrites the bad value.
+ */
+function parseTimestamp(value: string, column: string, playlistId: string): Date {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    console.warn(
+      `[SQLitePlaylistRepository] Invalid ${column} on playlist ${playlistId}: ${value}`,
+    );
+    return new Date(0);
+  }
+  return parsed;
 }
 
 /**
@@ -63,7 +59,7 @@ class SQLitePlaylistRepository implements IPlaylistRepository {
   /**
    * Convert database row to Playlist object
    */
-  private rowToPlaylist(row: PlaylistRow, channels?: Channel[]): Playlist {
+  private rowToPlaylist(row: PlaylistRow): Playlist {
     const playlist: Playlist = {
       id: row.id,
       name: row.name,
@@ -73,10 +69,14 @@ class SQLitePlaylistRepository implements IPlaylistRepository {
       syncInterval: row.syncInterval ?? undefined,
       epgSyncInterval: row.epgSyncInterval ?? undefined,
       createdByUserId: row.createdByUserId || undefined,
-      createdAt: new Date(row.createdAt),
-      updatedAt: new Date(row.updatedAt),
-      lastFetchedAt: row.lastFetchedAt ? new Date(row.lastFetchedAt) : undefined,
-      lastEpgFetchedAt: row.lastEpgFetchedAt ? new Date(row.lastEpgFetchedAt) : undefined,
+      createdAt: parseTimestamp(row.createdAt, 'createdAt', row.id),
+      updatedAt: parseTimestamp(row.updatedAt, 'updatedAt', row.id),
+      lastFetchedAt: row.lastFetchedAt
+        ? parseTimestamp(row.lastFetchedAt, 'lastFetchedAt', row.id)
+        : undefined,
+      lastEpgFetchedAt: row.lastEpgFetchedAt
+        ? parseTimestamp(row.lastEpgFetchedAt, 'lastEpgFetchedAt', row.id)
+        : undefined,
     };
 
     if (row.username && row.password) {
@@ -86,42 +86,7 @@ class SQLitePlaylistRepository implements IPlaylistRepository {
       };
     }
 
-    if (channels && channels.length > 0) {
-      playlist.parsedData = {
-        items: channels as any,
-        header: {
-          attrs: { 'x-tvg-url': '' },
-          raw: '',
-        },
-      };
-    }
-
     return playlist;
-  }
-
-  /**
-   * Convert database row to Channel object
-   */
-  private rowToChannel(row: ChannelRow): Channel {
-    return {
-      name: row.name,
-      url: row.url,
-      tvg: {
-        id: row.tvgId || undefined,
-        name: row.tvgName || undefined,
-        logo: row.tvgLogo || undefined,
-        country: row.tvgCountry || undefined,
-        language: row.tvgLanguage || undefined,
-        url: row.tvgUrl || undefined,
-      },
-      group: {
-        title: row.groupTitle || undefined,
-      },
-      http: row.httpReferrer || row.httpUserAgent ? {
-        referrer: row.httpReferrer || undefined,
-        userAgent: row.httpUserAgent || undefined,
-      } : undefined,
-    };
   }
 
   async getAll(): Promise<Playlist[]> {
@@ -218,74 +183,68 @@ class SQLitePlaylistRepository implements IPlaylistRepository {
       throw new Error(`Playlist with id ${id} not found`);
     }
 
-    const updated: Playlist = {
-      ...existing,
-      ...updates,
-      updatedAt: new Date(),
+    // Only the patched columns are written: a full-row write would resurrect the
+    // values read above, undoing whatever another writer changed in between (a
+    // background sync recording channelCount while the EPG job records
+    // lastEpgFetchedAt, for instance).
+    const assignments = ['updatedAt = ?'];
+    const params: (string | number | null)[] = [new Date().toISOString()];
+    const assign = (column: string, value: string | number | null) => {
+      assignments.push(`${column} = ?`);
+      params.push(value);
     };
 
-    // Only update playlist metadata - channels are managed by Rust
+    // Required columns are only touched when the patch carries a real value;
+    // for the nullable ones a present key with `undefined` clears the column.
+    if (updates.name !== undefined) assign('name', updates.name);
+    if (updates.url !== undefined) assign('url', updates.url);
+    if ('epgUrl' in updates) assign('epgUrl', updates.epgUrl ?? null);
+    if ('credentials' in updates) {
+      assign('username', updates.credentials?.username || null);
+      assign('password', updates.credentials?.password || null);
+    }
+    if ('channelCount' in updates) assign('channelCount', updates.channelCount ?? null);
+    if ('syncInterval' in updates) assign('syncInterval', updates.syncInterval ?? null);
+    if ('epgSyncInterval' in updates) assign('epgSyncInterval', updates.epgSyncInterval ?? null);
+    if ('lastFetchedAt' in updates) {
+      assign('lastFetchedAt', updates.lastFetchedAt?.toISOString() ?? null);
+    }
+    if ('lastEpgFetchedAt' in updates) {
+      assign('lastEpgFetchedAt', updates.lastEpgFetchedAt?.toISOString() ?? null);
+    }
+
     await executeStatement(
-      `UPDATE playlists
-       SET name = ?, url = ?, epgUrl = ?, username = ?, password = ?, channelCount = ?, syncInterval = ?, epgSyncInterval = ?, updatedAt = ?, lastFetchedAt = ?, lastEpgFetchedAt = ?
-       WHERE id = ?`,
-      [
-        updated.name,
-        updated.url,
-        updated.epgUrl || null,
-        updated.credentials?.username || null,
-        updated.credentials?.password || null,
-        updated.channelCount || null,
-        updated.syncInterval ?? null,
-        updated.epgSyncInterval ?? null,
-        updated.updatedAt.toISOString(),
-        updated.lastFetchedAt?.toISOString() || null,
-        updated.lastEpgFetchedAt?.toISOString() || null,
-        id,
-      ]
+      `UPDATE playlists SET ${assignments.join(', ')} WHERE id = ?`,
+      [...params, id]
     );
 
+    // Re-read rather than returning the patched snapshot: the row may also carry
+    // another writer's change, and the caller puts this straight into the store.
+    const written = await this.getById(id);
+    if (!written) {
+      throw new Error(`Playlist with id ${id} disappeared while being updated`);
+    }
+
     console.log('[SQLitePlaylistRepository] Playlist updated successfully');
-    return updated;
+    return written;
   }
 
+  /**
+   * Delete a playlist. Idempotent: a row that is already gone is the state the
+   * caller asked for, so a repeated (or racing) delete is not an error.
+   */
   async delete(id: string): Promise<void> {
     console.log('[SQLitePlaylistRepository] delete called:', id);
 
     const result = await executeStatement('DELETE FROM playlists WHERE id = ?', [id]);
 
-    if (result.changes === 0) {
-      console.error('[SQLitePlaylistRepository] Playlist not found:', id);
-      throw new Error(`Playlist with id ${id} not found`);
-    }
-
-    console.log('[SQLitePlaylistRepository] Playlist deleted successfully');
+    console.log(
+      result.changes === 0
+        ? '[SQLitePlaylistRepository] Playlist was already deleted'
+        : '[SQLitePlaylistRepository] Playlist deleted successfully'
+    );
   }
 
-  async clear(): Promise<void> {
-    console.log('[SQLitePlaylistRepository] clear called');
-    await executeStatement('DELETE FROM playlists');
-    await executeStatement('DELETE FROM channels');
-    console.log('[SQLitePlaylistRepository] All playlists and channels cleared');
-  }
-
-  async getChannelsByPlaylistId(playlistId: string): Promise<Channel[]> {
-    // Channels are now stored in Rust database
-    console.log('[SQLitePlaylistRepository] getChannelsByPlaylistId - delegating to Rust:', playlistId);
-    return RustChannelService.getChannelsByPlaylistId(playlistId);
-  }
-
-  async saveChannels(_playlistId: string, _channels: Channel[]): Promise<void> {
-    // Channels are now managed by Rust - this is a no-op
-    // Channel import happens via RustChannelService.fetchAndImportPlaylist()
-    console.log('[SQLitePlaylistRepository] saveChannels - no-op, channels managed by Rust');
-  }
-
-  async deleteChannelsByPlaylistId(playlistId: string): Promise<void> {
-    // Channels are now stored in Rust database
-    console.log('[SQLitePlaylistRepository] deleteChannelsByPlaylistId - delegating to Rust:', playlistId);
-    await RustChannelService.deleteChannelsByPlaylist(playlistId);
-  }
 }
 
 /**

@@ -1,7 +1,7 @@
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
-import { ChannelDetailModal } from '@/features/live/channel-detail-modal';
+import { useReportLandingReady } from '@/features/launch/use-report-landing-ready';
 import { LiveScreenContent } from '@/features/live/live-screen-content';
 import { useCurrentProgrammes } from '@/features/live/hooks/use-current-programmes';
 import type { LiveViewMode } from '@/features/live/live-top-bar';
@@ -13,24 +13,21 @@ import { usePlaylistData } from '@/features/live/hooks/use-playlist-data';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { getChannelId } from '@/lib/channel-utils';
 import { FAVORITES_GROUP_SENTINEL, getEffectiveFavoriteGroups } from '@/lib/group-utils';
-import { EpgService } from '@/services/epg-service';
+import { channelHref } from '@/lib/detail-hrefs';
 import { useFirstPageCacheStore } from '@/stores/cache';
 import { usePlaybackQueueStore } from '@/stores/video/queue-store';
-import { useUserStore } from '@/stores/user/user-store';
+import { selectExcludeAdult, useUserStore } from '@/stores/user/user-store';
 import { LIVE_SORT_OPTIONS } from '@/types/sort.types';
 import type { Channel } from '@/types/playlist.types';
-import type { EpgProgramme } from 'expo-m3u-parser';
 
 export default function LiveScreen() {
   const router = useRouter();
 
   // Theme colors
-  const iconColor = useThemeColor({}, 'icon');
-  const tintColor = useThemeColor({}, 'tint');
   const backgroundColor = useThemeColor({}, 'background');
 
   // Parental control: exclude adult content when enabled
-  const excludeAdult = useUserStore((s) => s.currentUser?.settings?.parentalControlEnabled ?? true);
+  const excludeAdult = useUserStore((s) => selectExcludeAdult(s.currentUser));
 
   // View mode: channels grid vs EPG guide
   const [viewMode, setViewMode] = useState<LiveViewMode>('channels');
@@ -53,8 +50,14 @@ export default function LiveScreen() {
   // Favorite groups (single source of truth — passed down to modal via props)
   const { favoriteGroups, isLoading: isLoadingFavoriteGroups, toggleFavorite: toggleFavoriteGroup } = useFavoriteGroups();
 
-  // Server-side groups fetching (with favorites support)
-  const { groups } = useGroups(activePlaylist?.id, 'live', favoriteGroups, excludeAdult);
+  // Server-side groups fetching (with favorites support). Fetched once here and
+  // passed to both the channel grid and the EPG guide.
+  const {
+    groups,
+    isLoading: isLoadingGroups,
+    error: groupsError,
+    retry: retryGroups,
+  } = useGroups(activePlaylist?.id, 'live', favoriteGroups, excludeAdult);
 
   // Synchronous state derivation: reset filters on playlist change
   const activePlaylistId = activePlaylist?.id;
@@ -71,16 +74,22 @@ export default function LiveScreen() {
   // Derive selectedGroupName: user selection takes priority, otherwise default to all channels
   const selectedGroupName = userGroupSelection ?? '';
 
-  // Defer fetching until favorites are resolved; also wait for favorite groups when that filter is active
+  // Defer fetching until favorites are resolved; also wait for the groups when
+  // the favorites filter is active, since the query is derived from them. A
+  // *failed* group fetch resolves too (with no groups), so this can never pin
+  // the skeleton — which waiting on `groups.length` did.
   const shouldDeferFetch = !hasLoadedFavorites
-    || (selectedGroupName === FAVORITES_GROUP_SENTINEL && (isLoadingFavoriteGroups || groups.length === 0));
+    || (selectedGroupName === FAVORITES_GROUP_SENTINEL && (isLoadingFavoriteGroups || isLoadingGroups));
 
-  // Translate FAVORITES_GROUP_SENTINEL for the paginated channels query
+  // Translate FAVORITES_GROUP_SENTINEL for the paginated channels query. An empty
+  // array is a filter that matches nothing — none of the favorite groups exist in
+  // this playlist — as opposed to `undefined`, which means "no group filter".
   const channelGroups = selectedGroupName === FAVORITES_GROUP_SENTINEL
     ? getEffectiveFavoriteGroups(favoriteGroups, groups)
     : selectedGroupName
       ? [selectedGroupName]
       : undefined;
+  const hasUnmatchedFavoriteGroups = channelGroups?.length === 0;
 
   // Derive sort params from selected option
   const activeSortOption = useMemo(
@@ -93,9 +102,12 @@ export default function LiveScreen() {
     channels,
     isLoading: isLoadingChannels,
     isLoadingMore,
+    isRefreshing: isRefreshingChannels,
     hasMore,
     loadMore,
+    error: channelsError,
     refresh: refreshChannels,
+    retry: retryChannels,
   } = usePaginatedChannels({
     playlistId: activePlaylist?.id,
     groups: channelGroups,
@@ -109,35 +121,14 @@ export default function LiveScreen() {
     deferNetworkFetch: shouldDeferFetch,
   });
 
+  // Populated enough to be worth revealing at launch: the first page is
+  // normally pre-fetched, so this is true on the first render and the splash
+  // never waits for this tab at all. An empty or playlist-less catalogue
+  // reports too — there is nothing further to wait for.
+  useReportLandingReady('live', channels.length > 0 || !isLoadingChannels);
+
   // EPG: bulk current programmes for visible channels
   const { programmes: currentProgrammes } = useCurrentProgrammes(channels);
-
-  // Channel detail modal state
-  const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
-  const [channelModalVisible, setChannelModalVisible] = useState(false);
-  const [nextProgramme, setNextProgramme] = useState<EpgProgramme | null>(null);
-  const nextProgrammeFetchRef = useRef(0);
-
-  // Fetch next programme when modal opens
-  useEffect(() => {
-    if (!channelModalVisible || !selectedChannel?.tvg?.id) {
-      setNextProgramme(null);
-      return;
-    }
-
-    const fetchId = ++nextProgrammeFetchRef.current;
-    EpgService.getNextProgramme(selectedChannel.tvg.id)
-      .then((result) => {
-        if (fetchId === nextProgrammeFetchRef.current) {
-          setNextProgramme(result);
-        }
-      })
-      .catch(() => {
-        if (fetchId === nextProgrammeFetchRef.current) {
-          setNextProgramme(null);
-        }
-      });
-  }, [channelModalVisible, selectedChannel]);
 
   // View mode toggle handler
   const handleViewModeChange = useCallback((mode: LiveViewMode) => {
@@ -163,45 +154,37 @@ export default function LiveScreen() {
     }
   }, [selectedSortId]);
 
-  // Tap opens info modal instead of playing directly
+  // Opening a channel is a navigation, not screen state: the detail route keeps
+  // the grid mounted behind it and stays in history, so the player it launches
+  // comes back to the channel rather than to the grid.
+  //
+  // The queue goes with it through the session store rather than the route
+  // parameters — a live playlist is thousands of rows, far too many to
+  // serialise into a URL. Staging it here is safe across the extra hop: only
+  // the player's `startSession` consumes the hand-over, so it is still there
+  // when playback finally starts (see `takeStagedQueue`).
   const handleChannelPress = useCallback((channel: Channel) => {
-    setSelectedChannel(channel);
-    setChannelModalVisible(true);
-  }, []);
-
-  // Play from modal
-  const handlePlayPress = useCallback((channel: Channel) => {
-    setChannelModalVisible(false);
-
-    // Populate playback queue with currently loaded channels
-    const queueItems = channels.map(ch => ({
-      channelId: getChannelId(ch),
-      channel: ch,
-    }));
-    const currentIndex = queueItems.findIndex(
-      item => item.channelId === getChannelId(channel)
+    const currentIndex = channels.findIndex(
+      ch => getChannelId(ch) === getChannelId(channel)
     );
-    usePlaybackQueueStore.getState().setQueue(
-      queueItems,
+    usePlaybackQueueStore.getState().stageQueue(
+      getChannelId(channel),
+      channels,
       currentIndex >= 0 ? currentIndex : 0
     );
 
-    router.push({
-      pathname: '/video-player',
-      params: {
-        channelId: getChannelId(channel),
-        playlistId: activePlaylist?.id ?? '',
-        contentType: 'live',
-      },
-    });
+    router.push(channelHref(activePlaylist?.id ?? '', channel));
   }, [router, activePlaylist?.id, channels]);
 
-  const handleModalClose = useCallback(() => {
-    setChannelModalVisible(false);
-  }, []);
+  // Groups and channels fail independently; either failure must surface.
+  const loadError = channelsError ?? groupsError;
 
-  const isLoading = !hasLoadedPlaylist
-    || (!!activePlaylist && isLoadingChannels && channels.length === 0);
+  // While the fetch is deferred the loaded channels still belong to the previous
+  // filter, so the screen must read as loading (mirrors videos.tsx) — unless
+  // something failed, since a skeleton would hide the error and its retry.
+  const isLoading = !loadError
+    && (!hasLoadedPlaylist
+      || (!!activePlaylist && (shouldDeferFetch || (isLoadingChannels && channels.length === 0))));
 
   // Combined refresh handler
   const handleCombinedRefresh = useCallback(() => {
@@ -212,53 +195,48 @@ export default function LiveScreen() {
     refreshChannels();
   }, [handleRefresh, refreshChannels, activePlaylist?.id]);
 
-  // Get current programme for selected channel (for modal)
-  const selectedChannelProgramme = selectedChannel?.tvg?.id
-    ? currentProgrammes.get(selectedChannel.tvg.id) ?? null
-    : null;
+  // Whichever query failed is the one to re-run; a failed group fetch has its
+  // own retry, and neither knows about the other.
+  const handleRetry = useCallback(() => {
+    if (groupsError) retryGroups();
+    if (channelsError || !groupsError) retryChannels();
+  }, [groupsError, channelsError, retryGroups, retryChannels]);
+
+  // The pull-to-refresh spinner has to cover the channel re-fetch as well, not
+  // just the favorites reload.
+  const isRefreshingAll = isRefreshing || isRefreshingChannels;
 
   return (
-    <>
-      <LiveScreenContent
-        viewMode={viewMode}
-        onViewModeChange={handleViewModeChange}
-        isLoading={isLoading}
-        playlist={activePlaylist}
-        channels={channels}
-        favoriteChannels={favoriteChannels}
-        groups={groups}
-        selectedGroup={selectedGroupName}
-        searchText={searchText}
-        isRefreshing={isRefreshing}
-        onGroupSelect={handleGroupSelect}
-        onSearchChange={handleSearchTextChange}
-        onChannelPress={handleChannelPress}
-        onRefresh={handleCombinedRefresh}
-        onLoadMore={loadMore}
-        isLoadingMore={isLoadingMore}
-        hasMore={hasMore}
-        backgroundColor={backgroundColor}
-        iconColor={iconColor}
-        tintColor={tintColor}
-        favoriteGroups={favoriteGroups}
-        onToggleFavoriteGroup={toggleFavoriteGroup}
-        sortOptions={LIVE_SORT_OPTIONS}
-        selectedSortId={selectedSortId}
-        sortOrder={sortOrder}
-        onSortSelect={handleSortSelect}
-        currentProgrammes={currentProgrammes}
-        excludeAdult={excludeAdult}
-      />
-
-      <ChannelDetailModal
-        visible={channelModalVisible}
-        onClose={handleModalClose}
-        channel={selectedChannel}
-        playlistId={activePlaylist?.id}
-        onPlayPress={handlePlayPress}
-        currentProgramme={selectedChannelProgramme}
-        nextProgramme={nextProgramme}
-      />
-    </>
+    <LiveScreenContent
+      viewMode={viewMode}
+      onViewModeChange={handleViewModeChange}
+      isLoading={isLoading}
+      playlist={activePlaylist}
+      channels={channels}
+      favoriteChannels={favoriteChannels}
+      groups={groups}
+      selectedGroup={selectedGroupName}
+      searchText={searchText}
+      isRefreshing={isRefreshingAll}
+      error={loadError}
+      onRetry={handleRetry}
+      hasUnmatchedFavoriteGroups={hasUnmatchedFavoriteGroups}
+      onGroupSelect={handleGroupSelect}
+      onSearchChange={handleSearchTextChange}
+      onChannelPress={handleChannelPress}
+      onRefresh={handleCombinedRefresh}
+      onLoadMore={loadMore}
+      isLoadingMore={isLoadingMore}
+      hasMore={hasMore}
+      backgroundColor={backgroundColor}
+      favoriteGroups={favoriteGroups}
+      onToggleFavoriteGroup={toggleFavoriteGroup}
+      sortOptions={LIVE_SORT_OPTIONS}
+      selectedSortId={selectedSortId}
+      sortOrder={sortOrder}
+      onSortSelect={handleSortSelect}
+      currentProgrammes={currentProgrammes}
+      excludeAdult={excludeAdult}
+    />
   );
 }

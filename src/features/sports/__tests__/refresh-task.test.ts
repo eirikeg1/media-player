@@ -97,13 +97,13 @@ describe('performBackgroundRefresh', () => {
   it('falls back to the default preference when nothing is stored', async () => {
     const stateStore = fakeStateStore(null);
 
-    // The default mode is 'interval' and it has never run, so it is due.
+    // The default mode is 'night' and NOW is inside that window, so it is due.
     expect(await performBackgroundRefresh(makeDeps({ stateStore }))).toBe('ran');
   });
 
   it('fetches the favorite teams before reading the day schedule', async () => {
     const teams = jest.spyOn(db, 'getFixturesForTeams');
-    const day = jest.spyOn(db, 'getFixturesForDate');
+    const day = jest.spyOn(db, 'getFixturesForWindow');
     const stateStore = fakeStateStore(null);
 
     const outcome = await performBackgroundRefresh(makeDeps({ stateStore }));
@@ -168,7 +168,7 @@ describe('performBackgroundRefresh', () => {
 
   it('invalidates the derived caches before fetching, so the run re-stamps its own day fetch', async () => {
     const invalidate = jest.spyOn(db, 'invalidateSportsCaches');
-    const day = jest.spyOn(db, 'getFixturesForDate');
+    const day = jest.spyOn(db, 'getFixturesForWindow');
 
     expect(await performBackgroundRefresh(makeDeps({ stateStore: fakeStateStore(null) }))).toBe(
       'ran'
@@ -190,11 +190,32 @@ describe('performBackgroundRefresh', () => {
   });
 
   it('fails without advancing the last run when the day schedule throws', async () => {
-    jest.spyOn(db, 'getFixturesForDate').mockRejectedValue(new Error('provider down'));
+    jest.spyOn(db, 'getFixturesForWindow').mockRejectedValue(new Error('provider down'));
     const stateStore = fakeStateStore(null);
 
     expect(await performBackgroundRefresh(makeDeps({ stateStore }))).toBe('failed');
     expect(stateStore.lastRunAt).toBeNull();
+  });
+
+  it('prunes fixtures older than the retention window', async () => {
+    const prune = jest.spyOn(db, 'pruneSportsData');
+
+    expect(await performBackgroundRefresh(makeDeps({ stateStore: fakeStateStore(null) }))).toBe(
+      'ran'
+    );
+
+    expect(prune).toHaveBeenCalledTimes(1);
+    expect(prune.mock.calls[0][0]).toBe(Math.floor(NOW.getTime() / 1000) - 30 * 86_400);
+  });
+
+  it('still succeeds when the prune fails', async () => {
+    jest.spyOn(db, 'pruneSportsData').mockRejectedValue(new Error('database locked'));
+    const stateStore = fakeStateStore(null);
+
+    // Housekeeping is not what the wake was scheduled for: losing the stamp
+    // would make the next wake repeat the whole day fan-out.
+    expect(await performBackgroundRefresh(makeDeps({ stateStore }))).toBe('ran');
+    expect(stateStore.lastRunAt).toBe(NOW.getTime());
   });
 
   it('fails without advancing the last run when the live refresh throws', async () => {

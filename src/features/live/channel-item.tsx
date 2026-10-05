@@ -6,30 +6,36 @@ import { getChannelId } from '@/lib/channel-utils';
 import type { Channel } from '@/types/playlist.types';
 import type { EpgProgramme } from 'expo-m3u-parser';
 import { Image } from 'expo-image';
-import { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 
 interface ChannelItemProps {
   channel: Channel;
-  isFavorite: boolean;
   onPress: (channel: Channel) => void;
   currentProgramme?: EpgProgramme | null;
   testID?: string;
 }
 
-export function ChannelItem({ channel, isFavorite, onPress, currentProgramme, testID }: ChannelItemProps) {
-  const [imageError, setImageError] = useState(false);
-  const hasLogo = !!channel.tvg.logo && !imageError;
+function ChannelItemInner({ channel, onPress, currentProgramme, testID }: ChannelItemProps) {
+  const logoUri = channel.tvg.logo;
+  // Keyed by URI rather than a boolean: FlashList recycles this component
+  // between rows, and a plain `imageError` flag would carry the previous
+  // channel's failure over and degrade the whole grid to letter tiles.
+  const [failedLogoUri, setFailedLogoUri] = useState<string | null>(null);
+  const hasLogo = !!logoUri && failedLogoUri !== logoUri;
   const initial = channel.name.charAt(0).toUpperCase();
   const channelId = getChannelId(channel);
   const hasProgramme = !!currentProgramme;
+
+  const handlePress = useCallback(() => onPress(channel), [onPress, channel]);
+  const handleLogoError = useCallback(() => setFailedLogoUri(logoUri ?? null), [logoUri]);
 
   return (
     <View style={styles.container}>
       <TouchableOpacity
         testID={testID}
         style={styles.button}
-        onPress={() => onPress(channel)}
+        onPress={handlePress}
         activeOpacity={0.7}
         accessibilityRole="button"
         accessibilityLabel={`${channel.name} channel`}
@@ -38,11 +44,11 @@ export function ChannelItem({ channel, isFavorite, onPress, currentProgramme, te
         <View style={styles.imageWrapper}>
           {hasLogo ? (
             <Image
-              source={{ uri: channel.tvg.logo }}
+              source={{ uri: logoUri }}
               style={styles.poster}
               contentFit="cover"
               transition={200}
-              onError={() => setImageError(true)}
+              onError={handleLogoError}
             />
           ) : (
             <ThemedView style={[styles.poster, styles.fallbackPoster]}>
@@ -67,12 +73,17 @@ export function ChannelItem({ channel, isFavorite, onPress, currentProgramme, te
           channelId={channelId}
           channelName={channel.name}
           size={20}
-          initialIsFavorite={isFavorite}
         />
       </View>
     </View>
   );
 }
+
+/**
+ * Memoised: a grid of these re-renders whenever the screen's programme map or
+ * favourites change, and only the affected rows should actually re-render.
+ */
+export const ChannelItem = React.memo(ChannelItemInner);
 
 const styles = StyleSheet.create({
   container: {

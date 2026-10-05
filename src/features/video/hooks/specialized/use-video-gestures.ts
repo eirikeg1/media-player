@@ -1,7 +1,6 @@
 import * as Brightness from 'expo-brightness';
 import * as Haptics from 'expo-haptics';
-import type { VideoPlayer } from 'expo-video';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Platform, useWindowDimensions } from 'react-native';
 import { Gesture } from 'react-native-gesture-handler';
 import {
@@ -15,7 +14,6 @@ import { useGestureStore, type GestureType } from '@/stores/video/gesture-store'
 import { VIDEO_CONSTANTS } from '../../constants';
 
 interface UseVideoGesturesProps {
-  player: VideoPlayer;
   currentTime: number;
   duration: number;
   isLive: boolean;
@@ -43,6 +41,9 @@ const SEEK_SECONDS_PER_PX = VIDEO_CONSTANTS.GESTURE_SEEK_SECONDS_PER_PX;
 const SLIDER_SENSITIVITY = VIDEO_CONSTANTS.GESTURE_SLIDER_SENSITIVITY;
 const MIN_DIRECTION_THRESHOLD = VIDEO_CONSTANTS.GESTURE_MIN_DIRECTION_THRESHOLD;
 
+/** How long to wait for `currentTime` to confirm a gesture seek before giving up on it. */
+const SEEK_SETTLE_TIMEOUT_MS = 500;
+
 function clamp(value: number, min: number, max: number): number {
   'worklet';
   return Math.min(Math.max(value, min), max);
@@ -62,7 +63,6 @@ function zoneToNumeric(zone: GestureZone): number {
 }
 
 export function useVideoGestures({
-  player,
   currentTime,
   duration,
   isLive,
@@ -82,15 +82,25 @@ export function useVideoGestures({
     windowHeight * VIDEO_CONSTANTS.GESTURE_SLIDER_HEIGHT_RATIO -
     VIDEO_CONSTANTS.GESTURE_SLIDER_TRACK_OVERHEAD;
 
+  // `currentTime` ticks once a second. Read it from a ref so the gesture
+  // callbacks — and through them the memoised gesture objects — keep their
+  // identity between ticks; it is only needed the moment a seek starts.
+  const currentTimeRef = useRef(currentTime);
+  currentTimeRef.current = currentTime;
+
   // JS-only refs (not needed in worklet)
   const gestureZone = useRef<GestureZone>('center');
   const cachedBrightness = useRef(0.5);
   const cachedVolume = useRef(1);
   const resetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const gestureSeekPending = useRef(false);
+  const seekSettleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasSystemBrightnessPermission = useRef(false);
   const pendingBrightnessValue = useRef<number | null>(null);
   const brightnessInFlight = useRef(false);
+  /** Brightness before any gesture touched it — restored when the screen goes. */
+  const initialBrightness = useRef<number | null>(null);
+  const hasChangedBrightness = useRef(false);
 
   // Shared values for worklet fast-path (UI thread updates)
   const gestureActivatedSV = useSharedValue(false);
@@ -120,8 +130,13 @@ export function useVideoGestures({
     }
   }, [currentTime, isGestureSeeking]);
 
-  const { setActiveGesture, setSeekDelta, setVolume, setBrightness, reset } =
-    useGestureStore();
+  // Actions only — subscribing to the whole store would re-render the player
+  // tree on every `setSeekDelta` frame of a seek gesture.
+  const setActiveGesture = useGestureStore((s) => s.setActiveGesture);
+  const setSeekDelta = useGestureStore((s) => s.setSeekDelta);
+  const setVolume = useGestureStore((s) => s.setVolume);
+  const setBrightness = useGestureStore((s) => s.setBrightness);
+  const reset = useGestureStore((s) => s.reset);
 
   // Cleanup timers on unmount
   useEffect(() => {
@@ -129,32 +144,59 @@ export function useVideoGestures({
       if (resetTimeoutRef.current !== null) {
         clearTimeout(resetTimeoutRef.current);
       }
+      if (seekSettleTimeoutRef.current !== null) {
+        clearTimeout(seekSettleTimeoutRef.current);
+      }
     };
   }, []);
 
-  // Cache brightness on mount so gesture start is synchronous
+  // Cache brightness on mount so gesture start is synchronous.
+  //
+  // The permission is only *read*, never requested: system brightness needs
+  // WRITE_SETTINGS on Android, and asking for it opens the system "Modify
+  // system settings" screen — which backgrounds the app mid-stream, pauses
+  // playback and drops the panel's only connection. Without it the gesture
+  // dims the app window instead (no permission required), which is what a
+  // video player wants anyway.
   useEffect(() => {
     const init = async () => {
-      if (Platform.OS === 'android') {
-        const { status } = await Brightness.requestPermissionsAsync();
-        hasSystemBrightnessPermission.current = status === 'granted';
-        if (hasSystemBrightnessPermission.current) {
-          cachedBrightness.current = await Brightness.getSystemBrightnessAsync();
-        } else {
-          cachedBrightness.current = await Brightness.getBrightnessAsync();
+      try {
+        if (Platform.OS === 'android') {
+          const { granted } = await Brightness.getPermissionsAsync();
+          hasSystemBrightnessPermission.current = granted;
         }
-      } else {
-        cachedBrightness.current = await Brightness.getBrightnessAsync();
+        cachedBrightness.current = hasSystemBrightnessPermission.current
+          ? await Brightness.getSystemBrightnessAsync()
+          : await Brightness.getBrightnessAsync();
+        initialBrightness.current = cachedBrightness.current;
+      } catch (error) {
+        console.warn('[VideoGestures] Failed to read brightness:', error);
       }
     };
-    init();
+    void init();
+
+    // A player dimmed for a dark room must not leave the rest of the app dim:
+    // the gesture is a per-playback adjustment, so it is undone with the screen.
+    return () => {
+      if (!hasChangedBrightness.current) return;
+      const restore = hasSystemBrightnessPermission.current
+        ? Brightness.restoreSystemBrightnessAsync()
+        : initialBrightness.current !== null
+          ? Brightness.setBrightnessAsync(initialBrightness.current)
+          : null;
+      restore?.catch((error) =>
+        console.warn('[VideoGestures] Failed to restore brightness:', error)
+      );
+    };
   }, []);
 
   // Cache system volume on mount and keep in sync via listener
   useEffect(() => {
-    VolumeManager.getVolume().then((result) => {
-      cachedVolume.current = result.volume;
-    });
+    VolumeManager.getVolume()
+      .then((result) => {
+        cachedVolume.current = result.volume;
+      })
+      .catch((error) => console.warn('[VideoGestures] Failed to read volume:', error));
     const subscription = VolumeManager.addVolumeListener((result) => {
       cachedVolume.current = result.volume;
     });
@@ -204,15 +246,22 @@ export function useVideoGestures({
 
   const applyVolume = useCallback((v: number) => {
     cachedVolume.current = v;
-    VolumeManager.setVolume(v, { showUI: false });
+    try {
+      const result = VolumeManager.setVolume(v, { showUI: false });
+      void Promise.resolve(result).catch((error) =>
+        console.warn('[VideoGestures] Failed to set volume:', error)
+      );
+    } catch (error) {
+      console.warn('[VideoGestures] Failed to set volume:', error);
+    }
   }, []);
 
   const applyBrightness = useCallback((b: number) => {
     cachedBrightness.current = b;
-    const setBrightnessFn =
-      Platform.OS === 'android' && hasSystemBrightnessPermission.current
-        ? Brightness.setSystemBrightnessAsync
-        : Brightness.setBrightnessAsync;
+    hasChangedBrightness.current = true;
+    const setBrightnessFn = hasSystemBrightnessPermission.current
+      ? Brightness.setSystemBrightnessAsync
+      : Brightness.setBrightnessAsync;
 
     if (brightnessInFlight.current) {
       pendingBrightnessValue.current = b;
@@ -220,14 +269,19 @@ export function useVideoGestures({
     }
 
     brightnessInFlight.current = true;
-    setBrightnessFn(b).then(() => {
-      brightnessInFlight.current = false;
-      const pending = pendingBrightnessValue.current;
-      if (pending !== null) {
-        pendingBrightnessValue.current = null;
-        applyBrightness(pending);
-      }
-    });
+    // `finally` matters more than the success path: a rejected write used to
+    // leave the flag set, so every later drag only queued a pending value that
+    // nothing ever flushed — the gesture stopped changing anything.
+    setBrightnessFn(b)
+      .catch((error) => console.warn('[VideoGestures] Failed to set brightness:', error))
+      .finally(() => {
+        brightnessInFlight.current = false;
+        const pending = pendingBrightnessValue.current;
+        if (pending !== null) {
+          pendingBrightnessValue.current = null;
+          applyBrightness(pending);
+        }
+      });
   }, []);
 
   const flushBrightness = useCallback(() => {
@@ -254,15 +308,17 @@ export function useVideoGestures({
       gestureZone.current = zone;
       gestureActivatedSV.value = false;
 
-      // Bottom zone disabled for live streams
-      if (zone === 'bottom' && isLive) {
+      // Fine-seek needs a timeline to move along: a live stream has none, and
+      // neither does a stream whose duration hasn't arrived yet (seeking it
+      // would clamp the target to 0 and restart the stream).
+      if (zone === 'bottom' && (isLive || duration <= 0)) {
         gestureZone.current = 'center';
         gestureZoneSV.value = ZONE_CENTER;
       } else {
         gestureZoneSV.value = zoneToNumeric(zone);
       }
     },
-    [determineZone, isLive, reset, gestureActivatedSV, gestureZoneSV],
+    [determineZone, isLive, duration, reset, gestureActivatedSV, gestureZoneSV],
   );
 
   const activateGesture = useCallback(
@@ -280,11 +336,12 @@ export function useVideoGestures({
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
       if (gestureType === 'fine-seek') {
+        const startTime = currentTimeRef.current;
         isGestureSeeking.value = true;
-        startTimeSV.value = currentTime;
-        setSeekDelta(0, currentTime);
+        startTimeSV.value = startTime;
+        setSeekDelta(0, startTime);
         seekDeltaDisplay.value = 0;
-        seekTargetDisplay.value = currentTime;
+        seekTargetDisplay.value = startTime;
         onSeekStart();
       } else if (gestureType === 'volume') {
         startVolumeSV.value = cachedVolume.current;
@@ -295,17 +352,18 @@ export function useVideoGestures({
         startBrightnessSV.value = cachedBrightness.current;
         setBrightness(cachedBrightness.current);
         brightnessDisplay.value = cachedBrightness.current;
-        const refine = Platform.OS === 'android' && hasSystemBrightnessPermission.current
+        const refine = hasSystemBrightnessPermission.current
           ? Brightness.getSystemBrightnessAsync()
           : Brightness.getBrightnessAsync();
-        refine.then((b) => {
-          cachedBrightness.current = b;
-          startBrightnessSV.value = b;
-        });
+        refine
+          .then((b) => {
+            cachedBrightness.current = b;
+            startBrightnessSV.value = b;
+          })
+          .catch((error) => console.warn('[VideoGestures] Failed to read brightness:', error));
       }
     },
     [
-      currentTime,
       setActiveGesture,
       setSeekDelta,
       setVolume,
@@ -361,13 +419,16 @@ export function useVideoGestures({
       if (zone === 'bottom' && wasActivated) {
         gestureSeekPending.current = true;
         // Fallback: if seekTo lands on the same position, currentTime won't change
-        // and gestureSeekPending would stay true forever
-        setTimeout(() => {
+        // and gestureSeekPending would stay true forever. Tracked so unmounting
+        // mid-seek doesn't leave a timer writing to a released shared value.
+        if (seekSettleTimeoutRef.current !== null) clearTimeout(seekSettleTimeoutRef.current);
+        seekSettleTimeoutRef.current = setTimeout(() => {
+          seekSettleTimeoutRef.current = null;
           if (gestureSeekPending.current) {
             gestureSeekPending.current = false;
             isGestureSeeking.value = false;
           }
-        }, 500);
+        }, SEEK_SETTLE_TIMEOUT_MS);
         seekTo(seekTarget);
         onSeekEnd(seekTarget);
         setSeekDelta(seekDelta, seekTarget);
@@ -395,7 +456,10 @@ export function useVideoGestures({
 
   // --- Gesture definitions ---
 
-  const panGesture = Gesture.Pan()
+  // Memoised: rebuilding these on every render makes GestureDetector swap out
+  // the native gesture handlers, which this component would otherwise do twice
+  // a second as `currentTime` ticks.
+  const panGesture = useMemo(() => Gesture.Pan()
     .onStart((event) => {
       runOnJS(handleGestureStart)(event.x, event.y);
     })
@@ -451,13 +515,39 @@ export function useVideoGestures({
         brightnessDisplay.value,
       );
     })
-    .minDistance(VIDEO_CONSTANTS.GESTURE_MIN_DISTANCE);
+    .minDistance(VIDEO_CONSTANTS.GESTURE_MIN_DISTANCE),
+    [
+      handleGestureStart,
+      handleGestureActivation,
+      handleGestureEnd,
+      applyBrightness,
+      applyVolume,
+      gestureActivatedSV,
+      gestureZoneSV,
+      startTranslationX,
+      startTranslationY,
+      startVolumeSV,
+      startBrightnessSV,
+      startTimeSV,
+      durationSV,
+      sliderTrackHeightSV,
+      volumeDisplay,
+      brightnessDisplay,
+      seekDeltaDisplay,
+      seekTargetDisplay,
+    ]);
 
-  const tapGesture = Gesture.Tap().onEnd(() => {
-    runOnJS(handleTap)();
-  });
+  const tapGesture = useMemo(
+    () => Gesture.Tap().onEnd(() => {
+      runOnJS(handleTap)();
+    }),
+    [handleTap]
+  );
 
-  const composedGesture = Gesture.Exclusive(panGesture, tapGesture);
+  const composedGesture = useMemo(
+    () => Gesture.Exclusive(panGesture, tapGesture),
+    [panGesture, tapGesture]
+  );
 
   const onLayout = useCallback(
     (event: { nativeEvent: { layout: { width: number; height: number } } }) => {

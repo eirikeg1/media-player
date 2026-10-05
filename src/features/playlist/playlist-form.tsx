@@ -1,29 +1,33 @@
-import { Dropdown, type DropdownOption } from '@/components/ui/controls/inputs/dropdown';
+import { Dropdown } from '@/components/ui/controls/inputs/dropdown';
 import { Input } from '@/components/ui/controls/inputs/input';
 import { Textarea } from '@/components/ui/controls/inputs/textarea';
+import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { GlassColors } from '@/lib/theme';
-import { useImportProgressStore } from '@/stores/playlist/import-progress-store';
+import { generatePlaylistId } from '@/lib/playlist-utils';
+import {
+  DEFAULT_EPG_SYNC_MINUTES,
+  DEFAULT_PLAYLIST_SYNC_MINUTES,
+  SYNC_INTERVAL_OPTIONS,
+} from '@/lib/sync-intervals';
+import { GlassColors, TINT } from '@/lib/theme';
+import { Spinner } from '@/components/ui/display/state';
+import { useImportProgress } from '@/stores/playlist/import-progress-store';
 import { usePlaylistStore } from '@/stores/playlist/playlist-store';
 import type { Playlist } from '@/types/playlist.types';
 import { memo, useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Switch, TouchableOpacity, View } from 'react-native';
+import { Platform, StyleSheet, Switch, TouchableOpacity, View } from 'react-native';
 import { ImportProgressBar } from './import-progress-bar';
 
-const SYNC_INTERVAL_OPTIONS: DropdownOption<number>[] = [
-  { label: 'Every day', value: 1440 },
-  { label: 'Every 1 hour', value: 60 },
-  { label: 'Every 2 hours', value: 120 },
-  { label: 'Every 4 hours', value: 240 },
-  { label: 'Every 6 hours', value: 360 },
-  { label: 'Every 8 hours', value: 480 },
-  { label: 'Every 12 hours', value: 720 },
-  { label: 'Every 2 days', value: 2880 },
-  { label: 'Every 4 days', value: 5760 },
-  { label: 'Every week', value: 10080 },
-];
+/**
+ * Background work is Android-only (see the sports refresh settings), so on iOS
+ * the automatic syncs only happen while the app is open.
+ */
+const BACKGROUND_SYNC_NOTE =
+  Platform.OS === 'ios'
+    ? 'Runs while the app is open.'
+    : 'Runs while the app is open, and in the background \u2014 on Wi\u2011Fi only, unless \u201cSync on mobile data\u201d is on in Settings.';
 
 interface PlaylistFormProps {
   onSuccess?: () => void;
@@ -45,22 +49,32 @@ export const PlaylistForm = memo(function PlaylistForm({ onSuccess, onCancel, pl
   const [username, setUsername] = useState(playlist?.credentials?.username || '');
   const [password, setPassword] = useState(playlist?.credentials?.password || '');
   const [epgUrl, setEpgUrl] = useState(playlist?.epgUrl || '');
-  const [syncInterval, setSyncInterval] = useState<number>(playlist?.syncInterval || 1440);
-  const [epgSyncInterval, setEpgSyncInterval] = useState<number>(playlist?.epgSyncInterval || 1440);
+  // `??`, never `||`: a stored 0 is the user's "Off", not a missing value.
+  const [syncInterval, setSyncInterval] = useState<number>(
+    playlist?.syncInterval ?? DEFAULT_PLAYLIST_SYNC_MINUTES,
+  );
+  const [epgSyncInterval, setEpgSyncInterval] = useState<number>(
+    playlist?.epgSyncInterval ?? DEFAULT_EPG_SYNC_MINUTES,
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const addPlaylist = usePlaylistStore((state) => state.addPlaylist);
   const updatePlaylist = usePlaylistStore((state) => state.updatePlaylist);
-  const phaseLabel = useImportProgressStore((s) => s.phaseLabel);
+  // The id whose import this form is showing: the playlist being edited, or the
+  // one this form generated for the playlist it is adding. Never another
+  // playlist's — a background sync must not appear as this form's progress.
+  const [addedPlaylistId, setAddedPlaylistId] = useState(generatePlaylistId);
+  const importedPlaylistId = playlist?.id ?? addedPlaylistId;
+  const phaseLabel = useImportProgress(importedPlaylistId)?.phaseLabel;
 
   useEffect(() => {
     if (playlist) {
       setName(playlist.name);
       setUrl(playlist.url);
       setEpgUrl(playlist.epgUrl || '');
-      setSyncInterval(playlist.syncInterval || 1440);
-      setEpgSyncInterval(playlist.epgSyncInterval || 1440);
+      setSyncInterval(playlist.syncInterval ?? DEFAULT_PLAYLIST_SYNC_MINUTES);
+      setEpgSyncInterval(playlist.epgSyncInterval ?? DEFAULT_EPG_SYNC_MINUTES);
       setUseCredentials(!!playlist.credentials);
       setUsername(playlist.credentials?.username || '');
       setPassword(playlist.credentials?.password || '');
@@ -101,9 +115,7 @@ export const PlaylistForm = memo(function PlaylistForm({ onSuccess, onCancel, pl
       const trimmedEpgUrl = epgUrl.trim() || undefined;
 
       if (isEditing && playlist) {
-        // Close modal immediately; progress shows inline on the playlist card
-        onSuccess?.();
-        updatePlaylist(playlist.id, {
+        await updatePlaylist(playlist.id, {
           name: name.trim(),
           url: url.trim(),
           epgUrl: trimmedEpgUrl,
@@ -112,15 +124,16 @@ export const PlaylistForm = memo(function PlaylistForm({ onSuccess, onCancel, pl
           credentials: useCredentials
             ? { username: username.trim(), password: password.trim() }
             : undefined,
-        }).catch((err) => {
-          console.error('[PlaylistForm] Update error (surfaced via store):', err);
         });
-        return;
+        console.log('[PlaylistForm] Playlist updated successfully');
       } else {
         await addPlaylist({
+          id: addedPlaylistId,
           name: name.trim(),
           url: url.trim(),
           epgUrl: trimmedEpgUrl,
+          syncInterval,
+          epgSyncInterval,
           credentials: useCredentials
             ? { username: username.trim(), password: password.trim() }
             : undefined,
@@ -135,6 +148,10 @@ export const PlaylistForm = memo(function PlaylistForm({ onSuccess, onCancel, pl
         setUsername('');
         setPassword('');
         setUseCredentials(false);
+        setSyncInterval(DEFAULT_PLAYLIST_SYNC_MINUTES);
+        setEpgSyncInterval(DEFAULT_EPG_SYNC_MINUTES);
+        // The id is spent: the next playlist added from this form needs its own.
+        setAddedPlaylistId(generatePlaylistId());
       }
 
       onSuccess?.();
@@ -147,13 +164,14 @@ export const PlaylistForm = memo(function PlaylistForm({ onSuccess, onCancel, pl
       setIsSubmitting(false);
       console.log('[PlaylistForm] Submit completed');
     }
-  }, [name, url, epgUrl, syncInterval, epgSyncInterval, useCredentials, username, password, addPlaylist, updatePlaylist, onSuccess, isEditing, playlist]);
+  }, [name, url, epgUrl, syncInterval, epgSyncInterval, useCredentials, username, password, addedPlaylistId, addPlaylist, updatePlaylist, onSuccess, isEditing, playlist]);
 
   return (
     <ThemedView style={styles.container}>
       {error && (
-        <View style={styles.errorContainer}>
-          <ThemedText style={styles.errorText}>⚠️ {error}</ThemedText>
+        <View style={[styles.errorBanner, { backgroundColor: isDark ? '#4a1a1a' : '#fee' }]}>
+          <IconSymbol name="exclamationmark.triangle" size={20} color="#c33" />
+          <ThemedText style={styles.errorText}>{error}</ThemedText>
         </View>
       )}
 
@@ -162,15 +180,19 @@ export const PlaylistForm = memo(function PlaylistForm({ onSuccess, onCancel, pl
           backgroundColor: isDark ? GlassColors.dark.surface : GlassColors.light.surface,
         }]}>
           <View style={styles.loadingHeader}>
-            <ActivityIndicator size="small" color="#007AFF" />
+            <Spinner />
             <ThemedText style={styles.loadingText}>
-              {phaseLabel || 'Preparing import...'}
+              {phaseLabel ?? 'Saving playlist...'}
             </ThemedText>
           </View>
-          <ImportProgressBar showAlways />
-          <ThemedText style={styles.loadingHelpText}>
-            Please do not close the app during import.
-          </ThemedText>
+          <ImportProgressBar playlistId={importedPlaylistId} />
+          {/* An edit that changes neither URL nor credentials only writes
+              metadata — there is no download to warn about. */}
+          {phaseLabel !== undefined && (
+            <ThemedText style={styles.loadingHelpText}>
+              Please do not close the app during import.
+            </ThemedText>
+          )}
         </View>
       )}
 
@@ -231,37 +253,34 @@ export const PlaylistForm = memo(function PlaylistForm({ onSuccess, onCancel, pl
         </ThemedText>
       </View>
 
-      {isEditing && (
-        <>
-          <View style={styles.formGroup}>
-            <Dropdown<number>
-              label="Auto Sync"
-              options={SYNC_INTERVAL_OPTIONS}
-              value={syncInterval}
-              onSelect={setSyncInterval}
-              disabled={isSubmitting}
-              accessibilityLabel="Playlist auto sync interval"
-            />
-            <ThemedText style={styles.helpText}>
-              Automatically refresh playlist data at the selected interval.
-            </ThemedText>
-          </View>
+      <View style={styles.formGroup}>
+        <Dropdown<number>
+          label="Auto Sync"
+          options={SYNC_INTERVAL_OPTIONS}
+          value={syncInterval}
+          onSelect={setSyncInterval}
+          disabled={isSubmitting}
+          accessibilityLabel="Playlist auto sync interval"
+        />
+        <ThemedText style={styles.helpText}>
+          Re-download the channel list at this interval, so renamed event channels stay current.{' '}
+          {BACKGROUND_SYNC_NOTE}
+        </ThemedText>
+      </View>
 
-          <View style={styles.formGroup}>
-            <Dropdown<number>
-              label="EPG Auto Sync"
-              options={SYNC_INTERVAL_OPTIONS}
-              value={epgSyncInterval}
-              onSelect={setEpgSyncInterval}
-              disabled={isSubmitting}
-              accessibilityLabel="EPG auto sync interval"
-            />
-            <ThemedText style={styles.helpText}>
-              Automatically refresh EPG programme data at the selected interval.
-            </ThemedText>
-          </View>
-        </>
-      )}
+      <View style={styles.formGroup}>
+        <Dropdown<number>
+          label="EPG Auto Sync"
+          options={SYNC_INTERVAL_OPTIONS}
+          value={epgSyncInterval}
+          onSelect={setEpgSyncInterval}
+          disabled={isSubmitting}
+          accessibilityLabel="EPG auto sync interval"
+        />
+        <ThemedText style={styles.helpText}>
+          Re-download the programme guide at this interval. {BACKGROUND_SYNC_NOTE}
+        </ThemedText>
+      </View>
 
       <View style={styles.switchContainer}>
         <View style={styles.switchLabelContainer}>
@@ -347,7 +366,7 @@ export const PlaylistForm = memo(function PlaylistForm({ onSuccess, onCancel, pl
           accessibilityState={{ disabled: isSubmitting }}
         >
           {isSubmitting ? (
-            <ActivityIndicator color="#fff" accessibilityLabel="Loading" />
+            <Spinner color="#fff" />
           ) : (
             <ThemedText style={styles.submitButtonText}>
               {isEditing ? 'Update Playlist' : 'Add Playlist'}
@@ -385,18 +404,18 @@ const styles = StyleSheet.create({
   switchLabelContainer: {
     flex: 1,
   },
-  errorContainer: {
-    backgroundColor: '#fee',
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
     borderRadius: 8,
-    padding: 12,
+    padding: 16,
     marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#fcc',
   },
   errorText: {
+    flex: 1,
     color: '#c33',
     fontSize: 14,
-    fontWeight: '600',
   },
   loadingContainer: {
     padding: 16,
@@ -412,7 +431,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 14,
-    color: '#007AFF',
+    color: TINT,
   },
   loadingHelpText: {
     fontSize: 12,
@@ -438,7 +457,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   submitButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: TINT,
   },
   submitButtonDisabled: {
     opacity: 0.6,

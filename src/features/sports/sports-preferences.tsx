@@ -2,8 +2,11 @@ import { Dropdown, type DropdownOption } from '@/components/ui/controls/inputs/d
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
+import { Spinner } from '@/components/ui/display/state';
+import { saveSetting } from '@/features/user/save-setting';
 import { COUNTRY_OPTIONS, getDeviceCountry } from '@/lib/country-utils';
 import { getTimeElapsed } from '@/lib/playlist-utils';
+import { SWITCH_TRACK } from '@/lib/theme';
 import { useUserStore } from '@/stores/user/user-store';
 import {
   DEFAULT_SPORTS_BACKGROUND_REFRESH,
@@ -12,13 +15,15 @@ import {
 } from '@/types/user.types';
 import { Image } from 'expo-image';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Platform, StyleSheet, Switch, TouchableOpacity, View } from 'react-native';
+import { Platform, StyleSheet, Switch, TouchableOpacity, View } from 'react-native';
 
 import { runForegroundRefresh } from './background/foreground-refresh';
 import { describePreference } from './background/refresh-policy';
 import { refreshStateStore } from './background/refresh-state-store';
 import { useLeaguePreferences } from './hooks/use-league-preferences';
-import { competitionLogoUrl, moveLeague } from './league-preferences';
+import { moveLeague } from './league-preferences';
+import { SportsCountryPicker } from './sports-country-picker';
+import { sportsErrorMessage } from './sports-errors';
 import { SPORTS_ACCENT, useSportsPalette } from './sports-theme';
 
 const MODE_OPTIONS: DropdownOption<SportsRefreshMode>[] = [
@@ -56,11 +61,14 @@ const IS_IOS = Platform.OS === 'ios';
 /** Settings → Sports: TV country, league ranking and list filters. */
 export const SportsPreferences = memo(function SportsPreferences() {
   const palette = useSportsPalette();
-  const currentUser = useUserStore((s) => s.currentUser);
-  const updateSettings = useUserStore((s) => s.updateSettings);
+  // Primitive selectors: the user object is replaced on every settings write.
+  const hasUser = useUserStore((s) => s.currentUser != null);
+  const sportsCountry = useUserStore((s) => s.currentUser?.settings?.sportsCountry ?? '');
+  const backgroundRefresh: SportsBackgroundRefresh = useUserStore(
+    (s) => s.currentUser?.settings?.sportsBackgroundRefresh ?? DEFAULT_SPORTS_BACKGROUND_REFRESH
+  );
   const { competitions, order, hideOtherLeagues, setOrder, resetOrder, setHideOtherLeagues } = useLeaguePreferences();
 
-  const sportsCountry = currentUser?.settings?.sportsCountry ?? '';
   const sportsCountryLabel = useMemo(() => {
     if (!sportsCountry) {
       const detected = getDeviceCountry();
@@ -70,34 +78,27 @@ export const SportsPreferences = memo(function SportsPreferences() {
     return COUNTRY_OPTIONS.find((o) => o.value === sportsCountry)?.label ?? sportsCountry;
   }, [sportsCountry]);
 
-  const handleCountryChange = useCallback(
-    (value: string) => {
-      if (!currentUser) return;
-      void updateSettings(currentUser.id, { sportsCountry: value || undefined });
-    },
-    [currentUser, updateSettings]
-  );
-
-  const backgroundRefresh: SportsBackgroundRefresh =
-    currentUser?.settings?.sportsBackgroundRefresh ?? DEFAULT_SPORTS_BACKGROUND_REFRESH;
-
   /** Every write carries the whole preference, so a partial row can never persist. */
   const saveBackgroundRefresh = useCallback(
     (patch: Partial<SportsBackgroundRefresh>) => {
-      if (!currentUser) return;
-      void updateSettings(currentUser.id, {
-        sportsBackgroundRefresh: {
-          ...DEFAULT_SPORTS_BACKGROUND_REFRESH,
-          ...backgroundRefresh,
-          ...patch,
+      void saveSetting(
+        {
+          sportsBackgroundRefresh: {
+            ...DEFAULT_SPORTS_BACKGROUND_REFRESH,
+            ...backgroundRefresh,
+            ...patch,
+          },
         },
-      });
+        'background refresh'
+      );
     },
-    [backgroundRefresh, currentUser, updateSettings]
+    [backgroundRefresh]
   );
 
   const [lastRunAt, setLastRunAt] = useState<number | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  /** Why the last manual refresh failed, or null when it worked. */
+  const [refreshError, setRefreshError] = useState<string | null>(null);
   const isMountedRef = useRef(true);
   useEffect(() => {
     isMountedRef.current = true;
@@ -114,17 +115,24 @@ export const SportsPreferences = memo(function SportsPreferences() {
 
   const handleRefreshNow = useCallback(async () => {
     setIsRefreshing(true);
+    setRefreshError(null);
+    // A refresh that failed must say so: the row's only other feedback is the
+    // "Last updated" stamp, which stays where it was — indistinguishable from a
+    // refresh that found nothing to change.
+    let failure: string | null = null;
     try {
       await runForegroundRefresh({ force: true });
       await refreshStateStore.setLastRunAt(Date.now());
     } catch (err) {
       console.warn('[SportsPreferences] Manual refresh failed:', err);
+      failure = sportsErrorMessage(err, "Couldn't refresh sports data.");
     }
     // Read back rather than assume: a failed run leaves the previous stamp, and
     // a background wake may have advanced it while the screen was open.
     const ts = await refreshStateStore.getLastRunAt();
     if (!isMountedRef.current) return;
     setLastRunAt(ts);
+    setRefreshError(failure);
     setIsRefreshing(false);
   }, []);
 
@@ -135,7 +143,7 @@ export const SportsPreferences = memo(function SportsPreferences() {
       .filter((c): c is NonNullable<typeof c> => c != null);
   }, [competitions, order]);
 
-  if (!currentUser) return null;
+  if (!hasUser) return null;
 
   return (
     <ThemedView style={styles.container}>
@@ -153,13 +161,7 @@ export const SportsPreferences = memo(function SportsPreferences() {
           </View>
         </View>
         <View style={styles.dropdown}>
-          <Dropdown<string>
-            label="Country"
-            options={COUNTRY_OPTIONS}
-            value={sportsCountry}
-            onSelect={handleCountryChange}
-            accessibilityLabel="Sports TV channel country"
-          />
+          <SportsCountryPicker accessibilityLabel="Sports TV channel country" />
         </View>
 
         <View style={styles.sectionHeader}>
@@ -168,7 +170,7 @@ export const SportsPreferences = memo(function SportsPreferences() {
         <ThemedText style={styles.helpText}>
           {IS_IOS
             ? 'Background refresh is not yet supported on iOS \u2014 data refreshes when you open the app.'
-            : `Keeps today\u2019s matches and your favorite teams up to date while the app is closed. Current: ${describePreference(backgroundRefresh)}`}
+            : `Keeps today\u2019s matches and your favorite teams up to date while the app is closed. Each run first syncs your playlists and guides (on their own intervals; Wi\u2011Fi only unless mobile data is allowed), so matches are found on current channels. Current: ${describePreference(backgroundRefresh)}`}
         </ThemedText>
 
         <View style={styles.dropdown}>
@@ -222,7 +224,7 @@ export const SportsPreferences = memo(function SportsPreferences() {
           <Switch
             value={backgroundRefresh.refreshOnOpen}
             onValueChange={(refreshOnOpen) => saveBackgroundRefresh({ refreshOnOpen })}
-            trackColor={{ false: '#767577', true: SPORTS_ACCENT.tint }}
+            trackColor={{ false: SWITCH_TRACK, true: SPORTS_ACCENT.tint }}
             accessibilityLabel="Refresh sports when opening the app"
           />
         </View>
@@ -237,7 +239,7 @@ export const SportsPreferences = memo(function SportsPreferences() {
             </ThemedText>
           </View>
           {isRefreshing ? (
-            <ActivityIndicator size="small" color={SPORTS_ACCENT.tint} />
+            <Spinner color={SPORTS_ACCENT.tint} />
           ) : (
             <TouchableOpacity
               onPress={() => void handleRefreshNow()}
@@ -249,6 +251,12 @@ export const SportsPreferences = memo(function SportsPreferences() {
           )}
         </View>
 
+        {refreshError ? (
+          <ThemedText style={[styles.helpText, styles.errorText]} accessibilityRole="alert">
+            {refreshError}
+          </ThemedText>
+        ) : null}
+
         <View style={styles.preferenceRow}>
           <View style={styles.labelContainer}>
             <ThemedText style={styles.label}>Only show my leagues</ThemedText>
@@ -259,7 +267,7 @@ export const SportsPreferences = memo(function SportsPreferences() {
           <Switch
             value={hideOtherLeagues}
             onValueChange={setHideOtherLeagues}
-            trackColor={{ false: '#767577', true: SPORTS_ACCENT.tint }}
+            trackColor={{ false: SWITCH_TRACK, true: SPORTS_ACCENT.tint }}
             accessibilityLabel="Only show ranked leagues"
           />
         </View>
@@ -280,7 +288,7 @@ export const SportsPreferences = memo(function SportsPreferences() {
             >
               <ThemedText style={[styles.rank, { color: palette.muted }]}>{index + 1}</ThemedText>
               <Image
-                source={{ uri: league.emblemUrl ?? competitionLogoUrl(league.providerId) }}
+                source={{ uri: league.emblemUrl ?? undefined }}
                 style={styles.logo}
                 contentFit="contain"
               />
@@ -350,6 +358,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
     opacity: 0.6,
     paddingHorizontal: 16,
+  },
+  errorText: {
+    color: SPORTS_ACCENT.live,
+    opacity: 1,
   },
   dropdown: {
     paddingHorizontal: 16,

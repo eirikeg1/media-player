@@ -178,11 +178,66 @@ describe('update', () => {
     expect(fetched?.credentials).toEqual({ username: 'new-user', password: 'new-pass' });
   });
 
+  it('writes only the patched columns, so two writers do not clobber each other', async () => {
+    await playlistRepository.create(makePlaylist({ id: 'pl-1', channelCount: 10 }));
+    const epgFetchedAt = new Date(BASE_TIME.getTime() + 5_000);
+
+    // Genuinely concurrent: a background sync recording channelCount while the
+    // EPG job records lastEpgFetchedAt. Each reads the row before writing, so a
+    // full-row write would resurrect what it read and undo the other's change.
+    const [afterSync, afterEpg] = await Promise.all([
+      playlistRepository.update('pl-1', { channelCount: 4200 }),
+      playlistRepository.update('pl-1', { lastEpgFetchedAt: epgFetchedAt }),
+    ]);
+
+    // Each caller gets the row as it stands after its own write, not the
+    // snapshot it read before it.
+    expect(afterSync.channelCount).toBe(4200);
+    expect(afterEpg.lastEpgFetchedAt).toEqual(epgFetchedAt);
+
+    const fetched = await playlistRepository.getById('pl-1');
+    expect(fetched?.channelCount).toBe(4200);
+    expect(fetched?.lastEpgFetchedAt).toEqual(epgFetchedAt);
+  });
+
+  it('clears a nullable column when the patch carries undefined for it', async () => {
+    await playlistRepository.create(
+      makePlaylist({ id: 'pl-1', syncInterval: 12, epgUrl: 'https://epg.example.com/guide.xml' }),
+    );
+
+    await playlistRepository.update('pl-1', { syncInterval: undefined });
+
+    const fetched = await playlistRepository.getById('pl-1');
+    expect(fetched?.syncInterval).toBeUndefined();
+    // Columns the patch never mentioned are untouched.
+    expect(fetched?.epgUrl).toBe('https://epg.example.com/guide.xml');
+  });
+
   it('throws for a missing id', async () => {
     silenceConsoleError();
     await expect(playlistRepository.update('missing-id', { name: 'X' })).rejects.toThrow(
       'Playlist with id missing-id not found',
     );
+  });
+});
+
+describe('invalid stored timestamps', () => {
+  it('reads an unparseable timestamp as the epoch instead of an Invalid Date', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    await playlistRepository.create(makePlaylist({ id: 'pl-1' }));
+    await executeStatement('UPDATE playlists SET lastFetchedAt = ?, updatedAt = ? WHERE id = ?', [
+      'not-a-date',
+      'also-not-a-date',
+      'pl-1',
+    ]);
+
+    const fetched = await playlistRepository.getById('pl-1');
+
+    // NaN made every "is it time to sync?" comparison false, so the playlist
+    // never synced again; the epoch reads as "infinitely stale" instead.
+    expect(fetched?.lastFetchedAt).toEqual(new Date(0));
+    expect(fetched?.updatedAt).toEqual(new Date(0));
+    expect(warn).toHaveBeenCalled();
   });
 });
 
@@ -195,28 +250,11 @@ describe('delete', () => {
     await expect(playlistRepository.getById('pl-1')).resolves.toBeNull();
   });
 
-  it('throws for a missing id', async () => {
-    silenceConsoleError();
-    await expect(playlistRepository.delete('missing-id')).rejects.toThrow(
-      'Playlist with id missing-id not found',
-    );
-  });
-});
-
-describe('clear', () => {
-  it('removes all playlists and legacy channel rows', async () => {
-    await playlistRepository.create(makePlaylist({ id: 'pl-1' }));
-    await playlistRepository.create(makePlaylist({ id: 'pl-2' }));
-    await executeStatement(
-      'INSERT INTO channels (id, playlistId, name, url) VALUES (?, ?, ?, ?)',
-      ['ch-1', 'pl-1', 'Channel 1', 'http://stream.example.com/1.m3u8'],
-    );
-
-    await playlistRepository.clear();
-
-    await expect(playlistRepository.getAll()).resolves.toEqual([]);
-    const channelRow = await executeQuerySingle('SELECT * FROM channels');
-    expect(channelRow).toBeNull();
+  it('accepts a delete of a playlist that is already gone', async () => {
+    // Idempotent by design: the store deletes the row and the channels behind
+    // it, and a retry (or a second tap) must not report a failure for work that
+    // has already happened.
+    await expect(playlistRepository.delete('missing-id')).resolves.toBeUndefined();
   });
 });
 

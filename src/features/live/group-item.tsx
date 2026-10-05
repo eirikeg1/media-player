@@ -1,6 +1,7 @@
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import type { useSelectionColors } from '@/constants/selection-theme';
+import { useHaptics } from '@/hooks/use-haptics';
 import { FAVORITES_GROUP_SENTINEL } from '@/lib/group-utils';
 import React from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
@@ -54,6 +55,7 @@ export const GroupItemComponent = React.memo(function GroupItemComponent({
   onToggleFavorite,
 }: GroupItemProps) {
   const colors = isSelected ? selectionColors.selected : selectionColors.unselected;
+  const haptics = useHaptics();
 
   const handlePress = () => {
     onPress(item.name);
@@ -61,6 +63,7 @@ export const GroupItemComponent = React.memo(function GroupItemComponent({
 
   const handleFavoritePress = () => {
     if (onToggleFavorite) {
+      haptics.selection();
       onToggleFavorite(item.name);
     }
   };
@@ -93,10 +96,15 @@ export const GroupItemComponent = React.memo(function GroupItemComponent({
           style={styles.groupIcon}
         />
         {onToggleFavorite && (
-          <TouchableOpacity 
+          <TouchableOpacity
             onPress={handleFavoritePress}
             style={styles.favoriteButton}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            accessibilityRole="button"
+            accessibilityLabel={
+              isFavorite ? `Unfavorite ${displayName} group` : `Favorite ${displayName} group`
+            }
+            accessibilityState={{ selected: isFavorite }}
           >
             <IconSymbol
               name={isFavorite ? 'star.fill' : 'star'}

@@ -8,6 +8,7 @@ import {
   type Credentials,
   type GroupCount,
   type PlaylistMetadata,
+  type RecommendationSignals,
   type SeriesInfo,
   type SeriesListResult,
 } from 'expo-m3u-parser';
@@ -61,6 +62,7 @@ function rustChannelToJsChannel(rustChannel: RustChannel): Channel {
       country: rustChannel.tvgCountry || undefined,
       language: rustChannel.tvgLanguage || undefined,
       url: rustChannel.tvgUrl || undefined,
+      shift: rustChannel.tvgShift ?? undefined,
     },
     group: {
       title: rustChannel.group || undefined,
@@ -162,28 +164,6 @@ export class RustChannelService {
   }
 
   /**
-   * Get channels with filtering, pagination, and sorting
-   */
-  static async getChannelsFiltered(
-    playlistId: string,
-    options?: {
-      groups?: string[];
-      search?: string;
-      contentType?: 'live' | 'movie' | 'series';
-      limit?: number;
-      offset?: number;
-      sortBy?: 'title' | 'group' | 'tvgName';
-      sortOrder?: 'asc' | 'desc';
-    }
-  ): Promise<Channel[]> {
-    const filter: ChannelFilter = {
-      playlistId,
-      ...options,
-    };
-    return this.getChannels(filter);
-  }
-
-  /**
    * Get channels with filtering, pagination, sorting, and total count.
    * Uses a single optimized query with COUNT(*) OVER() to avoid separate count call.
    */
@@ -221,6 +201,7 @@ export class RustChannelService {
     options?: {
       groups?: string[];
       search?: string;
+      exactName?: string;
       limit?: number;
       offset?: number;
       excludeAdult?: boolean;
@@ -254,53 +235,77 @@ export class RustChannelService {
   }
 
   /**
-   * Get movie recommendations from cache (generates on first call)
+   * Load the taste model used for personalized recommendations. The model is
+   * process-global, so one call per app launch serves every database handle.
    */
-  static async getMovieRecommendations(
+  static async loadRecommendationModel(path: string): Promise<void> {
+    const db = await getRustDatabase();
+    await db.loadRecommendationModel(path);
+  }
+
+  /**
+   * Get the user's current personalized movie batch, generating one
+   * synchronously when there is none yet. Falls back to the random
+   * recommender inside the engine when the user has no signals or no model
+   * is loaded.
+   */
+  static async getPersonalizedMovieRecommendations(
     playlistId: string,
+    userKey: string,
     excludeAdult: boolean,
-    limit: number
+    limit: number,
+    signals: RecommendationSignals
   ): Promise<Channel[]> {
     const db = await getRustDatabase();
-    const rustChannels = await db.getMovieRecommendations(playlistId, excludeAdult, limit);
+    const rustChannels = await db.getPersonalizedMovieRecommendations(
+      playlistId, userKey, excludeAdult, limit, signals
+    );
     return rustChannels.map(rustChannelToJsChannel);
   }
 
   /**
-   * Regenerate movie recommendations (fire-and-forget for next launch)
+   * Regenerate the personalized movie batch (fire-and-forget precompute of
+   * the batch the next read will serve)
    */
-  static async regenerateMovieRecommendations(
+  static async regeneratePersonalizedMovieRecommendations(
     playlistId: string,
+    userKey: string,
     excludeAdult: boolean,
-    limit: number
-  ): Promise<Channel[]> {
+    limit: number,
+    signals: RecommendationSignals
+  ): Promise<void> {
     const db = await getRustDatabase();
-    const rustChannels = await db.regenerateMovieRecommendations(playlistId, excludeAdult, limit);
-    return rustChannels.map(rustChannelToJsChannel);
+    await db.regeneratePersonalizedMovieRecommendations(
+      playlistId, userKey, excludeAdult, limit, signals
+    );
   }
 
-  /**
-   * Get series recommendations from cache (generates on first call)
-   */
-  static async getSeriesRecommendations(
+  /** Series counterpart of {@link getPersonalizedMovieRecommendations} */
+  static async getPersonalizedSeriesRecommendations(
     playlistId: string,
+    userKey: string,
     excludeAdult: boolean,
-    limit: number
+    limit: number,
+    signals: RecommendationSignals
   ): Promise<SeriesInfo[]> {
     const db = await getRustDatabase();
-    return db.getSeriesRecommendations(playlistId, excludeAdult, limit);
+    return db.getPersonalizedSeriesRecommendations(
+      playlistId, userKey, excludeAdult, limit, signals
+    );
   }
 
-  /**
-   * Regenerate series recommendations (fire-and-forget for next launch)
-   */
-  static async regenerateSeriesRecommendations(
+  /** Series counterpart of {@link regeneratePersonalizedMovieRecommendations} */
+  static async regeneratePersonalizedSeriesRecommendations(
     playlistId: string,
+    userKey: string,
     excludeAdult: boolean,
-    limit: number
-  ): Promise<SeriesInfo[]> {
+    limit: number,
+    signals: RecommendationSignals
+  ): Promise<void> {
     const db = await getRustDatabase();
-    return db.regenerateSeriesRecommendations(playlistId, excludeAdult, limit);
+    await db.regeneratePersonalizedSeriesRecommendations(
+      playlistId, userKey, excludeAdult, limit, signals
+    );
   }
 
   /**
@@ -316,19 +321,23 @@ export class RustChannelService {
   }
 
   /**
-   * Get rich metadata for a channel by its Xtream stream ID
+   * Build the panel URL for a window of a channel's catch-up archive.
+   *
+   * Returns null when the playlist or channel has no addressable archive —
+   * only Xtream panels expose one.
    */
-  static async getMetadataByStreamId(
+  static async getCatchupStreamUrl(
     playlistId: string,
-    streamId: number
-  ): Promise<ChannelMetadata | null> {
+    channelId: string,
+    startUnix: number,
+    durationMinutes: number
+  ): Promise<string | null> {
     const db = await getRustDatabase();
-    return db.getMetadataByStreamId(playlistId, streamId);
+    return db.getCatchupStreamUrl(playlistId, channelId, startUnix, durationMinutes);
   }
 
   /**
    * Get rich movie metadata by the channel's stable ID (the key playback uses).
-   * Preferred over getMetadataByStreamId — avoids URL parsing that could mismatch.
    */
   static async getMetadataByChannelId(
     playlistId: string,

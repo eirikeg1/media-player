@@ -1,50 +1,36 @@
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { ThemedView } from '@/components/ui/display/themed-view';
+import { saveSetting } from '@/features/user/save-setting';
 import { useUserStore } from '@/stores/user/user-store';
+import { SWITCH_TRACK, TINT } from '@/lib/theme';
 import { memo, useCallback } from 'react';
 import { StyleSheet, Switch, View } from 'react-native';
 
 export const AppPreferences = memo(function AppPreferences() {
-  const currentUser = useUserStore((state) => state.currentUser);
-  const updateSettings = useUserStore((state) => state.updateSettings);
+  const hasUser = useUserStore((state) => state.currentUser !== null);
 
-  const showHomeTab = currentUser?.settings?.showHomeTab ?? true;
-  const showLiveTab = currentUser?.settings?.showLiveTab ?? true;
-  const showVideosTab = currentUser?.settings?.showVideosTab ?? true;
-  const showSportsTab = currentUser?.settings?.showSportsTab ?? true;
-  const handleToggleHomeTab = useCallback(
-    (value: boolean) => {
-      if (!currentUser) return;
-      updateSettings(currentUser.id, { showHomeTab: value });
-    },
-    [currentUser, updateSettings],
-  );
+  const showHomeTab = useUserStore((s) => s.currentUser?.settings?.showHomeTab ?? true);
+  const showLiveTab = useUserStore((s) => s.currentUser?.settings?.showLiveTab ?? true);
+  const showVideosTab = useUserStore((s) => s.currentUser?.settings?.showVideosTab ?? true);
+  const showSportsTab = useUserStore((s) => s.currentUser?.settings?.showSportsTab ?? true);
 
-  const handleToggleLiveTab = useCallback(
-    (value: boolean) => {
-      if (!currentUser) return;
-      updateSettings(currentUser.id, { showLiveTab: value });
-    },
-    [currentUser, updateSettings],
-  );
+  const handleToggleHomeTab = useCallback((value: boolean) => {
+    void saveSetting({ showHomeTab: value }, 'Home tab visibility');
+  }, []);
 
-  const handleToggleVideosTab = useCallback(
-    (value: boolean) => {
-      if (!currentUser) return;
-      updateSettings(currentUser.id, { showVideosTab: value });
-    },
-    [currentUser, updateSettings],
-  );
+  const handleToggleLiveTab = useCallback((value: boolean) => {
+    void saveSetting({ showLiveTab: value }, 'Live tab visibility');
+  }, []);
 
-  const handleToggleSportsTab = useCallback(
-    (value: boolean) => {
-      if (!currentUser) return;
-      updateSettings(currentUser.id, { showSportsTab: value });
-    },
-    [currentUser, updateSettings],
-  );
+  const handleToggleVideosTab = useCallback((value: boolean) => {
+    void saveSetting({ showVideosTab: value }, 'Videos tab visibility');
+  }, []);
 
-  if (!currentUser) {
+  const handleToggleSportsTab = useCallback((value: boolean) => {
+    void saveSetting({ showSportsTab: value }, 'Sports tab visibility');
+  }, []);
+
+  if (!hasUser) {
     return null;
   }
 
@@ -62,7 +48,7 @@ export const AppPreferences = memo(function AppPreferences() {
           <Switch
             value={showHomeTab}
             onValueChange={handleToggleHomeTab}
-            trackColor={{ false: '#767577', true: '#007AFF' }}
+            trackColor={{ false: SWITCH_TRACK, true: TINT }}
             accessibilityLabel="Show Home tab"
           />
         </View>
@@ -74,7 +60,7 @@ export const AppPreferences = memo(function AppPreferences() {
           <Switch
             value={showLiveTab}
             onValueChange={handleToggleLiveTab}
-            trackColor={{ false: '#767577', true: '#007AFF' }}
+            trackColor={{ false: SWITCH_TRACK, true: TINT }}
             accessibilityLabel="Show Live tab"
           />
         </View>
@@ -86,7 +72,7 @@ export const AppPreferences = memo(function AppPreferences() {
           <Switch
             value={showVideosTab}
             onValueChange={handleToggleVideosTab}
-            trackColor={{ false: '#767577', true: '#007AFF' }}
+            trackColor={{ false: SWITCH_TRACK, true: TINT }}
             accessibilityLabel="Show Videos tab"
           />
         </View>
@@ -98,7 +84,7 @@ export const AppPreferences = memo(function AppPreferences() {
           <Switch
             value={showSportsTab}
             onValueChange={handleToggleSportsTab}
-            trackColor={{ false: '#767577', true: '#007AFF' }}
+            trackColor={{ false: SWITCH_TRACK, true: TINT }}
             accessibilityLabel="Show Sports tab"
           />
         </View>

@@ -4,17 +4,19 @@
  * fake for series-episode resolution. Only the native file-system boundary is
  * mocked.
  */
-import { getDatabase } from '@/db/sqlite-client';
+import { playlistRepository } from '@/db/playlist-repository';
 import { userRepository } from '@/db/user-repository';
 import { getRustDatabase } from '@/services/rust-channel-service';
+import { useFirstPageCacheStore } from '@/stores/cache';
 import { useHeaderBackgroundStore } from '@/stores/header-background/header-background-store';
 import { usePlaylistStore } from '@/stores/playlist/playlist-store';
-import { useUserStore } from '@/stores/user/user-store';
-import { makePlaylistMetadata } from '@/test/factories';
+import { selectExcludeAdult, useUserStore } from '@/stores/user/user-store';
+import { makePlaylist, makePlaylistMetadata } from '@/test/factories';
 import { Database as M3uDatabaseFake, __registerRemoteM3u } from '@/test/fakes/m3u-database-fake';
-import { BASIC_M3U } from '@/test/fixtures';
+import { BASIC_M3U, BASIC_M3U_COUNTS } from '@/test/fixtures';
 import { flushAsync, resetStores, resetTestDatabases } from '@/test/helpers';
 import type { Channel } from '@/types/playlist.types';
+import type { User } from '@/types/user.types';
 
 type FakeDb = InstanceType<typeof M3uDatabaseFake>;
 
@@ -64,12 +66,7 @@ async function watchChannel(
 
 beforeEach(async () => {
   await resetTestDatabases();
-  // The app never enables PRAGMA foreign_keys (expo-sqlite defaults to OFF),
-  // but better-sqlite3 behind the test fake turns it ON. Match production:
-  // favorites reference Rust-DB channel ids that the legacy `channels` table
-  // (still targeted by an old FOREIGN KEY clause) does not contain.
-  await (await getDatabase()).execAsync('PRAGMA foreign_keys = OFF');
-  resetStores(useUserStore, usePlaylistStore, useHeaderBackgroundStore);
+  resetStores(useUserStore, usePlaylistStore, useHeaderBackgroundStore, useFirstPageCacheStore);
 });
 
 describe('loadUsers', () => {
@@ -83,7 +80,7 @@ describe('loadUsers', () => {
     expect(state.error).toBeNull();
   });
 
-  it('loads persisted users, selects the first as current, and hydrates favorites', async () => {
+  it('loads persisted users and selects the first as current', async () => {
     const created = await useUserStore.getState().createUser({ username: 'Alice' });
     await userRepository.addFavoriteChannel(created.id, 'nrk1.no');
 
@@ -97,7 +94,11 @@ describe('loadUsers', () => {
     expect(state.users).toHaveLength(1);
     expect(state.currentUser?.id).toBe(created.id);
     expect(state.currentUser?.settings?.theme).toBe('system');
-    expect(state.favoriteChannels).toEqual(['nrk1.no']);
+    // Hydration is the caller's job (runInit), so loadUsers leaves it alone.
+    expect(state.favoriteChannels).toEqual([]);
+
+    await useUserStore.getState().loadFavoriteChannels(created.id);
+    expect(useUserStore.getState().favoriteChannels).toEqual(['nrk1.no']);
   });
 });
 
@@ -126,6 +127,38 @@ describe('createUser', () => {
   });
 });
 
+describe('hydrateForUser', () => {
+  it('replaces the previous user\'s favourites and reactions', async () => {
+    const alice = await useUserStore.getState().createUser({ username: 'Alice' });
+    const bob = await useUserStore.getState().createUser({ username: 'Bob' });
+    await useUserStore.getState().toggleFavorite(alice.id, 'ch-alice');
+    await useUserStore.getState().setReaction(alice.id, 'movie-1', 1);
+    await userRepository.addFavoriteChannel(bob.id, 'ch-bob');
+
+    await useUserStore.getState().hydrateForUser(bob.id);
+
+    const state = useUserStore.getState();
+    expect(state.favoriteChannels).toEqual(['ch-bob']);
+    expect(state.contentReactions).toEqual({});
+    expect(useHeaderBackgroundStore.getState().isLoaded).toBe(true);
+  });
+
+  it('lets the latest hydration win when two overlap', async () => {
+    const alice = await useUserStore.getState().createUser({ username: 'Alice' });
+    const bob = await useUserStore.getState().createUser({ username: 'Bob' });
+    await userRepository.addFavoriteChannel(alice.id, 'ch-alice');
+    await userRepository.addFavoriteChannel(bob.id, 'ch-bob');
+
+    await Promise.all([
+      useUserStore.getState().hydrateForUser(alice.id),
+      useUserStore.getState().hydrateForUser(bob.id),
+    ]);
+    await flushAsync();
+
+    expect(useUserStore.getState().favoriteChannels).toEqual(['ch-bob']);
+  });
+});
+
 describe('switchUser', () => {
   it('switches currentUser and reloads favorites for the new user', async () => {
     const alice = await useUserStore.getState().createUser({ username: 'Alice' });
@@ -151,6 +184,29 @@ describe('switchUser', () => {
     expect(persisted?.lastActiveAt).toBeDefined();
   });
 
+  it('drops the first-page cache built for the previous user', async () => {
+    const alice = await useUserStore.getState().createUser({ username: 'Alice' });
+    const bob = await useUserStore.getState().createUser({ username: 'Bob' });
+    await importBasicPlaylist();
+    // The playlist metadata lives in iptv.db; `loadPlaylists` reads it from
+    // there to decide which playlist is active.
+    await playlistRepository.create(makePlaylist({ id: PLAYLIST_ID, url: PLAYLIST_URL }));
+    await usePlaylistStore.getState().loadPlaylists();
+    useFirstPageCacheStore.getState().setCachedChannels(PLAYLIST_ID, 'live', [], 1, false);
+    expect(
+      useFirstPageCacheStore.getState().getCachedChannels(PLAYLIST_ID, 'live', false),
+    ).not.toBeNull();
+
+    await useUserStore.getState().switchUser(bob.id);
+
+    // Cached pages were sorted with Alice's favourites; Bob gets a fresh
+    // pre-fetch instead (the fixture has live channels, so it is populated).
+    const cached = useFirstPageCacheStore.getState().getCachedChannels(PLAYLIST_ID, 'live', false);
+    expect(cached?.totalCount).toBe(BASIC_M3U_COUNTS.live);
+    expect(useUserStore.getState().currentUser?.id).toBe(bob.id);
+    expect(alice.id).not.toBe(bob.id);
+  });
+
   it('sets error state and throws for an unknown user id', async () => {
     const alice = await useUserStore.getState().createUser({ username: 'Alice' });
 
@@ -162,6 +218,42 @@ describe('switchUser', () => {
     expect(state.error).toBe('User with id missing-id not found');
     expect(state.isLoading).toBe(false);
     expect(state.currentUser?.id).toBe(alice.id);
+  });
+
+  it('treats a repeated switch to the same user as the one already running', async () => {
+    await useUserStore.getState().createUser({ username: 'Alice' });
+    const bob = await useUserStore.getState().createUser({ username: 'Bob' });
+    const updateLastActive = jest.spyOn(userRepository, 'updateLastActive');
+
+    // A double tap on the same profile card.
+    await Promise.all([
+      useUserStore.getState().switchUser(bob.id),
+      useUserStore.getState().switchUser(bob.id),
+    ]);
+
+    // One switch, not two interleaved sequences of dependent writes.
+    expect(updateLastActive).toHaveBeenCalledTimes(1);
+    expect(useUserStore.getState().currentUser?.id).toBe(bob.id);
+  });
+
+  it('runs two different switches one after another, last one winning', async () => {
+    const alice = await useUserStore.getState().createUser({ username: 'Alice' });
+    const bob = await useUserStore.getState().createUser({ username: 'Bob' });
+    await userRepository.addFavoriteChannel(alice.id, 'ch-alice');
+    await userRepository.addFavoriteChannel(bob.id, 'ch-bob');
+
+    await Promise.all([
+      useUserStore.getState().switchUser(bob.id),
+      useUserStore.getState().switchUser(alice.id),
+    ]);
+    await flushAsync();
+
+    // Interleaved, the two would leave one user current with the other's
+    // favourites on screen.
+    const state = useUserStore.getState();
+    expect(state.currentUser?.id).toBe(alice.id);
+    expect(state.favoriteChannels).toEqual(['ch-alice']);
+    expect(state.isLoading).toBe(false);
   });
 });
 
@@ -202,6 +294,26 @@ describe('deleteUser', () => {
     expect(state.users.map((u) => u.id)).toEqual([alice.id]);
     expect(state.currentUser?.id).toBe(alice.id);
   });
+
+  it('reloads the playlists and drops the cached pages, like a switch does', async () => {
+    const alice = await useUserStore.getState().createUser({ username: 'Alice' });
+    const bob = await useUserStore.getState().createUser({ username: 'Bob' });
+    await importBasicPlaylist();
+    await playlistRepository.create(
+      makePlaylist({ id: PLAYLIST_ID, url: PLAYLIST_URL, createdByUserId: bob.id }),
+    );
+    await usePlaylistStore.getState().loadPlaylists();
+    useFirstPageCacheStore.getState().setCachedChannels(PLAYLIST_ID, 'live', [], 1, false);
+
+    await useUserStore.getState().deleteUser(alice.id);
+
+    // Bob took over: the list and the pages cached from it were rebuilt for him
+    // rather than left as Alice's (a page cached with her favourites and her
+    // adult filter belongs to nobody now).
+    const cached = useFirstPageCacheStore.getState().getCachedChannels(PLAYLIST_ID, 'live', false);
+    expect(cached?.totalCount).toBe(BASIC_M3U_COUNTS.live);
+    expect(usePlaylistStore.getState().playlists.map((p) => p.id)).toEqual([PLAYLIST_ID]);
+  });
 });
 
 describe('updateSettings', () => {
@@ -230,7 +342,7 @@ describe('toggleFavorite', () => {
     await useUserStore.getState().toggleFavorite(user.id, 'nrk1.no');
 
     expect(useUserStore.getState().favoriteChannels).toEqual(['nrk1.no']);
-    expect(await useUserStore.getState().isFavorite(user.id, 'nrk1.no')).toBe(true);
+    await expect(userRepository.getFavoriteChannels(user.id)).resolves.toEqual(['nrk1.no']);
   });
 
   it('removes the favorite on a second toggle', async () => {
@@ -240,7 +352,88 @@ describe('toggleFavorite', () => {
     await useUserStore.getState().toggleFavorite(user.id, 'nrk1.no');
 
     expect(useUserStore.getState().favoriteChannels).toEqual([]);
-    expect(await useUserStore.getState().isFavorite(user.id, 'nrk1.no')).toBe(false);
+    await expect(userRepository.getFavoriteChannels(user.id)).resolves.toEqual([]);
+  });
+
+  it('shows the change immediately and settles on one entry per channel', async () => {
+    const user = await useUserStore.getState().createUser({ username: 'Alice' });
+
+    // Not awaited: the star has to flip on the tap, not on the round-trip.
+    const pending = useUserStore.getState().toggleFavorite(user.id, 'nrk1.no');
+    expect(useUserStore.getState().favoriteChannels).toEqual(['nrk1.no']);
+    await pending;
+
+    // A repeated add (a double-tap racing its own write) must not duplicate it.
+    await useUserStore.getState().toggleFavorite(user.id, 'nrk2.no');
+    expect(useUserStore.getState().favoriteChannels).toEqual(['nrk2.no', 'nrk1.no']);
+    const persisted = await userRepository.getFavoriteChannels(user.id);
+    expect([...persisted].sort()).toEqual(['nrk1.no', 'nrk2.no']);
+  });
+
+  it('rolls the optimistic update back when the write fails', async () => {
+    const user = await useUserStore.getState().createUser({ username: 'Alice' });
+    await useUserStore.getState().toggleFavorite(user.id, 'nrk1.no');
+    jest
+      .spyOn(userRepository, 'addFavoriteChannel')
+      .mockRejectedValueOnce(new Error('database is locked'));
+
+    await expect(
+      useUserStore.getState().toggleFavorite(user.id, 'nrk2.no'),
+    ).rejects.toThrow('database is locked');
+
+    expect(useUserStore.getState().favoriteChannels).toEqual(['nrk1.no']);
+  });
+
+  it('reverts only the failed id, keeping a toggle that landed in between', async () => {
+    const user = await useUserStore.getState().createUser({ username: 'Alice' });
+    jest
+      .spyOn(userRepository, 'addFavoriteChannel')
+      .mockImplementationOnce(async () => {
+        throw new Error('database is locked');
+      });
+
+    const failing = useUserStore.getState().toggleFavorite(user.id, 'nrk1.no');
+    // A second star tapped while the first write is in flight.
+    const succeeding = useUserStore.getState().toggleFavorite(user.id, 'nrk2.no');
+
+    await expect(failing).rejects.toThrow('database is locked');
+    await succeeding;
+
+    // Restoring the whole list would have wiped the second toggle.
+    expect(useUserStore.getState().favoriteChannels).toEqual(['nrk2.no']);
+    await expect(userRepository.getFavoriteChannels(user.id)).resolves.toEqual(['nrk2.no']);
+  });
+
+  it('leaves the list alone once another user became current', async () => {
+    const alice = await useUserStore.getState().createUser({ username: 'Alice' });
+    const bob = await useUserStore.getState().createUser({ username: 'Bob' });
+    await useUserStore.getState().switchUser(bob.id);
+    await flushAsync();
+
+    // A star tapped on a screen that belonged to Alice: the write is hers, but
+    // the list on screen is Bob's.
+    await useUserStore.getState().toggleFavorite(alice.id, 'nrk1.no');
+
+    expect(useUserStore.getState().favoriteChannels).toEqual([]);
+    await expect(userRepository.getFavoriteChannels(alice.id)).resolves.toEqual(['nrk1.no']);
+  });
+});
+
+describe('selectExcludeAdult', () => {
+  it('fails closed until the settings are known', () => {
+    // A query that runs before the user's settings have loaded must not be the
+    // reason adult content shows up.
+    expect(selectExcludeAdult(null)).toBe(true);
+    expect(selectExcludeAdult(undefined)).toBe(true);
+    expect(selectExcludeAdult({ id: 'u-1' } as User)).toBe(true);
+  });
+
+  it('follows the setting once it is there', () => {
+    const withSetting = (parentalControlEnabled: boolean) =>
+      ({ id: 'u-1', settings: { parentalControlEnabled } }) as User;
+
+    expect(selectExcludeAdult(withSetting(false))).toBe(false);
+    expect(selectExcludeAdult(withSetting(true))).toBe(true);
   });
 });
 

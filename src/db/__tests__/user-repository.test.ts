@@ -8,6 +8,7 @@
  */
 import { userRepository } from '@/db/user-repository';
 import { executeQuery, executeQuerySingle, executeStatement } from '@/db/sqlite-client';
+import { COMPLETION_RATIO, RESUME_MIN_SECONDS } from '@/lib/viewing-progress';
 import type { ContentType, User } from '@/types/user.types';
 import { DEFAULT_USER_SETTINGS } from '@/types/user.types';
 import { FACTORY_NOW as BASE_TIME } from '@/test/factories';
@@ -228,6 +229,32 @@ describe('deleteUser', () => {
       'User with id missing-id not found',
     );
   });
+
+  it('hands the deleted user\'s playlists over as shared, not dangling', async () => {
+    const alice = await createUser('Alice');
+    const bob = await createUser('Bob');
+    const now = new Date().toISOString();
+    for (const [id, owner] of [['pl-alice', alice.id], ['pl-bob', bob.id]]) {
+      await executeStatement(
+        'INSERT INTO playlists (id, name, url, createdByUserId, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)',
+        [id, id, `https://iptv.example.com/${id}.m3u`, owner, now, now],
+      );
+    }
+
+    await userRepository.deleteUser(alice.id);
+
+    // A dangling createdByUserId would hide the playlist from everyone; NULL
+    // means "shared", so Bob keeps seeing it (and its imported channels).
+    const visible = await executeQuery<{ id: string }>(
+      'SELECT id FROM playlists WHERE createdByUserId IS NULL',
+    );
+    expect(visible.map((row) => row.id)).toEqual(['pl-alice']);
+    const bobsPlaylist = await executeQuerySingle<{ createdByUserId: string | null }>(
+      'SELECT createdByUserId FROM playlists WHERE id = ?',
+      ['pl-bob'],
+    );
+    expect(bobsPlaylist?.createdByUserId).toBe(bob.id);
+  });
 });
 
 describe('updateLastActive', () => {
@@ -281,6 +308,67 @@ describe('user settings', () => {
     settings = await userRepository.getUserSettings(user.id);
     expect(settings?.parentalControlEnabled).toBe(true);
     expect(settings?.showLiveTab).toBe(false);
+  });
+
+  it('writes only the patched columns, so a stale read cannot clobber others', async () => {
+    const user = await createUser();
+
+    // Genuinely concurrent: two switches toggled in the same moment. Each reads
+    // the row before writing, so a full-row write would resurrect what it read
+    // and undo the other's change.
+    const [afterTheme, afterTab] = await Promise.all([
+      userRepository.updateUserSettings(user.id, { theme: 'dark' }),
+      userRepository.updateUserSettings(user.id, { showLiveTab: false }),
+    ]);
+    expect(afterTheme.theme).toBe('dark');
+    expect(afterTab.showLiveTab).toBe(false);
+
+    const persisted = await userRepository.getUserSettings(user.id);
+    expect(persisted?.theme).toBe('dark');
+    expect(persisted?.showLiveTab).toBe(false);
+  });
+
+  it('ignores an explicit undefined for a column that cannot be null', async () => {
+    const user = await createUser();
+    await userRepository.updateUserSettings(user.id, { theme: 'dark', showLiveTab: false });
+
+    // A caller spreading optional fields ends up passing `undefined`; writing it
+    // would either violate NOT NULL or store a coerced 0/'undefined'.
+    const updated = await userRepository.updateUserSettings(user.id, {
+      theme: undefined,
+      showLiveTab: undefined,
+    });
+
+    expect(updated).toMatchObject({ theme: 'dark', showLiveTab: false });
+    const persisted = await userRepository.getUserSettings(user.id);
+    expect(persisted?.theme).toBe('dark');
+    expect(persisted?.showLiveTab).toBe(false);
+  });
+
+  it('still clears a nullable column when the patch carries undefined', async () => {
+    const user = await createUser();
+    await userRepository.updateUserSettings(user.id, {
+      activePlaylistId: 'pl-1',
+      parentalControlPin: '1234',
+    });
+
+    const updated = await userRepository.updateUserSettings(user.id, {
+      activePlaylistId: undefined,
+      parentalControlPin: undefined,
+    });
+
+    expect(updated.activePlaylistId).toBeUndefined();
+    const persisted = await userRepository.getUserSettings(user.id);
+    expect(persisted?.activePlaylistId).toBeUndefined();
+    expect(persisted?.parentalControlPin).toBeUndefined();
+  });
+
+  it('accepts an empty patch without touching the row', async () => {
+    const user = await createUser();
+
+    const updated = await userRepository.updateUserSettings(user.id, {});
+
+    expect(updated).toEqual({ userId: user.id, ...DEFAULT_USER_SETTINGS });
   });
 
   it('throws when updating settings for a missing user', async () => {
@@ -346,32 +434,86 @@ describe('favorite channels', () => {
   });
 });
 
-describe('hidden channels', () => {
-  beforeEach(async () => {
-    await seedChannels('ch-1');
-  });
-
-  it('round-trips hide/is/unhide with dedup', async () => {
+describe('content reactions', () => {
+  it('stores a like and returns it with its timestamp', async () => {
     const user = await createUser();
 
-    await userRepository.hideChannel(user.id, 'ch-1');
-    await userRepository.hideChannel(user.id, 'ch-1');
+    await userRepository.setContentReaction(user.id, 'movie-1', 1);
 
-    await expect(userRepository.isChannelHidden(user.id, 'ch-1')).resolves.toBe(true);
-    await expect(userRepository.getHiddenChannels(user.id)).resolves.toEqual(['ch-1']);
-
-    await userRepository.unhideChannel(user.id, 'ch-1');
-    await expect(userRepository.isChannelHidden(user.id, 'ch-1')).resolves.toBe(false);
-    await expect(userRepository.getHiddenChannels(user.id)).resolves.toEqual([]);
+    await expect(userRepository.getContentReactions(user.id)).resolves.toEqual([
+      { channelId: 'movie-1', reaction: 1, createdAt: BASE_TIME.toISOString() },
+    ]);
   });
 
-  it('isolates hidden channels per user', async () => {
+  it('upserts so like and dislike are mutually exclusive', async () => {
+    const user = await createUser();
+
+    await userRepository.setContentReaction(user.id, 'movie-1', 1);
+    tick();
+    await userRepository.setContentReaction(user.id, 'movie-1', -1);
+
+    const reactions = await userRepository.getContentReactions(user.id);
+    expect(reactions).toEqual([
+      {
+        channelId: 'movie-1',
+        reaction: -1,
+        createdAt: new Date(BASE_TIME.getTime() + 1000).toISOString(),
+      },
+    ]);
+
+    const rows = await executeQuery(
+      'SELECT * FROM user_content_reactions WHERE userId = ? AND channelId = ?',
+      [user.id, 'movie-1'],
+    );
+    expect(rows).toHaveLength(1);
+  });
+
+  it('deletes the row when the reaction is null', async () => {
+    const user = await createUser();
+    await userRepository.setContentReaction(user.id, 'movie-1', 1);
+    await userRepository.setContentReaction(user.id, 'series:Some Show', -1);
+
+    await userRepository.setContentReaction(user.id, 'movie-1', null);
+
+    await expect(userRepository.getContentReactions(user.id)).resolves.toEqual([
+      { channelId: 'series:Some Show', reaction: -1, createdAt: BASE_TIME.toISOString() },
+    ]);
+  });
+
+  it('clearing a reaction that does not exist is a no-op', async () => {
+    const user = await createUser();
+
+    await userRepository.setContentReaction(user.id, 'movie-1', null);
+
+    await expect(userRepository.getContentReactions(user.id)).resolves.toEqual([]);
+  });
+
+  it('isolates reactions per user', async () => {
     const alice = await createUser('Alice');
     const bob = await createUser('Bob');
 
-    await userRepository.hideChannel(alice.id, 'ch-1');
+    await userRepository.setContentReaction(alice.id, 'movie-1', 1);
+    await userRepository.setContentReaction(bob.id, 'movie-1', -1);
 
-    await expect(userRepository.isChannelHidden(bob.id, 'ch-1')).resolves.toBe(false);
+    await expect(userRepository.getContentReactions(alice.id)).resolves.toEqual([
+      { channelId: 'movie-1', reaction: 1, createdAt: BASE_TIME.toISOString() },
+    ]);
+    await expect(userRepository.getContentReactions(bob.id)).resolves.toEqual([
+      { channelId: 'movie-1', reaction: -1, createdAt: BASE_TIME.toISOString() },
+    ]);
+  });
+
+  it('deleteUser removes the user\'s reactions', async () => {
+    const user = await createUser();
+    await userRepository.setContentReaction(user.id, 'movie-1', 1);
+
+    await userRepository.deleteUser(user.id);
+
+    const rows = await executeQuery(
+      'SELECT * FROM user_content_reactions WHERE userId = ?',
+      [user.id],
+    );
+    expect(rows).toEqual([]);
   });
 });
 
@@ -397,52 +539,6 @@ describe('favorite groups', () => {
     await userRepository.addFavoriteGroup(alice.id, 'Sports');
 
     await expect(userRepository.getFavoriteGroups(bob.id)).resolves.toEqual([]);
-  });
-});
-
-describe('channel order', () => {
-  beforeEach(async () => {
-    await seedChannels('ch-1', 'ch-2');
-  });
-
-  it('returns the order as a map', async () => {
-    const user = await createUser();
-
-    await userRepository.setChannelOrder(user.id, 'ch-1', 2);
-    await userRepository.setChannelOrder(user.id, 'ch-2', 1);
-
-    const order = await userRepository.getChannelOrder(user.id);
-    expect(order.get('ch-1')).toBe(2);
-    expect(order.get('ch-2')).toBe(1);
-    expect(order.size).toBe(2);
-  });
-
-  it('upserts so the latest order wins without duplicating rows', async () => {
-    const user = await createUser();
-
-    await userRepository.setChannelOrder(user.id, 'ch-1', 5);
-    await userRepository.setChannelOrder(user.id, 'ch-1', 9);
-
-    const order = await userRepository.getChannelOrder(user.id);
-    expect(order.get('ch-1')).toBe(9);
-
-    const rows = await executeQuery(
-      'SELECT * FROM user_channel_order WHERE userId = ? AND channelId = ?',
-      [user.id, 'ch-1'],
-    );
-    expect(rows).toHaveLength(1);
-  });
-
-  it('clearChannelOrder only clears the given user', async () => {
-    const alice = await createUser('Alice');
-    const bob = await createUser('Bob');
-    await userRepository.setChannelOrder(alice.id, 'ch-1', 1);
-    await userRepository.setChannelOrder(bob.id, 'ch-1', 1);
-
-    await userRepository.clearChannelOrder(alice.id);
-
-    expect((await userRepository.getChannelOrder(alice.id)).size).toBe(0);
-    expect((await userRepository.getChannelOrder(bob.id)).size).toBe(1);
   });
 });
 
@@ -647,6 +743,81 @@ describe('getRecentlyWatched', () => {
     const items = await userRepository.getRecentlyWatched(user.id, 'playlist-a');
     expect(items.map((item) => item.channelId)).toEqual(['ch-a']);
   });
+
+  it('drops live channels when asked, so the limit is spent on movies and series', async () => {
+    const user = await createUser();
+    await watchSession({ userId: user.id, channelId: 'movie-1', contentType: 'movie' });
+    tick();
+    await watchSession({ userId: user.id, channelId: 'live-1', contentType: 'live' });
+    tick();
+    await watchSession({ userId: user.id, channelId: 'episode-1', contentType: 'series' });
+
+    await expect(
+      userRepository.getRecentlyWatched(user.id, PLAYLIST_ID, 20, { excludeLive: true }),
+    ).resolves.toMatchObject([{ channelId: 'episode-1' }, { channelId: 'movie-1' }]);
+    // The default keeps the old behaviour.
+    const all = await userRepository.getRecentlyWatched(user.id, PLAYLIST_ID);
+    expect(all.map((item) => item.channelId)).toContain('live-1');
+  });
+});
+
+describe('getWatchStatsForChannels', () => {
+  it('returns the most recently watched of the given channels', async () => {
+    const user = await createUser();
+    await watchSession({ userId: user.id, channelId: 's01e01', contentType: 'series' });
+    tick();
+    await watchSession({ userId: user.id, channelId: 's01e02', contentType: 'series', endPosition: 300, durationWatched: 300, totalDuration: 1000 });
+    tick();
+    await watchSession({ userId: user.id, channelId: 'unrelated-movie' });
+
+    const stats = await userRepository.getWatchStatsForChannels(user.id, PLAYLIST_ID, [
+      's01e01',
+      's01e02',
+      's01e03',
+    ]);
+
+    expect(stats).toMatchObject({ channelId: 's01e02', lastPosition: 300, totalDuration: 1000 });
+  });
+
+  it('returns null when none of the channels was ever watched', async () => {
+    const user = await createUser();
+    await watchSession({ userId: user.id, channelId: 'movie-1' });
+
+    await expect(
+      userRepository.getWatchStatsForChannels(user.id, PLAYLIST_ID, ['s01e01', 's01e02']),
+    ).resolves.toBeNull();
+    await expect(
+      userRepository.getWatchStatsForChannels(user.id, PLAYLIST_ID, []),
+    ).resolves.toBeNull();
+  });
+
+  it('finds a match past the chunking boundary', async () => {
+    const user = await createUser();
+    await watchSession({ userId: user.id, channelId: 'needle' });
+    const channelIds = [
+      ...Array.from({ length: 700 }, (_, i) => `filler-${i}`),
+      'needle',
+    ];
+
+    const stats = await userRepository.getWatchStatsForChannels(
+      user.id,
+      PLAYLIST_ID,
+      channelIds,
+    );
+
+    expect(stats?.channelId).toBe('needle');
+  });
+
+  it('scopes results to the requested user and playlist', async () => {
+    const alice = await createUser('Alice');
+    const bob = await createUser('Bob');
+    await watchSession({ userId: bob.id, channelId: 'shared-episode' });
+    await watchSession({ userId: alice.id, channelId: 'shared-episode', playlistId: 'other' });
+
+    await expect(
+      userRepository.getWatchStatsForChannels(alice.id, PLAYLIST_ID, ['shared-episode']),
+    ).resolves.toBeNull();
+  });
 });
 
 describe('getSavedPosition', () => {
@@ -661,45 +832,57 @@ describe('getSavedPosition', () => {
     ).resolves.toBeNull();
   });
 
-  it('returns null below 10% of totalDuration', async () => {
+  it(`returns null below the ${RESUME_MIN_SECONDS}s resume floor`, async () => {
     const user = await createUser();
-    await watchTo(user.id, 'movie-1', 99, 1000);
+    await watchTo(user.id, 'movie-1', RESUME_MIN_SECONDS - 1, 1000);
     await expect(
       userRepository.getSavedPosition(user.id, PLAYLIST_ID, 'movie-1'),
     ).resolves.toBeNull();
   });
 
-  it('returns the position between 10% (inclusive) and 90% (exclusive)', async () => {
+  it('returns the position from the resume floor up to 90% (exclusive)', async () => {
     const user = await createUser();
-    await watchTo(user.id, 'at-ten', 100, 1000);
+    await watchTo(user.id, 'at-floor', RESUME_MIN_SECONDS, 1000);
     await watchTo(user.id, 'midway', 500, 1000);
 
     await expect(
-      userRepository.getSavedPosition(user.id, PLAYLIST_ID, 'at-ten'),
-    ).resolves.toEqual({ lastPosition: 100, totalDuration: 1000 });
+      userRepository.getSavedPosition(user.id, PLAYLIST_ID, 'at-floor'),
+    ).resolves.toEqual({ lastPosition: RESUME_MIN_SECONDS, totalDuration: 1000 });
     await expect(
       userRepository.getSavedPosition(user.id, PLAYLIST_ID, 'midway'),
     ).resolves.toEqual({ lastPosition: 500, totalDuration: 1000 });
   });
 
-  it('returns null at or above 90% of totalDuration', async () => {
+  it(`returns null at or above ${COMPLETION_RATIO * 100}% of totalDuration`, async () => {
     const user = await createUser();
-    await watchTo(user.id, 'movie-1', 900, 1000);
+    // Derived from the shared constant, not a copy of it: the query inlines that
+    // number as a literal (so the partial index can match), and a drift between
+    // the two would silently change what counts as finished.
+    const total = 1000;
+    await watchTo(user.id, 'at-ratio', total * COMPLETION_RATIO, total);
+    await watchTo(user.id, 'just-below', total * COMPLETION_RATIO - 1, total);
+
     await expect(
-      userRepository.getSavedPosition(user.id, PLAYLIST_ID, 'movie-1'),
+      userRepository.getSavedPosition(user.id, PLAYLIST_ID, 'at-ratio'),
     ).resolves.toBeNull();
+    await expect(
+      userRepository.getSavedPosition(user.id, PLAYLIST_ID, 'just-below'),
+    ).resolves.toEqual({ lastPosition: total * COMPLETION_RATIO - 1, totalDuration: total });
   });
 
-  it('returns null when totalDuration is unknown', async () => {
+  it('resumes an unknown duration, which cannot be checked for completion', async () => {
     const user = await createUser();
     await watchTo(user.id, 'movie-1', 500);
     await expect(
       userRepository.getSavedPosition(user.id, PLAYLIST_ID, 'movie-1'),
-    ).resolves.toBeNull();
+    ).resolves.toEqual({ lastPosition: 500, totalDuration: undefined });
   });
 });
 
 describe('closeOrphanedSessions', () => {
+  /** Sessions only count as orphaned once they are over an hour old. */
+  const PAST_ORPHAN_AGE_MS = 3_600_000 + 60_000;
+
   it('ends open sessions, derives completion, and aggregates stats', async () => {
     const user = await createUser();
 
@@ -724,7 +907,7 @@ describe('closeOrphanedSessions', () => {
     });
     await userRepository.updateSessionProgress(earlyExit, 200, 180);
 
-    tick(60_000);
+    tick(PAST_ORPHAN_AGE_MS);
     await userRepository.closeOrphanedSessions();
 
     const sessions = await userRepository.getViewingHistory(user.id);
@@ -758,6 +941,58 @@ describe('closeOrphanedSessions', () => {
     const stats = await getChannelStatsRow(user.id, 'movie-1');
     expect(stats?.watchCount).toBe(1);
   });
+
+  it('leaves recent sessions alone — they are still playing, not orphaned', async () => {
+    const user = await createUser();
+    const sessionId = await userRepository.startViewingSession({
+      userId: user.id,
+      playlistId: PLAYLIST_ID,
+      channelId: 'movie-1',
+      channelName: 'Movie 1',
+      contentType: 'movie',
+      totalDuration: 1000,
+    });
+    tick(60_000);
+
+    await userRepository.closeOrphanedSessions();
+
+    const [session] = await userRepository.getViewingHistory(user.id);
+    expect(session.id).toBe(sessionId);
+    expect(session.endedAt).toBeUndefined();
+    expect(await getChannelStatsRow(user.id, 'movie-1')).toBeNull();
+  });
+
+  it('never closes the caller\'s active session, however old', async () => {
+    const user = await createUser();
+    const activeSessionId = await userRepository.startViewingSession({
+      userId: user.id,
+      playlistId: PLAYLIST_ID,
+      channelId: 'long-movie',
+      channelName: 'Long Movie',
+      contentType: 'movie',
+      totalDuration: 20_000,
+    });
+    const crashed = await userRepository.startViewingSession({
+      userId: user.id,
+      playlistId: PLAYLIST_ID,
+      channelId: 'crashed',
+      channelName: 'Crashed',
+      contentType: 'movie',
+      totalDuration: 1000,
+    });
+    tick(PAST_ORPHAN_AGE_MS);
+
+    await userRepository.closeOrphanedSessions(activeSessionId);
+
+    const sessions = await userRepository.getViewingHistory(user.id);
+    expect(sessions.find((s) => s.id === activeSessionId)?.endedAt).toBeUndefined();
+    expect(sessions.find((s) => s.id === crashed)?.endedAt).toBe(
+      new Date(jest.now()).toISOString(),
+    );
+    // Double-counting the active session in the stats is the bug this prevents.
+    expect(await getChannelStatsRow(user.id, 'long-movie')).toBeNull();
+    expect(await getChannelStatsRow(user.id, 'crashed')).not.toBeNull();
+  });
 });
 
 describe('clearViewingHistory', () => {
@@ -779,75 +1014,189 @@ describe('clearViewingHistory', () => {
   });
 });
 
-describe('clearViewingHistoryForPlaylist', () => {
-  it('removes history for the given playlist only', async () => {
-    const user = await createUser();
-    await watchSession({ userId: user.id, channelId: 'ch-a', playlistId: 'playlist-a', groupTitle: 'Movies', durationWatched: 100 });
-    await watchSession({ userId: user.id, channelId: 'ch-b', playlistId: 'playlist-b', groupTitle: 'Movies', durationWatched: 100 });
-
-    await userRepository.clearViewingHistoryForPlaylist(user.id, 'playlist-a');
-
-    const sessions = await userRepository.getViewingHistory(user.id);
-    expect(sessions.map((s) => s.playlistId)).toEqual(['playlist-b']);
-    expect(await getChannelStatsRow(user.id, 'ch-a', 'playlist-a')).toBeNull();
-    expect(await getChannelStatsRow(user.id, 'ch-b', 'playlist-b')).not.toBeNull();
-    expect(await getGroupStatsRow(user.id, 'Movies', 'playlist-a')).toBeNull();
-    expect(await getGroupStatsRow(user.id, 'Movies', 'playlist-b')).not.toBeNull();
-  });
-});
-
 describe('setNextEpisode', () => {
   it('is returned by getRecentlyWatched', async () => {
     const user = await createUser();
     await watchSession({ userId: user.id, channelId: 's01e01', contentType: 'series' });
 
-    await userRepository.setNextEpisode(user.id, PLAYLIST_ID, 's01e01', 's01e02', 'Episode 2');
+    await userRepository.setNextEpisode(
+      user.id,
+      PLAYLIST_ID,
+      { channelId: 's01e01', channelName: 'Episode 1', contentType: 'series' },
+      { channelId: 's01e02', channelName: 'Episode 2' },
+    );
 
     const [item] = await userRepository.getRecentlyWatched(user.id, PLAYLIST_ID);
     expect(item.nextEpisodeChannelId).toBe('s01e02');
     expect(item.nextEpisodeChannelName).toBe('Episode 2');
   });
 
-  it('is cleared when the channel is watched again', async () => {
+  it('creates the stats row on a first watch, before any session has closed', async () => {
+    // The pointer is resolved at ~90%, while the episode is still playing: on a
+    // first watch nothing has written `channel_watch_stats` yet, and an UPDATE
+    // would silently store nothing.
+    const user = await createUser();
+
+    await userRepository.setNextEpisode(
+      user.id,
+      PLAYLIST_ID,
+      {
+        channelId: 's01e01',
+        channelName: 'Episode 1',
+        groupTitle: 'Series | Drama',
+        contentType: 'series',
+      },
+      { channelId: 's01e02', channelName: 'Episode 2' },
+    );
+
+    const [item] = await userRepository.getRecentlyWatched(user.id, PLAYLIST_ID);
+    expect(item).toMatchObject({
+      channelId: 's01e01',
+      channelName: 'Episode 1',
+      nextEpisodeChannelId: 's01e02',
+      nextEpisodeChannelName: 'Episode 2',
+      // No watch has been recorded yet — the session that is running fills
+      // these in when it closes.
+      watchCount: 0,
+    });
+    expect(item.lastPosition).toBeUndefined();
+  });
+
+  it('counts the first completed watch of a pre-created row as a new channel in its group', async () => {
+    const user = await createUser();
+    await userRepository.setNextEpisode(
+      user.id,
+      PLAYLIST_ID,
+      {
+        channelId: 's01e01',
+        channelName: 'Episode 1',
+        groupTitle: 'Series | Drama',
+        contentType: 'series',
+      },
+      { channelId: 's01e02', channelName: 'Episode 2' },
+    );
+
+    await watchSession({
+      userId: user.id,
+      channelId: 's01e01',
+      channelName: 'Episode 1',
+      groupTitle: 'Series | Drama',
+      contentType: 'series',
+    });
+
+    // The row already existed, but nobody had watched the channel — the group's
+    // unique-channel count must still move.
+    const group = await getGroupStatsRow(user.id, 'Series | Drama');
+    expect(group?.uniqueChannelsWatched).toBe(1);
+  });
+
+  it('survives the session that resolved it being closed', async () => {
+    // The pointer is resolved mid-playback (~90% in), so ending the session
+    // must not wipe it — the home rows read it right after.
     const user = await createUser();
     await watchSession({ userId: user.id, channelId: 's01e01', contentType: 'series' });
-    await userRepository.setNextEpisode(user.id, PLAYLIST_ID, 's01e01', 's01e02', 'Episode 2');
+    await userRepository.setNextEpisode(
+      user.id,
+      PLAYLIST_ID,
+      { channelId: 's01e01', channelName: 'Episode 1', contentType: 'series' },
+      { channelId: 's01e02', channelName: 'Episode 2' },
+    );
 
     tick();
     await watchSession({ userId: user.id, channelId: 's01e01', contentType: 'series' });
 
     const [item] = await userRepository.getRecentlyWatched(user.id, PLAYLIST_ID);
-    expect(item.nextEpisodeChannelId).toBeUndefined();
-    expect(item.nextEpisodeChannelName).toBeUndefined();
+    expect(item.nextEpisodeChannelId).toBe('s01e02');
+    expect(item.nextEpisodeChannelName).toBe('Episode 2');
   });
 });
 
-describe('getMostWatchedGroups', () => {
-  it('orders groups by totalTimeWatched descending', async () => {
+describe('getWatchedContent', () => {
+  it('returns every watched channel id and the series names behind watched episodes', async () => {
     const user = await createUser();
-    await watchSession({ userId: user.id, channelId: 'n-1', groupTitle: 'News', durationWatched: 100 });
-    await watchSession({ userId: user.id, channelId: 'm-1', groupTitle: 'Movies', durationWatched: 900 });
+    await watchSession({ userId: user.id, channelId: 'movie-1', channelName: 'Blade Runner' });
+    await watchSession({
+      userId: user.id,
+      channelId: 'ep-1',
+      channelName: 'Breaking Bad S01E01',
+      contentType: 'series',
+    });
+    await watchSession({
+      userId: user.id,
+      channelId: 'ep-2',
+      channelName: 'Breaking Bad S01E02',
+      contentType: 'series',
+    });
 
-    const groups = await userRepository.getMostWatchedGroups(user.id, PLAYLIST_ID);
-    expect(groups.map((g) => g.groupTitle)).toEqual(['Movies', 'News']);
-    expect(groups[0].totalTimeWatched).toBe(900);
+    const watched = await userRepository.getWatchedContent(user.id, PLAYLIST_ID);
+
+    expect(watched.channelIds.sort()).toEqual(['ep-1', 'ep-2', 'movie-1']);
+    // Episodes of one series collapse to a single series name.
+    expect(watched.seriesNames).toEqual(['Breaking Bad']);
   });
-});
 
-describe('migrateFavoritesToNewFormat', () => {
-  it('rewrites legacy name-based favorites to tvg.id-based ids', async () => {
+  it('scopes results to the requested user and playlist', async () => {
     const user = await createUser();
-    const channel = {
-      name: 'TV2 Sport',
-      url: 'http://stream.example.com/tv2sport.m3u8',
-      tvg: { id: 'tv2sport.no' },
-    };
-    await seedChannels('TV2 Sport', `${channel.name}|${channel.url}`, 'tv2sport.no');
-    await userRepository.addFavoriteChannel(user.id, 'TV2 Sport');
-    await userRepository.addFavoriteChannel(user.id, `${channel.name}|${channel.url}`);
+    const other = await createUser('Bob');
+    await watchSession({ userId: user.id, channelId: 'ch-a', playlistId: 'playlist-a' });
+    await watchSession({ userId: user.id, channelId: 'ch-b', playlistId: 'playlist-b' });
+    await watchSession({ userId: other.id, channelId: 'ch-c', playlistId: 'playlist-a' });
 
-    await userRepository.migrateFavoritesToNewFormat(user.id, [channel]);
+    const watched = await userRepository.getWatchedContent(user.id, 'playlist-a');
+    expect(watched.channelIds).toEqual(['ch-a']);
+  });
 
-    await expect(userRepository.getFavoriteChannels(user.id)).resolves.toEqual(['tv2sport.no']);
+  it('is empty for a user who has watched nothing', async () => {
+    const user = await createUser();
+    await expect(userRepository.getWatchedContent(user.id, PLAYLIST_ID)).resolves.toEqual({
+      channelIds: [],
+      seriesNames: [],
+      completedChannelIds: [],
+      completedEpisodesBySeries: {},
+    });
+  });
+
+  it('reports only the movies watched to completion', async () => {
+    const user = await createUser();
+    await watchSession({ userId: user.id, channelId: 'finished', completed: true });
+    await watchSession({ userId: user.id, channelId: 'abandoned', completed: false });
+
+    const watched = await userRepository.getWatchedContent(user.id, PLAYLIST_ID);
+
+    expect(watched.completedChannelIds).toEqual(['finished']);
+  });
+
+  it('counts distinct completed episodes per series', async () => {
+    const user = await createUser();
+    const episode = (channelId: string, channelName: string, completed: boolean) =>
+      watchSession({ userId: user.id, channelId, channelName, contentType: 'series', completed });
+
+    await episode('a-1', 'Show A S01E01', true);
+    await episode('a-2', 'Show A S01E02', true);
+    await episode('a-3', 'Show A S01E03', false);
+    await episode('b-1', 'Show B S01E01', true);
+    // A rewatch is one more session on the same episode, not a second episode.
+    await episode('b-1', 'Show B S01E01', true);
+
+    const watched = await userRepository.getWatchedContent(user.id, PLAYLIST_ID);
+
+    expect(watched.completedEpisodesBySeries).toEqual({ 'Show A': 2, 'Show B': 1 });
+  });
+
+  it('never counts live channels as completed content', async () => {
+    const user = await createUser();
+    await watchSession({
+      userId: user.id,
+      channelId: 'live-1',
+      channelName: 'NRK1',
+      contentType: 'live',
+      completed: true,
+    });
+
+    const watched = await userRepository.getWatchedContent(user.id, PLAYLIST_ID);
+
+    expect(watched.channelIds).toEqual(['live-1']);
+    expect(watched.completedChannelIds).toEqual([]);
+    expect(watched.completedEpisodesBySeries).toEqual({});
   });
 });

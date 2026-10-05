@@ -3,66 +3,79 @@ import { useDayFixtures } from '@/features/sports/hooks/use-day-fixtures';
 import { useFavoriteMatchPrefetch } from '@/features/sports/hooks/use-favorite-match-prefetch';
 import { useFavoriteTeams } from '@/features/sports/hooks/use-favorite-teams';
 import { useLeaguePreferences } from '@/features/sports/hooks/use-league-preferences';
-import { LeagueSheet, type LeagueTab } from '@/features/sports/league-sheet';
+import { useSportsRoutes } from '@/features/sports/hooks/use-sports-routes';
 import { groupFixturesByLeague, type MatchGroup } from '@/features/sports/match-grouping';
-import { MatchSheet } from '@/features/sports/match-sheet';
 import { isMatchLive } from '@/features/sports/match-widgets';
 import { MatchesList } from '@/features/sports/matches-list';
 import { SportsHeader, type MatchFilter } from '@/features/sports/sports-header';
 import { isSameLocalDay, startOfLocalDay } from '@/features/sports/date-utils';
 import { ManageFavoritesModal } from '@/features/sports/team-search-modal';
-import { TeamSheet, type TeamRef } from '@/features/sports/team-sheet';
+import { useToday } from '@/features/sports/hooks/use-today';
+import { useAppState } from '@/hooks/use-app-state';
+import { useChromeInsets } from '@/hooks/use-chrome-insets';
+import type { LeagueTab } from '@/lib/route-params';
 import { getSportsDatabase } from '@/services/sports-service';
-import { usePlaylistStore } from '@/stores/playlist/playlist-store';
-import { usePlaybackQueueStore } from '@/stores/video/queue-store';
-import { useRouter } from 'expo-router';
-import type { Fixture, Team } from 'expo-m3u-parser';
+import { useIsFocused } from '@react-navigation/native';
+import type { Team } from 'expo-m3u-parser';
 import { useCallback, useMemo, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function SportsScreen() {
   const insets = useSafeAreaInsets();
-  const router = useRouter();
-  const activePlaylistId = usePlaylistStore((s) => s.activePlaylistId);
+  // The tab bar and mini player float over the screen, so the list has to
+  // reserve their height itself.
+  const chromeInsets = useChromeInsets();
+  // A match, a competition and a team are routes of their own: pressing one is
+  // a navigation, carrying what it is about in the parameters. That is what
+  // keeps this list mounted behind them, and what puts the player they lead to
+  // above them in history instead of in their place.
+  const { openMatch, openLeague } = useSportsRoutes();
+  // Tabs stay mounted once visited, so "is this screen on show" has to be asked
+  // rather than assumed: the day view polls only while it is.
+  const isFocused = useIsFocused();
+  const appState = useAppState();
+  const isActive = isFocused && appState === 'active';
 
   const [selectedDate, setSelectedDate] = useState(() => startOfLocalDay(new Date()));
   const [filter, setFilter] = useState<MatchFilter>('all');
   const [favoritesVisible, setFavoritesVisible] = useState(false);
-  const [selectedFixture, setSelectedFixture] = useState<Fixture | null>(null);
-  /** The open competition sheet: which group, and the tab it was opened on. */
-  const [selectedLeague, setSelectedLeague] = useState<{ key: string; tab: LeagueTab } | null>(null);
-  const [selectedTeam, setSelectedTeam] = useState<TeamRef | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const { teams, isLoading: isLoadingTeams, addTeam, removeTeam, refresh: refreshTeams } = useFavoriteTeams();
+  const {
+    teams,
+    teamIds,
+    teamIdSet: favoriteTeamIds,
+    isLoading: isLoadingTeams,
+    addTeam,
+    removeTeam,
+    refresh: refreshTeams,
+  } = useFavoriteTeams();
   const { order, hideOtherLeagues } = useLeaguePreferences();
-  const favoriteTeamIdList = useMemo(() => teams.map((t) => t.providerId), [teams]);
-  const { fixtures, isLoading, error, refresh } = useDayFixtures(selectedDate, favoriteTeamIdList);
-
-  const favoriteTeamIds = useMemo(() => new Set(favoriteTeamIdList), [favoriteTeamIdList]);
-  const liveCount = useMemo(() => fixtures.filter(isMatchLive).length, [fixtures]);
-  // Unfiltered grouping: what the league sheet resolves against, so the sheet
-  // survives both the minute-level poll (it re-reads the group by key and picks
-  // up fresh scores instead of rendering a stale snapshot) and an All/Live
-  // toggle made while it is open.
-  const allGroups = useMemo(
-    () => groupFixturesByLeague(fixtures, { favoriteTeamIds, leagueOrder: order, hideOtherLeagues }),
-    [fixtures, favoriteTeamIds, order, hideOtherLeagues]
+  const { fixtures, isLoading, isRevalidating, error, refresh } = useDayFixtures(
+    selectedDate,
+    teamIds,
+    isActive
   );
+
+  const liveCount = useMemo(() => fixtures.filter(isMatchLive).length, [fixtures]);
   const groups = useMemo(
     () =>
-      filter === 'live'
-        ? groupFixturesByLeague(fixtures, { favoriteTeamIds, leagueOrder: order, hideOtherLeagues, liveOnly: true })
-        : allGroups,
-    [allGroups, fixtures, favoriteTeamIds, order, hideOtherLeagues, filter]
+      groupFixturesByLeague(fixtures, {
+        favoriteTeamIds,
+        leagueOrder: order,
+        hideOtherLeagues,
+        liveOnly: filter === 'live',
+      }),
+    [fixtures, favoriteTeamIds, order, hideOtherLeagues, filter]
   );
-  const selectedLeagueGroup = useMemo(
-    () => allGroups.find((g) => g.key === selectedLeague?.key) ?? null,
-    [allGroups, selectedLeague]
-  );
-  const isToday = isSameLocalDay(selectedDate, new Date());
+  const today = useToday();
+  const isToday = isSameLocalDay(selectedDate, today);
 
-  useFavoriteMatchPrefetch(fixtures, favoriteTeamIds, isToday);
+  // Held back until the day list has settled: the warm requests are paced by
+  // the provider and would otherwise queue ahead of the list's own fetch. Rows
+  // served from a cache that is still being refreshed are not settled yet —
+  // that fan-out is on the very pacer these would join.
+  useFavoriteMatchPrefetch(fixtures, favoriteTeamIds, isToday && !isLoading && !isRevalidating);
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
@@ -84,32 +97,25 @@ export default function SportsScreen() {
   const handleOpenFavorites = useCallback(() => setFavoritesVisible(true), []);
   const handleCloseFavorites = useCallback(() => setFavoritesVisible(false), []);
   const handleJumpToToday = useCallback(() => setSelectedDate(startOfLocalDay(new Date())), []);
-  const handleCloseFixture = useCallback(() => setSelectedFixture(null), []);
-  const handleCloseLeague = useCallback(() => setSelectedLeague(null), []);
-  const handleCloseTeam = useCallback(() => setSelectedTeam(null), []);
 
+  /**
+   * The competition, on the day it was opened from. The header fields travel
+   * with it so its surface has something to show before its own day read
+   * lands; the key and the date are what it re-resolves the group by.
+   */
   const handleOpenLeague = useCallback(
-    (group: MatchGroup, tab: LeagueTab = 'matches') => setSelectedLeague({ key: group.key, tab }),
-    []
+    (group: MatchGroup, tab: LeagueTab = 'matches') =>
+      openLeague({
+        key: group.key,
+        competitionId: group.competitionId,
+        title: group.title,
+        subtitle: group.subtitle,
+        logoUrl: group.logoUrl,
+        dateIso: selectedDate.toISOString(),
+        tab,
+      }),
+    [openLeague, selectedDate]
   );
-
-  /** From the league sheet: close it first so the match sheet isn't stacked behind it. */
-  const handleLeagueFixturePress = useCallback((fixture: Fixture) => {
-    setSelectedLeague(null);
-    setSelectedFixture(fixture);
-  }, []);
-
-  /** From the match sheet: close it first so the team sheet isn't stacked behind it. */
-  const handleOpenTeam = useCallback((team: TeamRef) => {
-    setSelectedFixture(null);
-    setSelectedTeam(team);
-  }, []);
-
-  /** From the team sheet: close it first so the match sheet isn't stacked behind it. */
-  const handleTeamFixturePress = useCallback((fixture: Fixture) => {
-    setSelectedTeam(null);
-    setSelectedFixture(fixture);
-  }, []);
 
   const handleToggleFavorite = useCallback(
     async (team: Team, isFavorite: boolean) => {
@@ -119,22 +125,34 @@ export default function SportsScreen() {
     [addTeam, removeTeam]
   );
 
-  const handlePlayChannel = useCallback(
-    (channelId: string, fixture: Fixture) => {
-      setSelectedFixture(null);
-      usePlaybackQueueStore.getState().reset();
-      router.push({
-        pathname: '/video-player',
-        params: {
-          channelId,
-          playlistId: activePlaylistId ?? '',
-          contentType: 'live',
-          // Carry the fixture so the player can show SofaScore match widgets.
-          fixture: JSON.stringify(fixture),
-        },
-      });
-    },
-    [router, activePlaylistId]
+  const showFavoritesPrompt = !isLoadingTeams && teams.length === 0;
+  // A fresh element on every render would defeat `memo(MatchesList)`, so the
+  // whole list re-renders on every poll tick.
+  const header = useMemo(
+    () => (
+      <SportsHeader
+        selectedDate={selectedDate}
+        onSelectDate={setSelectedDate}
+        filter={filter}
+        onFilterChange={setFilter}
+        liveCount={liveCount}
+        onOpenFavorites={handleOpenFavorites}
+        onJumpToToday={handleJumpToToday}
+        isToday={isToday}
+        showFavoritesPrompt={showFavoritesPrompt}
+        topInset={insets.top}
+      />
+    ),
+    [
+      selectedDate,
+      filter,
+      liveCount,
+      handleOpenFavorites,
+      handleJumpToToday,
+      isToday,
+      showFavoritesPrompt,
+      insets.top,
+    ]
   );
 
   const emptyTitle =
@@ -156,30 +174,20 @@ export default function SportsScreen() {
         groups={groups}
         favoriteTeamIds={favoriteTeamIds}
         isLoading={isLoading}
+        isRevalidating={isRevalidating}
         error={error}
         isRefreshing={isRefreshing}
         onRefresh={handleRefresh}
-        onFixturePress={setSelectedFixture}
+        onFixturePress={openMatch}
         onOpenLeague={handleOpenLeague}
         emptyTitle={emptyTitle}
         emptyHint={emptyHint}
-        bottomInset={insets.bottom + 64}
-        header={
-          <SportsHeader
-            selectedDate={selectedDate}
-            onSelectDate={setSelectedDate}
-            filter={filter}
-            onFilterChange={setFilter}
-            liveCount={liveCount}
-            onOpenFavorites={handleOpenFavorites}
-            onJumpToToday={handleJumpToToday}
-            isToday={isToday}
-            showFavoritesPrompt={!isLoadingTeams && teams.length === 0}
-            topInset={insets.top}
-          />
-        }
+        bottomInset={chromeInsets.bottom}
+        header={header}
       />
 
+      {/* A transient control rather than a surface of its own: it picks the
+          teams this list is built from and has nothing to come back to. */}
       {favoritesVisible && (
         <ManageFavoritesModal
           onClose={handleCloseFavorites}
@@ -187,26 +195,6 @@ export default function SportsScreen() {
           onToggleFavorite={handleToggleFavorite}
         />
       )}
-
-      <MatchSheet
-        fixture={selectedFixture}
-        onClose={handleCloseFixture}
-        onPlayChannel={handlePlayChannel}
-        onOpenTeam={handleOpenTeam}
-      />
-      <LeagueSheet
-        group={selectedLeagueGroup}
-        favoriteTeamIds={favoriteTeamIds}
-        onClose={handleCloseLeague}
-        onFixturePress={handleLeagueFixturePress}
-        initialTab={selectedLeague?.tab}
-      />
-      <TeamSheet
-        team={selectedTeam}
-        favoriteTeamIds={favoriteTeamIds}
-        onClose={handleCloseTeam}
-        onFixturePress={handleTeamFixturePress}
-      />
     </>
   );
 }

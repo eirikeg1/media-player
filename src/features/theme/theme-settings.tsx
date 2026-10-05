@@ -20,7 +20,12 @@ export const ThemeSettings = memo(function ThemeSettings() {
           Customize Theme
         </ThemedText>
 
-        <Pressable style={styles.preferenceRow} onPress={handleOpen}>
+        <Pressable
+          style={styles.preferenceRow}
+          onPress={handleOpen}
+          accessibilityRole="button"
+          accessibilityLabel="Page header backgrounds"
+        >
           <View style={styles.labelContainer}>
             <ThemedText style={styles.label}>Page Header Backgrounds</ThemedText>
           </View>

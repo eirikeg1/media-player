@@ -41,49 +41,65 @@ graph TD
 
 ## 2. Navigation & Routing (Expo Router)
 
-The app uses file-based routing with a tab-based primary interface and modals for secondary interactions.
+The app uses file-based routing: a tab bar for the primary surfaces, plus
+full-screen routes outside it. Secondary interactions are rendered as in-place
+modal components, not as routes.
 
-- **Main Tabs:** Playlists (Index), Live TV, and Settings.
-- **Root Routes:** Full-screen Video Player and User Selection.
+- **Main Tabs:** Home (Index), Live TV, Videos, Sports, and Settings. Which tabs
+  are shown is a per-user setting (`showHomeTab`, `showLiveTab`, …).
+- **Root Routes:** Video Player and User Selection.
 
 ```mermaid
 graph TD
     Root["Root Layout (_layout.tsx)"]
-    
+
     subgraph "Main App (Tabs)"
+        Home["Home (/(tabs)/index)"]
         Live["Live TV (/(tabs)/live)"]
-        Playlists["Playlists (/(tabs)/index)"]
+        Videos["Videos (/(tabs)/videos)"]
+        Sports["Sports (/(tabs)/sports)"]
         Settings["Settings (/(tabs)/settings)"]
     end
 
-    subgraph "Modals & Fullscreen"
+    subgraph "Fullscreen Routes"
         Player["Video Player (/video-player)"]
         UserSel["User Select (/user-select)"]
-        Modal["Generic Modal (/modal)"]
     end
 
-    Root --> Playlists
+    Root --> Home
     Root --> Live
+    Root --> Videos
+    Root --> Sports
     Root --> Settings
-    
+
+    Home -- "Resume / Discover" --> Player
     Live -- "Select Channel" --> Player
-    Playlists -- "Manage" --> Modal
+    Videos -- "Play Movie or Episode" --> Player
+    Sports -- "Watch Match" --> Player
     Settings -- "Switch User" --> UserSel
 ```
 
 ## 3. Video Player Module
 
-The Video Player is the most complex module, utilizing an **Orchestrator Pattern** to manage playback, network state, error handling, and UI controls independently.
+The Video Player is the most complex module, using an **Orchestrator Pattern** to
+manage playback, network state, error handling and UI controls independently.
 
-- **Orchestrator:** `useVideoOrchestrator` acts as the central hub.
-- **Specialized Hooks:** Logic is split into network, error, state, and control hooks.
-- **Service Layer:** `VideoStateService` provides pure utility functions for player interaction.
+- **Orchestrator:** `useVideoOrchestrator` is the central hub for the player
+  *screen*.
+- **Specialized Hooks:** logic is split into network, error, state, control and
+  gesture hooks under `features/video/hooks/specialized/`.
+- **Session store:** `usePlaybackSessionStore` owns the `expo-video` player and
+  outlives the screen, so playback survives into the mini player bar. There is no
+  service layer between the hooks and the player — the stores are the seam.
+- **Viewing history** is tracked by `PlaybackSessionHost`, not by the screen, so
+  progress keeps recording while a session plays in the mini bar.
 
 ```mermaid
 graph TD
     subgraph "Video UI"
         Screen["VideoPlayer Screen"]
         UI_Controls["VideoControls Component"]
+        Mini["MiniPlayerBar"]
     end
 
     subgraph "The Brain"
@@ -97,8 +113,11 @@ graph TD
         H_Ctrl["useVideoControls"]
     end
 
-    subgraph "Core Logic"
-        Service["VideoStateService"]
+    subgraph "Playback State (src/stores/video)"
+        Session["usePlaybackSessionStore"]
+        Time["usePlaybackTimeStore"]
+        UIStore["useVideoUIStore"]
+        Retry["useVideoRetryStore"]
         ExpoVideo["expo-video Player"]
     end
 
@@ -107,11 +126,14 @@ graph TD
     Orchestrator --> H_Err
     Orchestrator --> H_State
     Orchestrator --> H_Ctrl
-    
-    H_State --> Service
-    Service --> ExpoVideo
-    H_Ctrl --> Service
-    
+
+    H_State --> Session
+    H_Ctrl --> UIStore
+    H_Err --> Retry
+    Session --> ExpoVideo
+    Session --> Time
+    Mini -.-> Session
+
     UI_Controls -.-> H_Ctrl
 ```
 
@@ -119,12 +141,20 @@ graph TD
 
 State is decentralized into domain-specific stores located in `src/stores/`:
 
-- **Playlist Store:** Manages M3U content, parsing status, and list of available playlists.
-- **User Store:** Manages user profiles and global preferences.
-- **Video Store:** Split into sub-stores (Player, UI, Network, Error) to prevent unnecessary re-renders in the playback UI.
+- **Playlist Store:** the list of playlists and their import lifecycle. The
+  channel catalogue itself lives in the Rust backend, not in this store.
+- **User Store:** user profiles, settings, favourites and watch history.
+- **Cache Store:** `first-page-cache-store` holds the pre-fetched first page of
+  each tab so a tab renders before its own query returns.
+- **Video Stores:** split by concern (`playback-session`, `playback-time`,
+  `player`, `ui`, `gesture`, `queue`, `retry`, `cast-mini-player`) so a per-frame
+  timeline update cannot re-render the whole playback UI.
 
 ## 5. Domain Documentation
 
 For deeper dives into specific domains, refer to:
 - [Playlist Architecture](./playlist-architecture.md)
 - [Playlist Usage](./playlist-usage.md)
+- [Catch-up](./catchup.md)
+- [Recommendations](./recommendations.md)
+- [Conventions](./conventions.md)

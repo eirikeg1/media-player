@@ -1,5 +1,6 @@
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useThemeColor } from '@/hooks/use-theme-color';
 import { GlassColors } from '@/lib/theme';
 import * as React from 'react';
 import { Pressable, StyleSheet, TextInput, View, type TextInputProps } from 'react-native';
@@ -18,6 +19,7 @@ const Input = React.forwardRef<TextInput, InputProps>(
   ({ style, error, editable = true, value, onChangeText, ...props }, ref) => {
     const colorScheme = useColorScheme();
     const isDark = colorScheme === 'dark';
+    const iconColor = useThemeColor({}, 'icon');
     const hasValue = !!value && value.length > 0;
 
     return (
@@ -56,7 +58,7 @@ const Input = React.forwardRef<TextInput, InputProps>(
             <IconSymbol
               name="xmark.circle.fill"
               size={24}
-              color={isDark ? '#7c869e' : '#5c6477'}
+              color={iconColor}
             />
           </Pressable>
         )}

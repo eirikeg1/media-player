@@ -54,6 +54,9 @@ export function SortSelectionModal({
                 style={styles.optionRow}
                 onPress={() => handleSelect(option.id)}
                 activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={`Sort by ${option.label}`}
+                accessibilityState={{ selected: isSelected }}
               >
                 <ThemedText
                   style={[

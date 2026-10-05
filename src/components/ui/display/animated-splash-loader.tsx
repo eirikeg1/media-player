@@ -1,7 +1,8 @@
 import * as SplashScreen from 'expo-splash-screen';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, {
+  cancelAnimation,
   runOnJS,
   type SharedValue,
   useAnimatedStyle,
@@ -100,38 +101,49 @@ function SplashCircle({ color, baseAngle, progress }: SplashCircleProps) {
   );
 }
 
+interface AnimatedSplashLoaderProps {
+  /**
+   * Called once the fade-out has finished. The owner must stop rendering the
+   * overlay in response: the disc loop is infinite, so only unmounting ends it.
+   */
+  onFadeComplete: () => void;
+}
+
 /**
  * Full-screen animated loading overlay shown during app startup. Three glowing
  * discs rotate between a "play triangle" formation and a center overlap in an
  * infinite loop. Hands off from the native splash on first layout and fades out
- * once {@link useAppReadyStore} reports the app is ready.
+ * once {@link useAppReadyStore} reports the app is ready, then asks its owner to
+ * unmount it through {@link AnimatedSplashLoaderProps.onFadeComplete}.
  */
-export function AnimatedSplashLoader() {
-  const [mounted, setMounted] = useState(true);
+export function AnimatedSplashLoader({ onFadeComplete }: AnimatedSplashLoaderProps) {
   const isReady = useAppReadyStore((s) => s.isReady);
 
   const progress = useSharedValue(0);
   const opacity = useSharedValue(1);
   const nativeSplashHidden = useRef(false);
 
-  // Drive the rotation/converge loop.
+  // Drive the rotation/converge loop. `withRepeat(-1)` never settles, so the
+  // cleanup has to cancel it explicitly or the worklet keeps waking the UI
+  // thread for the rest of the session.
   useEffect(() => {
     progress.value = withRepeat(
       withTiming(1, { duration: CYCLE_MS, easing: holdEasing }),
       -1,
       false,
     );
+    return () => cancelAnimation(progress);
   }, [progress]);
 
-  // Fade out (and unmount) once the app reports ready.
+  // Fade out once the app reports ready, then hand unmounting to the owner.
   useEffect(() => {
     if (!isReady) return;
     opacity.value = withTiming(0, { duration: FADE_OUT_MS }, (finished) => {
       if (finished) {
-        runOnJS(setMounted)(false);
+        runOnJS(onFadeComplete)();
       }
     });
-  }, [isReady, opacity]);
+  }, [isReady, opacity, onFadeComplete]);
 
   // Hand off from the native splash the moment this overlay paints over the
   // same colored background — avoids any flash or jump.
@@ -145,10 +157,15 @@ export function AnimatedSplashLoader() {
 
   const containerStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
 
-  if (!mounted) return null;
-
   return (
-    <Animated.View style={[styles.container, containerStyle]} onLayout={handleLayout}>
+    // Purely decorative: `pointerEvents="none"` keeps the overlay from eating
+    // taps meant for the screen underneath while it is still fading (or still
+    // waiting on a slow start-up).
+    <Animated.View
+      style={[styles.container, containerStyle]}
+      onLayout={handleLayout}
+      pointerEvents="none"
+    >
       <SplashWaveBackground />
       <View style={styles.box}>
         {CIRCLES.map((c) => (
