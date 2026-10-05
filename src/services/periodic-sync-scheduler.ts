@@ -1,7 +1,12 @@
 import { AppState, type AppStateStatus } from 'react-native';
-import { EpgService, isEpgFetchComplete } from '@/services/epg-service';
-import { isAnyImportRunning } from '@/stores/playlist/import-progress-store';
+import { isChannelSyncDue, isGuideSyncDue } from '@/lib/sync-intervals';
+import {
+  isCatalogueSyncRunning,
+  syncPlaylistChannels,
+  syncPlaylistGuide,
+} from '@/stores/playlist/playlist-sync';
 import { usePlaylistStore } from '@/stores/playlist/playlist-store';
+import { ImportAlreadyRunningError } from '@/stores/playlist/run-import';
 import type { Playlist } from '@/types/playlist.types';
 
 /** How often a running scheduler looks for overdue work. */
@@ -53,7 +58,10 @@ let appStateSubscription: ReturnType<typeof AppState.addEventListener> | null = 
  *
  * Playlist imports and EPG downloads hit the same provider (whose account
  * usually allows a single connection), so they queue behind one another rather
- * than competing: a tick is skipped entirely while any sync is running.
+ * than competing: a tick is skipped entirely while any sync is running — this
+ * counter for the schedulers' own batches, {@link isCatalogueSyncRunning} for
+ * every other sync in the process (a user's refresh and its guide download, or
+ * the OS background task running while the app is still alive).
  */
 let runsInFlight = 0;
 
@@ -111,7 +119,7 @@ export function createSyncScheduler(config: SyncSchedulerConfig): SyncScheduler 
 
   const tick = async (): Promise<void> => {
     // Both this scheduler's own previous tick and every other sync count.
-    if (runsInFlight > 0 || isAnyImportRunning()) return;
+    if (runsInFlight > 0 || isCatalogueSyncRunning()) return;
 
     const now = Date.now();
     lastTickAt = now;
@@ -129,7 +137,7 @@ export function createSyncScheduler(config: SyncSchedulerConfig): SyncScheduler 
         // The user may have started an import of their own while the previous
         // playlist was syncing. The provider allows a single connection, so
         // yield to them and let the next check pick up what is left.
-        if (isAnyImportRunning()) {
+        if (isCatalogueSyncRunning()) {
           console.log(`[${name}Sync] Yielding to a user-triggered import`);
           break;
         }
@@ -204,31 +212,30 @@ export function createSyncScheduler(config: SyncSchedulerConfig): SyncScheduler 
   return scheduler;
 }
 
-/** Whether `lastSyncAt + intervalMinutes` has elapsed; never-synced is overdue. */
-function isOverdue(lastSyncAt: Date | undefined, intervalMinutes: number | undefined, now: number) {
-  if (!intervalMinutes || intervalMinutes <= 0) return false;
-  if (!lastSyncAt) return true;
-  return now >= lastSyncAt.getTime() + intervalMinutes * 60_000;
-}
-
 /** Re-imports playlists whose `syncInterval` has elapsed. */
 export const playlistSyncScheduler = createSyncScheduler({
   name: 'Playlist',
-  isDue: (playlist, now) => isOverdue(playlist.lastFetchedAt, playlist.syncInterval, now),
-  run: (playlist) => usePlaylistStore.getState().refreshPlaylist(playlist.id, { silent: true }),
+  isDue: isChannelSyncDue,
+  run: async (playlist) => {
+    try {
+      await syncPlaylistChannels(playlist.id);
+    } catch (err) {
+      // Someone else's import of this playlist is still going and will stamp
+      // it when done — not a failure to back off from.
+      if (err instanceof ImportAlreadyRunningError) return;
+      throw err;
+    }
+  },
 });
 
 /** Re-downloads programme data for playlists whose `epgSyncInterval` has elapsed. */
 export const epgSyncScheduler = createSyncScheduler({
   name: 'Epg',
-  isDue: (playlist, now) => isOverdue(playlist.lastEpgFetchedAt, playlist.epgSyncInterval, now),
+  isDue: isGuideSyncDue,
+  // A guide download that failed rejects without a stamp, which hands the
+  // retry to the backoff above instead of hiding the missing guide for a whole
+  // interval.
   run: async (playlist) => {
-    const result = await EpgService.detectAndFetchEpgSources(playlist.id, playlist.epgUrl);
-    // Stamping a download that failed would hide the missing guide until the
-    // next full interval; failing instead hands the retry to the backoff above.
-    if (!isEpgFetchComplete(result)) {
-      throw new Error(`all ${result.failed} EPG source(s) failed to download`);
-    }
-    await usePlaylistStore.getState().markEpgFetched(playlist.id);
+    await syncPlaylistGuide(playlist.id);
   },
 });

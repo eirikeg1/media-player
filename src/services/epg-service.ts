@@ -1,6 +1,12 @@
 import { redactCredentials } from '@/lib/url-utils';
 import { getRustDatabase } from '@/services/rust-channel-service';
-import type { EpgProgramme, EpgSource, GroupedProgrammesResult } from 'expo-m3u-parser';
+import type {
+  ChannelShift,
+  EpgProgramme,
+  EpgSource,
+  GroupedProgrammesResult,
+  ProgrammeSearchOptions,
+} from 'expo-m3u-parser';
 
 /** Outcome of one detect-and-fetch pass over a playlist's EPG sources. */
 export interface EpgFetchResult {
@@ -208,16 +214,20 @@ export class EpgService {
   /**
    * Get currently airing programmes for multiple channels.
    * Returns a Map keyed by channelId for O(1) lookups in the grid.
+   *
+   * Each channel carries its `tvg-shift`, which decides which of its programmes
+   * counts as current as well as the times returned — the native side applies
+   * both (see `ChannelShift`).
    */
   static async getCurrentProgrammesForChannels(
-    channelIds: string[]
+    channels: ChannelShift[]
   ): Promise<Map<string, EpgProgramme>> {
-    if (channelIds.length === 0) {
+    if (channels.length === 0) {
       return new Map();
     }
 
     const db = await getRustDatabase();
-    const programmes = await db.getCurrentProgrammesForChannels(channelIds);
+    const programmes = await db.getCurrentProgrammesForChannels(channels);
 
     const map = new Map<string, EpgProgramme>();
     for (const programme of programmes) {
@@ -227,49 +237,64 @@ export class EpgService {
   }
 
   /**
-   * Get the schedule for a single channel within a time range
+   * Get the schedule for a single channel within a time range.
+   *
+   * `shiftHours` is the channel's `tvg-shift`; the window is the caller's own
+   * hours either way, because the shift is applied inside the query.
    */
   static async getChannelSchedule(
     channelId: string,
     from: number,
-    to: number
+    to: number,
+    shiftHours: number = 0
   ): Promise<EpgProgramme[]> {
     const db = await getRustDatabase();
-    return db.getChannelSchedule(channelId, from, to);
+    return db.getChannelSchedule(channelId, from, to, shiftHours);
   }
 
   /**
-   * Get the currently airing programme for a single channel
+   * Get the currently airing programme for a single channel.
+   *
+   * `shiftHours` is the channel's `tvg-shift`: it decides which programme counts
+   * as current, so this agrees with the schedule shown beside it.
    */
-  static async getCurrentProgramme(channelId: string): Promise<EpgProgramme | null> {
+  static async getCurrentProgramme(
+    channelId: string,
+    shiftHours: number = 0
+  ): Promise<EpgProgramme | null> {
     const db = await getRustDatabase();
-    return db.getCurrentProgramme(channelId);
+    return db.getCurrentProgramme(channelId, undefined, shiftHours);
   }
 
   /**
-   * Get the next programme for a single channel
+   * Get the next programme for a single channel, shifted like
+   * {@link EpgService.getCurrentProgramme}.
    */
-  static async getNextProgramme(channelId: string): Promise<EpgProgramme | null> {
+  static async getNextProgramme(
+    channelId: string,
+    shiftHours: number = 0
+  ): Promise<EpgProgramme | null> {
     const db = await getRustDatabase();
-    return db.getNextProgramme(channelId);
+    return db.getNextProgramme(channelId, undefined, shiftHours);
   }
 
   /**
    * Get programmes for multiple channels in a time range (for EPG guide grid).
    * Returns a Map keyed by channelId with sorted programme arrays.
-   * Grouping and sorting is done in Rust — this just converts to Map.
+   * Grouping, sorting and each channel's `tvg-shift` are handled in Rust — this
+   * just converts to Map.
    */
   static async getProgrammesForChannels(
-    channelIds: string[],
+    channels: ChannelShift[],
     from: number,
     to: number
   ): Promise<Map<string, EpgProgramme[]>> {
-    if (channelIds.length === 0) {
+    if (channels.length === 0) {
       return new Map();
     }
 
     const db = await getRustDatabase();
-    const groups = await db.getProgrammesForChannels(channelIds, from, to);
+    const groups = await db.getProgrammesForChannels(channels, from, to);
 
     const map = new Map<string, EpgProgramme[]>();
     for (const group of groups) {
@@ -281,16 +306,14 @@ export class EpgService {
   /**
    * Search programmes by title with optional filters.
    * Returns results pre-grouped by channel with a has_more pagination flag.
+   *
+   * Search covers the whole guide, including channels the caller has not
+   * loaded, so `shifts` is a sparse map: list the channels that have a
+   * `tvg-shift` and every other channel is matched and returned unshifted.
    */
   static async searchProgrammes(
     query: string,
-    options?: {
-      from?: number;
-      to?: number;
-      category?: string;
-      limit?: number;
-      offset?: number;
-    }
+    options?: ProgrammeSearchOptions
   ): Promise<GroupedProgrammesResult> {
     const db = await getRustDatabase();
     return db.searchProgrammes(query, options);

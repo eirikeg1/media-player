@@ -647,6 +647,40 @@ const migrations: Migration[] = [
       console.log('[Migration] Created user_content_reactions table');
     },
   },
+  // 22 is the deferred channel-id remap (see LEGACY_CHANNEL_ID_REMAP below).
+  {
+    version: 23,
+    name: 'default_playlist_sync_intervals',
+    up: async (db) => {
+      // Playlists used to be created without either interval, and the
+      // schedulers skip an unset one — so no playlist ever synced on its own.
+      // NULL has only ever meant "never set": there was no "Off" choice until
+      // `0` was introduced alongside this migration, so filling it in cannot
+      // override a decision. The values are the defaults as of this migration,
+      // frozen here on purpose: a later change of default must not rewrite
+      // what this step did.
+      await db.runAsync('UPDATE playlists SET syncInterval = ? WHERE syncInterval IS NULL', [360]);
+      await db.runAsync('UPDATE playlists SET epgSyncInterval = ? WHERE epgSyncInterval IS NULL', [
+        1440,
+      ]);
+
+      console.log('[Migration] Backfilled unset playlist sync intervals with the defaults');
+    },
+  },
+  {
+    version: 24,
+    name: 'add_background_sync_on_mobile_data',
+    up: async (db) => {
+      await addColumnIfMissing(
+        db,
+        'user_settings',
+        'backgroundSyncOnMobileData',
+        'INTEGER NOT NULL DEFAULT 0',
+      );
+
+      console.log('[Migration] Added backgroundSyncOnMobileData column to user_settings');
+    },
+  },
 ];
 
 /**
@@ -748,7 +782,7 @@ export async function initializeDatabase(): Promise<void> {
  * Not part of {@link migrations}: it needs the Rust database to be open (the
  * mapping is a native call), which happens after the schema migrations. It is
  * recorded in the same `migrations` table so it runs exactly once, which speaks
- * for this version number: the next schema migration takes 23.
+ * for this version number, which the schema migrations skip.
  */
 const LEGACY_CHANNEL_ID_REMAP = { version: 22, name: 'remap_legacy_channel_ids' } as const;
 

@@ -30,6 +30,17 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       monochromeImage: "./assets/icons/play_2.png",
     },
     edgeToEdgeEnabled: true,
+    // Predictive back stays OFF on React Native 0.81. With it on, back only
+    // reaches JS through a callback `ReactActivity` registers — and that
+    // callback is disabled, and never re-enabled, the first time a back press
+    // falls through to the system (leaving the app from a root screen). The
+    // activity survives that, so from then on every back press bypasses
+    // navigation entirely and backgrounds the app, whatever screen is open.
+    // Fixed on React Native main (`invokeDefaultOnBackPressed` re-enables the
+    // callback) but not in 0.81/0.82; turn this on only after upgrading past
+    // that fix. The app is ready for it otherwise: dismissible surfaces are
+    // routes or `Modal`s and the player decides about its session from the
+    // route's `beforeRemove`.
     predictiveBackGestureEnabled: false,
     package: IS_DEV
       ? "com.anonymous.mediaplayer.dev"
@@ -43,7 +54,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     "expo-router",
     // Adds the iOS `processing` background mode and the BGTaskScheduler
     // identifier the module schedules under — required for the sports
-    // background refresh task (see src/features/sports/background/).
+    // background refresh task (see src/background/).
     "expo-background-task",
     [
       "expo-splash-screen",
@@ -61,13 +72,17 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       },
     ],
     // expo-video is configured with neither `supportsPictureInPicture` nor
-    // `supportsBackgroundPlayback`: on iOS declaring PiP alone is what enables
-    // the background audio session, and playback is meant to *stop* when the
-    // app leaves the foreground — the panel allows a single connection, which
-    // a backgrounded stream would keep holding. Enabling PiP later means
-    // enabling it here (plus a prebuild) and passing `allowsPictureInPicture`
-    // to the `VideoView`; the prop alone is silently ignored.
+    // `supportsBackgroundPlayback`: both add the `audio` background mode on
+    // iOS, and playback is meant to *stop* when the app leaves the foreground —
+    // the panel allows a single connection, which a backgrounded stream would
+    // keep holding. Android PiP is enabled instead by the local plugin below,
+    // which does the Android half of `supportsPictureInPicture` and nothing on
+    // iOS.
     "expo-video",
+    // Android picture-in-picture: `android:supportsPictureInPicture` plus the
+    // `configChanges` the transition needs on MainActivity. The `VideoView`
+    // props alone are silently ignored without it (and it needs a prebuild).
+    "./plugins/with-android-pip",
     [
       "react-native-google-cast",
       {

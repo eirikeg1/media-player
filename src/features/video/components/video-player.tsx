@@ -1,7 +1,7 @@
 import type { Fixture } from 'expo-m3u-parser';
 import { VideoView } from 'expo-video';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View } from 'react-native';
+import { Platform, View } from 'react-native';
 import { useSharedValue } from 'react-native-reanimated';
 
 import { useLiveMatchScore } from '@/features/sports/hooks/use-match-detail';
@@ -114,6 +114,19 @@ export function VideoPlayer({ channel, streamUrl = channel.url, startPosition, o
     setScreenViewAttached(true);
     return () => setScreenViewAttached(false);
   }, [isCasting, player, setScreenViewAttached]);
+
+  // Picture-in-picture, Android only: the iOS half of expo-video's config
+  // plugin would also enable background audio, which the panel's single
+  // connection forbids (see `app.config.ts`). The manifest side of it lives in
+  // `plugins/with-android-pip.js`.
+  const pipSupported = Platform.OS === 'android';
+  const setPictureInPicture = usePlaybackSessionStore((s) => s.setPictureInPicture);
+  const handlePipStart = useCallback(() => {
+    if (player) setPictureInPicture(player, true);
+  }, [player, setPictureInPicture]);
+  const handlePipStop = useCallback(() => {
+    if (player) setPictureInPicture(player, false);
+  }, [player, setPictureInPicture]);
   const activeGesture = useGestureStore((s) => s.activeGesture);
   const volumeDisplay = useSharedValue(1);
   const brightnessDisplay = useSharedValue(0.5);
@@ -157,6 +170,14 @@ export function VideoPlayer({ channel, streamUrl = channel.url, startPosition, o
             nativeControls={false}
             fullscreenOptions={{ enable: true }}
             contentFit="contain"
+            allowsPictureInPicture={pipSupported}
+            // Home press enters PiP, but only while a stream is actually
+            // running: auto-entering on a paused or failed one would hand the
+            // viewer a window showing nothing (PiP hides the app's own UI, so
+            // the error card and its Try Again go with it).
+            startsPictureInPictureAutomatically={pipSupported && isPlaying && !hasError}
+            onPictureInPictureStart={handlePipStart}
+            onPictureInPictureStop={handlePipStop}
           />
         )}
 

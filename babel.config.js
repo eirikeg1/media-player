@@ -1,8 +1,7 @@
 module.exports = function (api) {
-  // Calling api.env() with no arguments keys the cache on the active env
-  // (BABEL_ENV || NODE_ENV) — the same value the test-only plugin branch
-  // below switches on.
-  const env = api.env();
+  // The release-only plugin below switches on NODE_ENV, so the config cache is
+  // keyed on it: a cached config must not outlive a change of env.
+  const isProduction = api.cache.using(() => process.env.NODE_ENV === 'production');
 
   const plugins = [
     [
@@ -16,13 +15,7 @@ module.exports = function (api) {
     ],
   ];
 
-  if (env === 'test') {
-    // Jest's default VM cannot execute native dynamic import(); rewrite it
-    // to a deferred require so code paths using import() run under tests.
-    plugins.push('babel-plugin-dynamic-import-node');
-  }
-
-  if (process.env.NODE_ENV === 'production') {
+  if (isProduction) {
     // The app logs verbosely through startup, imports and playback — some of it
     // with playlist URLs. Strip that from release builds, keeping the levels
     // that report real problems.

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { EpgService } from '@/services/epg-service';
 import type { Channel } from '@/types/playlist.types';
 import type { EpgProgramme } from 'expo-m3u-parser';
+import { toChannelShifts } from './channel-shifts';
 
 const SEARCH_DEBOUNCE_MS = 300;
 
@@ -84,6 +85,10 @@ export function useEpgSearch(
           to,
           category: selectedCategory ?? undefined,
           limit: 200,
+          // Sparse: only the channels with a `tvg-shift` need naming, and only
+          // the loaded ones are known here — a shifted channel further down
+          // the guide comes back unshifted until it is loaded.
+          shifts: toChannelShifts(loadedChannelsRef.current).filter((s) => s.shiftHours !== 0),
         });
 
         if (isStale()) return;

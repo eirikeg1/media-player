@@ -21,8 +21,14 @@ interface NowNextProgrammes {
  *
  * @param channelId The channel's EPG (`tvg.id`) id; `null` for a channel the
  *   EPG cannot match at all.
+ * @param shiftHours The channel's `tvg-shift`. It decides which programme is
+ *   current as well as the times shown, so the strip this feeds agrees with the
+ *   schedule under it.
  */
-export function useNowNextProgrammes(channelId: string | null): NowNextProgrammes {
+export function useNowNextProgrammes(
+  channelId: string | null,
+  shiftHours: number = 0
+): NowNextProgrammes {
   const [programmes, setProgrammes] = useState<NowNextProgrammes>({
     currentProgramme: null,
     nextProgramme: null,
@@ -34,8 +40,8 @@ export function useNowNextProgrammes(channelId: string | null): NowNextProgramme
 
     let cancelled = false;
     Promise.all([
-      EpgService.getCurrentProgramme(channelId),
-      EpgService.getNextProgramme(channelId),
+      EpgService.getCurrentProgramme(channelId, shiftHours),
+      EpgService.getNextProgramme(channelId, shiftHours),
     ])
       .then(([currentProgramme, nextProgramme]) => {
         if (!cancelled) setProgrammes({ currentProgramme, nextProgramme });
@@ -48,7 +54,7 @@ export function useNowNextProgrammes(channelId: string | null): NowNextProgramme
     return () => {
       cancelled = true;
     };
-  }, [channelId]);
+  }, [channelId, shiftHours]);
 
   return programmes;
 }

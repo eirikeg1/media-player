@@ -60,6 +60,13 @@ export interface PlaybackSession {
    * and the screen picks it up when it expands.
    */
   error: VideoError | null;
+  /**
+   * Whether the session is playing in the system's picture-in-picture window
+   * (Android; see `plugins/with-android-pip.js`). The app's own UI is hidden
+   * behind that window, so anything that would draw over playback — the mini
+   * bar above all — has to stand down while this is set.
+   */
+  pip: boolean;
 }
 
 interface StartSessionArgs {
@@ -105,6 +112,12 @@ interface PlaybackSessionState {
    * replaced cannot mark the new stream as broken.
    */
   setSessionError: (player: VideoPlayer, error: VideoError | null) => void;
+  /**
+   * Record that the session entered or left picture-in-picture. Guarded on
+   * `player` like {@link setSessionError}: the exit event of a session that was
+   * already replaced must not mark the new one as windowed.
+   */
+  setPictureInPicture: (player: VideoPlayer, active: boolean) => void;
   /**
    * Reload what the session is playing: the retry after an error, the resync of
    * a drifted live stream, and the recovery of an unloaded player are all the
@@ -252,6 +265,7 @@ export const usePlaybackSessionStore = create<PlaybackSessionState>((set, get) =
         screenViewAttached: false,
         sourceAttached: false,
         error: null,
+        pip: false,
       },
     });
 
@@ -289,10 +303,14 @@ export const usePlaybackSessionStore = create<PlaybackSessionState>((set, get) =
 
   // A mode it is already in changes nothing: handing out a new session object
   // for it re-renders every consumer (and re-runs their per-session effects).
+  // Minimizing also leaves the picture-in-picture window behind: the mini bar
+  // is the only control a minimized session has, and it stands down while
+  // `pip` is set — a stop event the screen's view was no longer around to
+  // deliver would otherwise leave the stream running with no way to stop it.
   minimize: () =>
     set((state) =>
-      state.session && state.session.mode !== 'mini'
-        ? { session: { ...state.session, mode: 'mini' } }
+      state.session && (state.session.mode !== 'mini' || state.session.pip)
+        ? { session: { ...state.session, mode: 'mini', pip: false } }
         : state
     ),
 
@@ -316,17 +334,29 @@ export const usePlaybackSessionStore = create<PlaybackSessionState>((set, get) =
     set({ connectionRelease: releaseConnection(session.player) });
   },
 
+  // The screen's view is what the picture-in-picture window shows, and what
+  // reports its exit — so detaching it ends the window as far as the session
+  // is concerned, whether or not the exit event arrived.
   setScreenViewAttached: (attached) =>
-    set((state) =>
-      state.session && state.session.screenViewAttached !== attached
-        ? { session: { ...state.session, screenViewAttached: attached } }
-        : state
-    ),
+    set((state) => {
+      if (!state.session) return state;
+      const pip = attached ? state.session.pip : false;
+      return state.session.screenViewAttached !== attached || state.session.pip !== pip
+        ? { session: { ...state.session, screenViewAttached: attached, pip } }
+        : state;
+    }),
 
   setSessionError: (player, error) =>
     set((state) =>
       state.session && state.session.player === player && state.session.error !== error
         ? { session: { ...state.session, error } }
+        : state
+    ),
+
+  setPictureInPicture: (player, active) =>
+    set((state) =>
+      state.session && state.session.player === player && state.session.pip !== active
+        ? { session: { ...state.session, pip: active } }
         : state
     ),
 

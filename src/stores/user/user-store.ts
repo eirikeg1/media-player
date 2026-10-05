@@ -5,6 +5,11 @@ import { getSeriesNameForChannel, sortEpisodes } from '@/lib/series-utils';
 import { RustChannelService } from '@/services/rust-channel-service';
 import { useFirstPageCacheStore } from '@/stores/cache';
 import { useHeaderBackgroundStore } from '@/stores/header-background';
+import {
+  setCurrentUserId,
+  subscribeToPersistedUserSettings,
+} from '@/stores/playlist/current-user-context';
+import { usePlaylistStore } from '@/stores/playlist/playlist-store';
 import type {
   ContentReactionValue,
   ContentType,
@@ -138,8 +143,6 @@ let switchInFlight: { userId: string; promise: Promise<void> } | null = null;
  * filter are part of what those pages were built from).
  */
 async function adoptCurrentUser(user: User | null, favoriteChannels: string[]): Promise<void> {
-  // The playlist store imports this one, so it can only be reached lazily.
-  const { usePlaylistStore } = await import('../playlist/playlist-store');
   const previousPlaylistId = usePlaylistStore.getState().activePlaylistId;
 
   try {
@@ -404,18 +407,7 @@ export const useUserStore = create<UserState>((set, get) => ({
 
     try {
       await userRepository.updateUserSettings(userId, settings);
-
-      // Reload the user to get updated settings
-      const updatedUser = await userRepository.getUserById(userId);
-      if (!updatedUser) return;
-
-      const { users, currentUser } = get();
-      const updatedUsers = users.map(u => u.id === userId ? updatedUser : u);
-
-      set({
-        users: updatedUsers,
-        currentUser: currentUser?.id === userId ? updatedUser : currentUser,
-      });
+      await applyStoredUser(userId);
 
       console.log('[UserStore] Settings updated successfully');
     } catch (error) {
@@ -678,3 +670,32 @@ export const useUserStore = create<UserState>((set, get) => ({
     }
   },
 }));
+
+/**
+ * Refresh one user's in-memory copy from what is stored.
+ *
+ * Used after a settings write, whoever made it: the database is the source of
+ * truth for settings, so a write is followed by a read rather than by patching
+ * the copy field by field.
+ */
+async function applyStoredUser(userId: string): Promise<void> {
+  const stored = await userRepository.getUserById(userId);
+  if (!stored) return;
+
+  const { users, currentUser } = useUserStore.getState();
+  useUserStore.setState({
+    users: users.map((user) => (user.id === userId ? stored : user)),
+    currentUser: currentUser?.id === userId ? stored : currentUser,
+  });
+}
+
+// The playlist store must not import this one — that cycle is what
+// `current-user-context` exists to break — so who is current is published to it
+// on every change, and its settings writes are reflected back here.
+useUserStore.subscribe((state, previous) => {
+  if (state.currentUser?.id !== previous.currentUser?.id) {
+    setCurrentUserId(state.currentUser?.id ?? null);
+  }
+});
+
+subscribeToPersistedUserSettings(applyStoredUser);

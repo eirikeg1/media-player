@@ -1,4 +1,7 @@
+import { subscribeToCatalogueRefreshes } from '@/stores/playlist/catalogue-events';
 import type { RankedBroadcast } from 'expo-m3u-parser';
+
+import { bumpSportsCacheEpoch } from './sports-cache-epoch';
 
 /**
  * The channels matched to a fixture, remembered for the length of a browsing
@@ -51,10 +54,27 @@ export function writeBroadcastCache(
 }
 
 /**
- * Drop every cached match. Called wherever the channels or the broadcast data
- * behind them are refreshed — a pull-to-refresh, a playlist import — since the
- * key alone cannot tell that the same playlist now holds different channels.
+ * Drop every cached match. Called wherever the broadcast data behind them is
+ * refreshed (see `invalidateSportsCaches`) and, through the subscription below,
+ * after every playlist import or guide download — the key alone cannot tell
+ * that the same playlist now holds different channels or programmes.
  */
 export function clearBroadcastCache(): void {
   entries.clear();
 }
+
+/**
+ * A refreshed catalogue changes the answer to every match: panels rename their
+ * event channels per fixture, and the guide is what ties a channel to a
+ * kickoff. Subscribed at module scope because the cache is module scope — it
+ * outlives every match surface, and a process that never loaded this module
+ * has no matches cached to drop.
+ *
+ * The epoch bump is what reaches the surfaces already open: their channels sit
+ * in query state rather than in this cache, and an invalidation reloads them
+ * silently, keeping the rows on screen until the new match lands.
+ */
+subscribeToCatalogueRefreshes(() => {
+  clearBroadcastCache();
+  bumpSportsCacheEpoch();
+});

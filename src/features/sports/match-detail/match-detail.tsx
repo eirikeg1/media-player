@@ -26,7 +26,7 @@ import {
 } from '../match-widgets';
 import { SPORTS_ACCENT, useSportsPalette } from '../sports-theme';
 import { MatchDetailContent } from './match-detail-content';
-import { DETAIL_BACKGROUND } from './match-detail-shared';
+import { MatchDetailThemeProvider, useThemedMatchDetailTheme } from './match-detail-theme';
 import { MatchOverviewTab } from './match-overview-tab';
 import { MatchWatchTab } from './match-watch-tab';
 
@@ -71,6 +71,7 @@ export function MatchDetail({ fixture, onClose }: MatchDetailProps) {
   const insets = useSafeAreaInsets();
   const chromeInsets = useChromeInsets();
   const palette = useSportsPalette();
+  const detailTheme = useThemedMatchDetailTheme();
   const router = useRouter();
   const { openTeam } = useSportsRoutes();
   const activePlaylistId = usePlaylistStore((s) => s.activePlaylistId);
@@ -228,36 +229,37 @@ export function MatchDetail({ fixture, onClose }: MatchDetailProps) {
       </View>
 
       {/* The surface owns the only vertical scroller; the detail tabs lay their
-          content out flat (`scrollable={false}`) so nothing nests inside it. */}
-      {/* The detail tabs are fixed-dark whatever the chrome around them is,
-          so the body is painted in their own surface rather than the
-          theme's — otherwise a light scheme shows white gutters around
-          black content. */}
-      <ScrollView
-        style={styles.body}
-        contentContainerStyle={{ paddingBottom: insets.bottom + chromeInsets.bottom + 32 }}
-      >
-        {tab === 'overview' && <MatchOverviewTab fixture={merged} />}
-        {tab === 'watch' && (
-          <MatchWatchTab
-            fixture={merged}
-            broadcasts={broadcasts}
-            isLoading={isLoadingBroadcasts}
-            error={broadcastsError}
-            onRetry={retryBroadcasts}
-            onPlay={handlePlay}
-          />
-        )}
-        {hasWidgets && (
-          <MatchDetailContent
-            fixture={merged}
-            activeKey={detailKey}
-            homeLabel={score.home}
-            awayLabel={score.away}
-            scrollable={false}
-          />
-        )}
-      </ScrollView>
+          content out flat (`scrollable={false}`) so nothing nests inside it.
+          The body is the themed surface the tabs draw on, so it matches the
+          chrome above instead of showing a dark slab under a light header. */}
+      <MatchDetailThemeProvider value={detailTheme}>
+        <ScrollView
+          testID="match-detail-body"
+          style={[styles.body, { backgroundColor: detailTheme.background }]}
+          contentContainerStyle={{ paddingBottom: insets.bottom + chromeInsets.bottom + 32 }}
+        >
+          {tab === 'overview' && <MatchOverviewTab fixture={merged} />}
+          {tab === 'watch' && (
+            <MatchWatchTab
+              fixture={merged}
+              broadcasts={broadcasts}
+              isLoading={isLoadingBroadcasts}
+              error={broadcastsError}
+              onRetry={retryBroadcasts}
+              onPlay={handlePlay}
+            />
+          )}
+          {hasWidgets && (
+            <MatchDetailContent
+              fixture={merged}
+              activeKey={detailKey}
+              homeLabel={score.home}
+              awayLabel={score.away}
+              scrollable={false}
+            />
+          )}
+        </ScrollView>
+      </MatchDetailThemeProvider>
     </View>
   );
 }
@@ -421,6 +423,5 @@ const styles = StyleSheet.create({
   },
   body: {
     flex: 1,
-    backgroundColor: DETAIL_BACKGROUND,
   },
 });

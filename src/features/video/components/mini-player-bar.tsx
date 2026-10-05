@@ -67,7 +67,12 @@ function catchupParams(catchup: CatchupWindow | null): Record<string, string> {
 export function MiniPlayerBar() {
   const castChannel = useCastMiniPlayerStore((s) => s.channel);
   const session = usePlaybackSessionStore((s) => s.session);
-  const localSession = !castChannel && session?.mode === 'mini' ? session : null;
+  // Never while the session plays in a picture-in-picture window: that window
+  // is all the viewer sees of this app, and mounting a second `VideoView` on
+  // the player behind it would take the picture away from it (Android allows
+  // one attached view per player).
+  const localSession =
+    !castChannel && session?.mode === 'mini' && !session.pip ? session : null;
 
   // Over the whole stack now, so the player route has to be excluded by name:
   // minimizing flips the session before the pop is dispatched, which would

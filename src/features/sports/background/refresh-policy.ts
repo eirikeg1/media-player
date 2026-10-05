@@ -1,3 +1,4 @@
+import { wakeMinutesForPeriod } from '@/background/wake-interval';
 import {
   DEFAULT_SPORTS_BACKGROUND_REFRESH,
   type SportsBackgroundRefresh,
@@ -12,16 +13,6 @@ import {
 /** Local-time hours the `night` mode refreshes in; `endHour` is exclusive. */
 export const NIGHT_WINDOW = { startHour: 2, endHour: 6 } as const;
 
-/** The OS will not wake a periodic task more often than this. */
-const MIN_SCHEDULER_MINUTES = 15;
-/**
- * Ceiling on the interval wake cadence: at least two wakes a day, however long
- * the chosen interval is. `shouldRunNow` still gates the actual refresh to the
- * chosen interval, so an extra wake only costs a cheap no-op check — while a
- * cadence stretched to days risks the device skipping the one wake that mattered
- * and losing a whole multi-day window.
- */
-const MAX_SCHEDULER_MINUTES = 720;
 /** How often to wake for the time-of-day modes, so the slot is never missed. */
 const TIME_OF_DAY_WAKE_MINUTES = 30;
 
@@ -124,13 +115,12 @@ export function shouldRunNow(
 }
 
 /**
- * How often the OS should wake the task, in minutes. `0` means the task should
- * be unregistered entirely.
+ * How often the sports refresh needs the OS to wake the app, in minutes. `0`
+ * means it needs no wakes at all.
  *
- * Interval mode wakes at half its period so the drift between a wake and the
- * moment the refresh becomes due stays bounded by half an interval; the OS
- * floor of 15 minutes still wins for short intervals, and the 12-hour ceiling
- * wins for the multi-day ones. The time-of-day modes wake on a fixed cadence —
+ * Interval mode wakes at half its period (see {@link wakeMinutesForPeriod}):
+ * the OS floor of 15 minutes still wins for short intervals, and the 12-hour
+ * ceiling wins for the multi-day ones. The time-of-day modes wake on a fixed cadence —
  * often enough to land inside the night window and to hit the daily slot
  * promptly, rarely enough to cost nothing when it is not due.
  */
@@ -139,10 +129,7 @@ export function schedulerIntervalMinutes(pref: SportsBackgroundRefresh): number 
     case 'off':
       return 0;
     case 'interval':
-      return Math.min(
-        MAX_SCHEDULER_MINUTES,
-        Math.max(MIN_SCHEDULER_MINUTES, (clampIntervalHours(pref.intervalHours) * 60) / 2)
-      );
+      return wakeMinutesForPeriod(clampIntervalHours(pref.intervalHours) * 60);
     case 'daily':
     case 'night':
       return TIME_OF_DAY_WAKE_MINUTES;

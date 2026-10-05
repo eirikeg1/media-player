@@ -106,8 +106,10 @@ function useForegroundResume(session: PlaybackSession | null): void {
     let isForeground = AppState.currentState === 'active';
     let wasPlayingInForeground = isForeground && player.playing;
 
+    // A picture-in-picture window is the viewer watching too, even though the
+    // activity counts as background: a pause tapped in it is theirs to keep.
     const playingSubscription = player.addListener('playingChange', ({ isPlaying }) => {
-      if (isForeground) wasPlayingInForeground = isPlaying;
+      if (isForeground || sessionRef.current?.pip) wasPlayingInForeground = isPlaying;
     });
 
     const appStateSubscription = AppState.addEventListener('change', (state) => {
@@ -120,6 +122,12 @@ function useForegroundResume(session: PlaybackSession | null): void {
 
       const current = sessionRef.current;
       if (!current || current.player !== player) return;
+
+      // Still playing means the stream was never suspended: picture-in-picture
+      // keeps it running (and at the live edge) while the app is away, so
+      // reconnecting on the way back would interrupt playback that is fine —
+      // and make the panel's single connection slot churn for nothing.
+      if (player.playing) return;
 
       // Both branches end up playing: `reloadSource` starts the reconnected
       // stream itself, since a live buffer minutes behind is unusable.

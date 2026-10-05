@@ -22,6 +22,7 @@ import type {
   ChannelIdMapping,
   ChannelMetadata,
   ChannelProgrammes,
+  ChannelShift,
   ChannelsWithCount,
   Competition,
   ContentType,
@@ -43,6 +44,7 @@ import type {
   MatchStatistics,
   MatchTimeline,
   PlaylistMetadata,
+  ProgrammeSearchOptions,
   RankedBroadcast,
   RecommendationSignals,
   SeriesFilter,
@@ -124,6 +126,16 @@ function extinfAttr(raw: string, name: string): string | undefined {
   return new RegExp(`${name}="([^"]*)"`).exec(raw)?.[1] || undefined;
 }
 
+/**
+ * `tvg-shift` as whole signed hours, like the Rust parser's `Option<i8>`: a
+ * value that is not an integer is no shift at all rather than a truncated one.
+ */
+function parseTvgShift(raw: string): number | undefined {
+  const value = extinfAttr(raw, 'tvg-shift');
+  if (value === undefined || !/^[+-]?\d+$/.test(value.trim())) return undefined;
+  return Number(value);
+}
+
 export function parsePlaylistString(content: string): Channel[] {
   const parsed = parseM3u(content);
   return parsed.items.map((item) => {
@@ -144,6 +156,7 @@ export function parsePlaylistString(content: string): Channel[] {
       userAgent: item.http?.['user-agent'] || undefined,
       referer: item.http?.referrer || undefined,
       contentType,
+      tvgShift: parseTvgShift(item.raw),
       // Like Rust, adult flags are group-based and applied only after a
       // fetch-and-import (see fetchAndImportPlaylist), never at parse time.
       isAdult: false,
@@ -192,6 +205,35 @@ function extractTag(block: string, tag: string): string | undefined {
   ).exec(block);
   if (!match) return undefined;
   return match[1] != null ? match[1].trim() : unescapeXml(match[2]).trim();
+}
+
+/**
+ * `tvg-shift` is declared in hours and the guide is stored in Unix seconds, as
+ * in the Rust queries this fake stands in for.
+ */
+const SECONDS_PER_HOUR = 3600;
+
+/** A programme as a shifted channel's viewer sees it. */
+function shiftProgramme(programme: EpgProgramme, shiftSeconds: number): EpgProgramme {
+  if (shiftSeconds === 0) return programme;
+  return {
+    ...programme,
+    start: programme.start + shiftSeconds,
+    stop: programme.stop + shiftSeconds,
+  };
+}
+
+/**
+ * The channels of a grid read, one entry per channel: the real queries stage
+ * them keyed by id, so a channel listed twice (an HD/SD pair sharing a tvg-id)
+ * is answered once.
+ */
+function dedupeChannels(channels: ChannelShift[]): ChannelShift[] {
+  const byId = new Map<string, ChannelShift>();
+  for (const channel of channels) {
+    if (!byId.has(channel.channelId)) byId.set(channel.channelId, channel);
+  }
+  return [...byId.values()];
 }
 
 export function parseXmltvString(content: string): EpgProgramme[] {
@@ -848,46 +890,74 @@ export class Database {
 
   // ── EPG programmes ──
 
-  async getCurrentProgramme(channelId: string, now?: number): Promise<EpgProgramme | null> {
-    const at = now ?? Math.floor(Date.now() / 1000);
-    return (
-      this.allProgrammes().find((p) => p.channelId === channelId && p.start <= at && p.stop > at) ??
-      null
+  async getCurrentProgramme(
+    channelId: string,
+    now?: number,
+    shiftHours: number = 0,
+  ): Promise<EpgProgramme | null> {
+    const shift = shiftHours * SECONDS_PER_HOUR;
+    const at = (now ?? Math.floor(Date.now() / 1000)) - shift;
+    const current = this.allProgrammes().find(
+      (p) => p.channelId === channelId && p.start <= at && p.stop > at,
     );
+    return current ? shiftProgramme(current, shift) : null;
   }
 
-  async getNextProgramme(channelId: string, now?: number): Promise<EpgProgramme | null> {
-    const at = now ?? Math.floor(Date.now() / 1000);
-    return (
-      this.allProgrammes()
-        .filter((p) => p.channelId === channelId && p.start > at)
-        .sort((a, b) => a.start - b.start)[0] ?? null
-    );
+  async getNextProgramme(
+    channelId: string,
+    now?: number,
+    shiftHours: number = 0,
+  ): Promise<EpgProgramme | null> {
+    const shift = shiftHours * SECONDS_PER_HOUR;
+    const at = (now ?? Math.floor(Date.now() / 1000)) - shift;
+    const next = this.allProgrammes()
+      .filter((p) => p.channelId === channelId && p.start > at)
+      .sort((a, b) => a.start - b.start)[0];
+    return next ? shiftProgramme(next, shift) : null;
   }
 
-  async getChannelSchedule(channelId: string, from: number, to: number): Promise<EpgProgramme[]> {
+  /**
+   * A channel's schedule for a window, with its `tvg-shift` applied as the real
+   * query applies it: the window is matched against the stored guide times and
+   * the programmes come back with the shift added, so the caller's window is the
+   * one it gets.
+   */
+  async getChannelSchedule(
+    channelId: string,
+    from: number,
+    to: number,
+    shiftHours: number = 0,
+  ): Promise<EpgProgramme[]> {
+    const shift = shiftHours * SECONDS_PER_HOUR;
     return this.allProgrammes()
-      .filter((p) => p.channelId === channelId && p.stop > from && p.start < to)
-      .sort((a, b) => a.start - b.start);
+      .filter((p) => p.channelId === channelId && p.stop > from - shift && p.start < to - shift)
+      .sort((a, b) => a.start - b.start)
+      .map((p) => shiftProgramme(p, shift));
   }
 
+  /** "On now" per channel, on each channel's own (shifted) clock. */
   async getCurrentProgrammesForChannels(
-    channelIds: string[],
+    channels: ChannelShift[],
     now?: number,
   ): Promise<EpgProgramme[]> {
-    const results = await Promise.all(channelIds.map((id) => this.getCurrentProgramme(id, now)));
+    const at = now ?? Math.floor(Date.now() / 1000);
+    const results = await Promise.all(
+      dedupeChannels(channels).map(({ channelId, shiftHours }) =>
+        this.getCurrentProgramme(channelId, at, shiftHours),
+      ),
+    );
     return results.filter((p): p is EpgProgramme => p !== null);
   }
 
   async getProgrammesForChannels(
-    channelIds: string[],
+    channels: ChannelShift[],
     from: number,
     to: number,
   ): Promise<ChannelProgrammes[]> {
     const groups = await Promise.all(
-      channelIds.map(async (channelId) => ({
+      dedupeChannels(channels).map(async ({ channelId, shiftHours }) => ({
         channelId,
-        programmes: await this.getChannelSchedule(channelId, from, to),
+        programmes: await this.getChannelSchedule(channelId, from, to, shiftHours),
       })),
     );
     return groups.filter((g) => g.programmes.length > 0);
@@ -895,12 +965,19 @@ export class Database {
 
   async searchProgrammes(
     query: string,
-    options?: { from?: number; to?: number; category?: string; limit?: number; offset?: number },
+    options?: ProgrammeSearchOptions,
   ): Promise<GroupedProgrammesResult> {
     const needle = query.toLowerCase();
+    // Sparse, like the real query's map: a channel it does not name is searched
+    // and returned on the guide's own clock.
+    const shiftOf = new Map(
+      (options?.shifts ?? []).map((s) => [s.channelId, s.shiftHours * SECONDS_PER_HOUR]),
+    );
+    const shift = (programme: EpgProgramme) => shiftOf.get(programme.channelId) ?? 0;
+
     let matches = this.allProgrammes().filter((p) => p.title.toLowerCase().includes(needle));
-    if (options?.from != null) matches = matches.filter((p) => p.stop > options.from!);
-    if (options?.to != null) matches = matches.filter((p) => p.start < options.to!);
+    if (options?.from != null) matches = matches.filter((p) => p.stop > options.from! - shift(p));
+    if (options?.to != null) matches = matches.filter((p) => p.start < options.to! - shift(p));
     if (options?.category) matches = matches.filter((p) => p.category === options.category);
 
     const limit = options?.limit ?? matches.length;
@@ -909,7 +986,10 @@ export class Database {
 
     const byChannel = new Map<string, EpgProgramme[]>();
     for (const programme of page) {
-      byChannel.set(programme.channelId, [...(byChannel.get(programme.channelId) ?? []), programme]);
+      byChannel.set(programme.channelId, [
+        ...(byChannel.get(programme.channelId) ?? []),
+        shiftProgramme(programme, shift(programme)),
+      ]);
     }
     return {
       groups: [...byChannel.entries()].map(([channelId, programmes]) => ({

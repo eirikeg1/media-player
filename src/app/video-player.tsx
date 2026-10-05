@@ -1,7 +1,7 @@
 import type { Fixture } from 'expo-m3u-parser';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { BackHandler, StatusBar, View } from 'react-native';
+import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { StatusBar, View } from 'react-native';
 
 import { ConfirmDialog } from '@/components/ui/containers/modal/confirm-dialog';
 import { shouldHandOverToLive } from '@/features/sports/catchup';
@@ -9,10 +9,12 @@ import { parseFixtureParam } from '@/features/sports/fixture-param';
 import { VIDEO_COLORS } from '@/features/video/constants';
 import { VideoPlayer } from '@/features/video/components/video-player';
 import { VideoStateButton } from '@/features/video/components/video-states';
+import { useNoHistoryBack, useSessionExit } from '@/features/video/hooks/use-session-exit';
 import { IconSymbol } from '@/components/ui/display/icon-symbol';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { firstVisibleTabHref } from '@/features/user/visible-tabs';
 import { getChannelId } from '@/lib/channel-utils';
+import { queueStepOrigin } from '@/lib/detail-hrefs';
 import { hrefParam } from '@/lib/route-params';
 import { RustChannelService } from '@/services/rust-channel-service';
 import { useCastMiniPlayerStore } from '@/stores/video/cast-mini-player-store';
@@ -66,7 +68,7 @@ export default function VideoPlayerScreen() {
   // The surface playback was launched from, carried on the session so the mini
   // bar can put it back underneath the player when it expands. Validated, not
   // cast: see `route-params`.
-  const origin = useMemo(() => hrefParam.decode(params.origin), [params.origin]);
+  const launchOrigin = useMemo(() => hrefParam.decode(params.origin), [params.origin]);
 
   const stopVideoRef = useRef<(() => void) | null>(null);
 
@@ -125,6 +127,18 @@ export default function VideoPlayerScreen() {
     if (!channel) return null;
     return catchup ? catchupUrl : channel.url;
   }, [channel, catchup, catchupUrl]);
+
+  /**
+   * The surface to return to for what is playing *now*. The route's origin
+   * describes the channel it was opened for, so a queue step onto another
+   * channel has to name that one instead — see `queueStepOrigin`.
+   */
+  const origin = useMemo(() => {
+    if (!channel || !params.playlistId || getChannelId(channel) === params.channelId) {
+      return launchOrigin;
+    }
+    return queueStepOrigin(contentType, params.playlistId, channel, launchOrigin);
+  }, [channel, params.channelId, params.playlistId, contentType, launchOrigin]);
 
   // Dismiss the cast mini bar when this screen mounts (expanding from bar or new channel)
   useEffect(() => {
@@ -312,6 +326,33 @@ export default function VideoPlayerScreen() {
     });
   }, [channel, isResumeResolved, streamUrl, catchup, params.playlistId, contentType, fixture, origin, startPosition]);
 
+  // What leaving the screen does to the session: healthy local playback
+  // minimizes into the mini bar and keeps playing; casting hands off to the cast
+  // bar; a failed stream just stops.
+  const leaveSession = useCallback(() => {
+    const isCasting = useVideoPlayerStore.getState().isCasting;
+    const sessionStore = usePlaybackSessionStore.getState();
+    if (isCasting && channel && streamUrl && params.playlistId) {
+      useCastMiniPlayerStore
+        .getState()
+        .activate(channel, params.playlistId, contentType, streamUrl, catchup);
+      // The cast bar takes over — the idle local player isn't needed anymore.
+      sessionStore.endSession();
+    } else if (sessionStore.session && !sessionStore.session.error) {
+      sessionStore.minimize();
+    } else {
+      stopVideoRef.current?.();
+      sessionStore.endSession();
+    }
+  }, [channel, streamUrl, catchup, params.playlistId, contentType]);
+
+  // Tied to the route being removed rather than to a back press, so every way
+  // out of the player — hardware back, the back pill, a deep-link replace —
+  // takes the same path. `beginHandover` exempts the catch-up → live replace
+  // below.
+  const navigation = useNavigation();
+  const { beginHandover } = useSessionExit(navigation, leaveSession);
+
   // Hand a catch-up window over to the live stream when it runs out. The panel
   // fixes the archive file's length at request time, so a window over a match
   // still in play ends at the recording edge rather than at the final whistle —
@@ -323,6 +364,8 @@ export default function VideoPlayerScreen() {
     if (!sessionPlayer || !shouldHandOverToLive(catchup, fixture)) return;
 
     const subscription = sessionPlayer.addListener('playToEnd', () => {
+      // The live session is started by the screen this replace mounts.
+      beginHandover();
       router.replace({
         pathname: '/video-player',
         params: {
@@ -342,6 +385,7 @@ export default function VideoPlayerScreen() {
     sessionPlayer,
     catchup,
     fixture,
+    beginHandover,
     router,
     params.channelId,
     params.playlistId,
@@ -375,41 +419,10 @@ export default function VideoPlayerScreen() {
     if (router.canGoBack()) router.back();
     else router.replace(firstVisibleTabHref(useUserStore.getState().currentUser?.settings));
   }, [router]);
-
-  // Leaving the screen: healthy local playback minimizes into the mini bar
-  // and keeps playing; casting hands off to the cast bar; a failed stream
-  // just stops.
-  const handleGoBack = useCallback(() => {
-    const isCasting = useVideoPlayerStore.getState().isCasting;
-    const sessionStore = usePlaybackSessionStore.getState();
-    if (isCasting && channel && streamUrl && params.playlistId) {
-      useCastMiniPlayerStore
-        .getState()
-        .activate(channel, params.playlistId, contentType, streamUrl, catchup);
-      // The cast bar takes over — the idle local player isn't needed anymore.
-      sessionStore.endSession();
-    } else if (sessionStore.session && !sessionStore.session.error) {
-      sessionStore.minimize();
-    } else {
-      stopVideoRef.current?.();
-      sessionStore.endSession();
-    }
-    dismiss();
-  }, [dismiss, channel, streamUrl, catchup, params.playlistId, contentType]);
-
-  // Registered once with a stable callback: re-registering on every identity
-  // change of `handleGoBack` pushed this handler to the front of the LIFO stack
-  // again and again, so it started swallowing overlays' own back handling.
-  const handleGoBackRef = useRef(handleGoBack);
-  handleGoBackRef.current = handleGoBack;
-  useLayoutEffect(() => {
-    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
-      handleGoBackRef.current();
-      return true;
-    });
-
-    return () => backHandler.remove();
-  }, []);
+  const canGoBack = useCallback(() => router.canGoBack(), [router]);
+  // The no-history case is the one navigation's own back handling leaves to the
+  // activity; `dismiss`'s replace removes this route, so `leaveSession` runs.
+  useNoHistoryBack(canGoBack, dismiss);
 
   const handleRegisterStopFunction = useCallback((stopFn: () => void) => {
     stopVideoRef.current = stopFn;
@@ -417,6 +430,8 @@ export default function VideoPlayerScreen() {
 
   /** Switch a catch-up launch over to the channel's live stream. */
   const watchLive = useCallback(() => {
+    // Same stream, different window: the incoming screen owns the session.
+    beginHandover();
     router.replace({
       pathname: '/video-player',
       params: {
@@ -427,7 +442,15 @@ export default function VideoPlayerScreen() {
         ...(params.origin ? { origin: params.origin } : {}),
       },
     });
-  }, [router, params.channelId, params.playlistId, params.fixture, params.origin, contentType]);
+  }, [
+    beginHandover,
+    router,
+    params.channelId,
+    params.playlistId,
+    params.fixture,
+    params.origin,
+    contentType,
+  ]);
 
   // Waiting for the channel, and then for what depends on it. Without a channel
   // there is nothing left to resolve — a rejected lookup must fall through to
@@ -504,7 +527,7 @@ export default function VideoPlayerScreen() {
         channel={channel}
         streamUrl={streamUrl}
         startPosition={startPosition}
-        onBack={handleGoBack}
+        onBack={dismiss}
         onRegisterStopFunction={handleRegisterStopFunction}
         onNext={handleNext}
         onPrevious={handlePrevious}
@@ -533,7 +556,7 @@ function UnavailableLayout({ title, message, onBack, onWatchLive }: UnavailableL
       <StatusBar hidden />
       <IconSymbol name="exclamationmark.triangle" size={64} color={VIDEO_COLORS.text} />
       <ThemedText style={styles.errorTitle}>{title}</ThemedText>
-      <ThemedText style={styles.errorSubtitle} type="subtitle">
+      <ThemedText style={styles.errorSubtitle} type="body">
         {message}
       </ThemedText>
       <View style={styles.errorActions}>
@@ -571,9 +594,7 @@ const styles = {
     color: VIDEO_COLORS.text,
   },
   errorSubtitle: {
-    fontSize: 14,
     textAlign: 'center' as const,
-    lineHeight: 20,
     color: VIDEO_COLORS.subtitle,
   },
   errorActions: {

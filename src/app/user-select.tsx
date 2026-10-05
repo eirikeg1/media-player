@@ -4,7 +4,6 @@ import { ConfirmDialog } from '@/components/ui/containers/modal/confirm-dialog';
 import { ThemedText } from '@/components/ui/display/themed-text';
 import { getInitials } from '@/features/user/get-initials';
 import { firstVisibleTabHref } from '@/features/user/visible-tabs';
-import { useBackClose } from '@/hooks/use-back-close';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useHaptics } from '@/hooks/use-haptics';
 import { useThemeColor } from '@/hooks/use-theme-color';
@@ -408,11 +407,6 @@ function EditUserModal({
 
   const cancelEditing = useCallback(() => setEditingUser(null), []);
 
-  // The panel is an absolute overlay, not a route: without this, back would pop
-  // the whole user-select screen from under it. The edit form covers itself (a
-  // Modal gets back directly), as does the delete confirmation.
-  useBackClose(!editingUser, onCancel);
-
   if (editingUser) {
     return (
       <AnimatedModal visible={true} onClose={isUpdating ? undefined : cancelEditing}>
@@ -437,8 +431,16 @@ function EditUserModal({
   }
 
   return (
-    <View style={styles.editOverlay}>
-      <View style={[styles.editPanel, { backgroundColor: palette.card }]}>
+    // A dialog rather than the in-screen overlay it used to be: anything back
+    // has to close before it leaves the screen belongs in a `Modal`, which
+    // receives back in its own window (see `AnimatedModal`) instead of
+    // competing with navigation for the press.
+    //
+    // It steps aside for the delete confirmation instead of sitting behind it:
+    // two dialog windows open at once is not something Android stacks reliably,
+    // and the confirmation is about the row that was just tapped anyway.
+    <>
+      <AnimatedModal visible={pendingDeleteUser === null} onClose={onCancel}>
         <ThemedText style={styles.dialogTitle}>Edit Profiles</ThemedText>
 
         <ScrollView style={styles.editList} showsVerticalScrollIndicator={false}>
@@ -502,7 +504,7 @@ function EditUserModal({
         >
           <ThemedText style={styles.dialogButtonLabel}>Done</ThemedText>
         </Pressable>
-      </View>
+      </AnimatedModal>
 
       <ConfirmDialog
         visible={pendingDeleteUser !== null}
@@ -530,7 +532,7 @@ function EditUserModal({
           },
         ]}
       />
-    </View>
+    </>
   );
 }
 
@@ -896,20 +898,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textAlign: 'center',
     marginBottom: 24,
-  },
-  editOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 32,
-  },
-  editPanel: {
-    width: '100%',
-    maxWidth: 448,
-    maxHeight: '80%',
-    borderRadius: 16,
-    padding: 32,
   },
   editList: {
     marginBottom: 24,

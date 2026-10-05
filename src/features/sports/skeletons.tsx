@@ -3,9 +3,10 @@ import {
   useSkeletonPulse,
   type SkeletonPulse,
 } from '@/components/ui/display/skeleton';
+import { textLineHeight } from '@/components/ui/display/themed-text';
 import { StyleSheet, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { FAINT } from './match-detail/match-detail-shared';
+import { useMatchDetailTheme } from './match-detail/match-detail-theme';
 import { useSportsPalette, type SportsPalette } from './sports-theme';
 
 /**
@@ -18,12 +19,31 @@ import { useSportsPalette, type SportsPalette } from './sports-theme';
  */
 
 /**
- * `ThemedText`'s default `lineHeight`. The sports styles override `fontSize`
- * only, so every themed text line on these screens is 24pt tall whatever its
- * font size — placeholder bars sit in a box of that height so the rows keep
- * their real geometry.
+ * The line box each mirrored text occupies, by the `fontSize` its real style
+ * sets: `ThemedText` derives a line height from an overridden size, so a
+ * placeholder bar sits in a box of exactly that height and the swap from
+ * skeleton to content moves nothing.
  */
-const TEXT_LINE = 24;
+const LINE = {
+  /** `competition-grid.tsx` `sectionLabel`, `team-detail.tsx` `sectionLabel`. */
+  label: textLineHeight(12),
+  /** `scorers-list.tsx` `teamName`/`assists`. */
+  meta: textLineHeight(12),
+  /** `league-header.tsx` `subtitle`. */
+  subtitle: textLineHeight(11),
+  /** `league-header.tsx` `title`, `scorers-list.tsx` `rank`. */
+  rowLabel: textLineHeight(14),
+  /** `match-row.tsx` `teamName`, `scorers-list.tsx` `playerName`. */
+  rowName: textLineHeight(15),
+  /** `standings-table.tsx` `colPosition`/`teamName`/`colStat`. */
+  cell: textLineHeight(13),
+  /** `scorers-list.tsx` `goals`. */
+  stat: textLineHeight(18),
+} as const;
+
+/** Crest sizes, which set a row's height wherever they exceed its text line. */
+const CREST = 20;
+const SMALL_CREST = 16;
 
 interface SportsSkeletonTheme {
   palette: SportsPalette;
@@ -40,24 +60,26 @@ function useSportsSkeletonTheme(): SportsSkeletonTheme {
 }
 
 /**
- * Block colour on the match surface's fixed dark card. The shared `FAINT` (10%
- * white) all but vanishes once the pulse dips to 0.3, so blocks use a stronger
- * fixed grey instead.
+ * Placeholder colour for the match-detail tabs, taken from the surface their
+ * host provides — fixed dark over the player, themed on the match route.
  */
-const DARK_BLOCK = '#33333A';
+function useDetailBlock(): string {
+  return useMatchDetailTheme().skeleton;
+}
 
 interface LineProps {
   width: number;
   /** Bar thickness; the box around it keeps the text line's height. */
   height?: number;
-  line?: number;
+  /** The mirrored text's line box — one of {@link LINE}. */
+  line: number;
   color: string;
   pulse: SkeletonPulse;
   style?: StyleProp<ViewStyle>;
 }
 
 /** A placeholder bar centred in a box the height of the real text line. */
-function TextLine({ width, height = 10, line = TEXT_LINE, color, pulse, style }: LineProps) {
+function TextLine({ width, height = 10, line, color, pulse, style }: LineProps) {
   return (
     <View style={[styles.lineBox, { height: line }, style]}>
       <SkeletonBlock width={width} height={height} color={color} pulse={pulse} />
@@ -135,10 +157,11 @@ function LeagueHeaderSkeleton({ theme }: { theme: SportsSkeletonTheme }) {
       <View style={[styles.leagueHeader, { backgroundColor: palette.faint }]}>
         <SkeletonBlock width={24} height={24} borderRadius={6} color={color} pulse={pulse} />
         <View style={styles.leagueHeaderTitles}>
-          <TextLine width={136} height={11} color={color} pulse={pulse} />
+          <TextLine width={136} height={11} line={LINE.rowLabel} color={color} pulse={pulse} />
           <TextLine
             width={84}
             height={9}
+            line={LINE.subtitle}
             color={color}
             pulse={pulse}
             style={styles.leagueHeaderSubtitle}
@@ -277,15 +300,21 @@ export function ScorersSkeleton() {
             <SkeletonBlock width={12} height={10} color={color} pulse={pulse} />
           </View>
           <View style={styles.scorerInfo}>
-            <TextLine width={index % 2 === 0 ? 148 : 124} height={11} color={color} pulse={pulse} />
+            <TextLine
+              width={index % 2 === 0 ? 148 : 124}
+              height={11}
+              line={LINE.rowName}
+              color={color}
+              pulse={pulse}
+            />
             <View style={styles.scorerTeamRow}>
               <SkeletonBlock width={16} height={16} borderRadius={8} color={color} pulse={pulse} />
               <SkeletonBlock width={88} height={9} color={color} pulse={pulse} />
             </View>
           </View>
           <View style={styles.scorerStats}>
-            <TextLine width={18} height={14} color={color} pulse={pulse} />
-            <TextLine width={44} height={9} color={color} pulse={pulse} />
+            <TextLine width={18} height={14} line={LINE.stat} color={color} pulse={pulse} />
+            <TextLine width={44} height={9} line={LINE.meta} color={color} pulse={pulse} />
           </View>
         </View>
       ))}
@@ -301,10 +330,10 @@ export function ScorersSkeleton() {
 const GRID_COLUMNS = 3;
 const GRID_HORIZONTAL_PADDING = 16;
 const GRID_GAP = 8;
-/** Border + 10pt padding + 40pt emblem + 6pt gap + one text line + 10 + border. */
-const GRID_TILE_HEIGHT = 92;
-/** Border + 10pt padding + one text line + 10 + border. */
-const ALL_CHIP_HEIGHT = 46;
+/** Border + 10pt padding + 40pt emblem + 6pt gap + the `cardLabel` line + 10 + border. */
+const GRID_TILE_HEIGHT = 1 + 10 + 40 + 6 + textLineHeight(11) + 10 + 1;
+/** Border + 10pt padding + the `allChipLabel` line + 10 + border. */
+const ALL_CHIP_HEIGHT = 1 + 10 + textLineHeight(14) + 10 + 1;
 const GRID_TOP_TILES = 6;
 const GRID_INTERNATIONAL_TILES = 3;
 
@@ -341,7 +370,14 @@ export function CompetitionGridSkeleton() {
         pulse={pulse}
       />
       {tileRow(GRID_TOP_TILES)}
-      <TextLine width={84} height={9} color={color} pulse={pulse} style={styles.gridSectionLabel} />
+      <TextLine
+        width={84}
+        height={9}
+        line={LINE.label}
+        color={color}
+        pulse={pulse}
+        style={styles.gridSectionLabel}
+      />
       {tileRow(GRID_INTERNATIONAL_TILES)}
     </View>
   );
@@ -362,7 +398,13 @@ export function TeamListSkeleton() {
           style={[styles.teamRow, { borderBottomColor: palette.border }]}
         >
           <SkeletonBlock width={32} height={32} borderRadius={16} color={color} pulse={pulse} />
-          <TextLine width={index % 2 === 0 ? 168 : 132} height={11} color={color} pulse={pulse} />
+          <TextLine
+            width={index % 2 === 0 ? 168 : 132}
+            height={11}
+            line={LINE.rowName}
+            color={color}
+            pulse={pulse}
+          />
         </View>
       ))}
     </View>
@@ -390,6 +432,7 @@ export function TeamScheduleSkeleton() {
           <TextLine
             width={104}
             height={9}
+            line={LINE.label}
             color={theme.color}
             pulse={theme.pulse}
             style={styles.teamScheduleLabel}
@@ -419,37 +462,38 @@ const STAT_ROWS = 8;
 /** The stats tab: a group title over paired comparison bars. */
 export function MatchStatsSkeleton() {
   const pulse = useSkeletonPulse();
+  const block = useDetailBlock();
 
   return (
     <View testID="match-stats-skeleton" style={styles.statsContent}>
-      <SkeletonBlock width={104} height={12} color={DARK_BLOCK} pulse={pulse} />
+      <SkeletonBlock width={104} height={12} color={block} pulse={pulse} />
       <View style={styles.statGroup}>
         {Array.from({ length: STAT_ROWS }, (_, index) => (
           <View key={index} testID="sports-skeleton-stat-row" style={styles.statRow}>
             <View style={styles.statValues}>
-              <SkeletonBlock width={26} height={10} color={DARK_BLOCK} pulse={pulse} />
+              <SkeletonBlock width={26} height={10} color={block} pulse={pulse} />
               <View style={styles.statLabel}>
                 <SkeletonBlock
                   width={index % 2 === 0 ? 96 : 74}
                   height={10}
-                  color={DARK_BLOCK}
+                  color={block}
                   pulse={pulse}
                 />
               </View>
-              <SkeletonBlock width={26} height={10} color={DARK_BLOCK} pulse={pulse} />
+              <SkeletonBlock width={26} height={10} color={block} pulse={pulse} />
             </View>
             <View style={styles.statTrack}>
               <SkeletonBlock
                 height={5}
                 borderRadius={3}
-                color={DARK_BLOCK}
+                color={block}
                 pulse={pulse}
                 style={styles.fill}
               />
               <SkeletonBlock
                 height={5}
                 borderRadius={3}
-                color={DARK_BLOCK}
+                color={block}
                 pulse={pulse}
                 style={styles.fill}
               />
@@ -467,6 +511,7 @@ const SUB_ROWS = 7;
 /** The lineups tab: the formation tags, the pitch and the substitute columns. */
 export function MatchLineupsSkeleton({ compact = false }: { compact?: boolean }) {
   const pulse = useSkeletonPulse();
+  const block = useDetailBlock();
 
   return (
     <View testID="match-lineups-skeleton" style={styles.lineupsContent}>
@@ -478,12 +523,12 @@ export function MatchLineupsSkeleton({ compact = false }: { compact?: boolean })
       <SkeletonBlock
         width="100%"
         borderRadius={12}
-        color={DARK_BLOCK}
+        color={block}
         pulse={pulse}
         style={compact ? styles.pitchHorizontal : styles.pitchVertical}
       />
       <View style={styles.subs}>
-        <SkeletonBlock width={92} height={12} color={DARK_BLOCK} pulse={pulse} />
+        <SkeletonBlock width={92} height={12} color={block} pulse={pulse} />
         <View style={styles.subColumns}>
           <SubColumnSkeleton pulse={pulse} />
           <SubColumnSkeleton pulse={pulse} />
@@ -500,34 +545,36 @@ function TeamTagSkeleton({
   pulse: SkeletonPulse;
   align?: 'left' | 'right';
 }) {
+  const block = useDetailBlock();
   return (
     <View style={[styles.teamTag, align === 'right' && styles.teamTagRight]}>
-      <SkeletonBlock width={9} height={9} borderRadius={4.5} color={DARK_BLOCK} pulse={pulse} />
-      <SkeletonBlock width={88} height={11} color={DARK_BLOCK} pulse={pulse} />
-      <SkeletonBlock width={44} height={10} color={DARK_BLOCK} pulse={pulse} />
+      <SkeletonBlock width={9} height={9} borderRadius={4.5} color={block} pulse={pulse} />
+      <SkeletonBlock width={88} height={11} color={block} pulse={pulse} />
+      <SkeletonBlock width={44} height={10} color={block} pulse={pulse} />
     </View>
   );
 }
 
 function SubColumnSkeleton({ pulse }: { pulse: SkeletonPulse }) {
+  const block = useDetailBlock();
   return (
     <View style={styles.subColumn}>
       <View style={styles.subTeamRow}>
-        <SkeletonBlock width={9} height={9} borderRadius={4.5} color={DARK_BLOCK} pulse={pulse} />
-        <SkeletonBlock width={72} height={10} color={DARK_BLOCK} pulse={pulse} />
+        <SkeletonBlock width={9} height={9} borderRadius={4.5} color={block} pulse={pulse} />
+        <SkeletonBlock width={72} height={10} color={block} pulse={pulse} />
       </View>
       {Array.from({ length: SUB_ROWS }, (_, index) => (
         <View key={index} testID="sports-skeleton-sub-row" style={styles.subRow}>
-          <SkeletonBlock width={14} height={10} color={DARK_BLOCK} pulse={pulse} />
+          <SkeletonBlock width={14} height={10} color={block} pulse={pulse} />
           <View style={styles.fill}>
             <SkeletonBlock
               width={index % 2 === 0 ? 92 : 76}
               height={10}
-              color={DARK_BLOCK}
+              color={block}
               pulse={pulse}
             />
           </View>
-          <SkeletonBlock width={30} height={20} borderRadius={5} color={DARK_BLOCK} pulse={pulse} />
+          <SkeletonBlock width={30} height={20} borderRadius={5} color={block} pulse={pulse} />
         </View>
       ))}
     </View>
@@ -539,6 +586,8 @@ const TIMELINE_ROWS = 6;
 /** The timeline tab: incident rows alternating either side of the centre rail. */
 export function MatchTimelineSkeleton({ compact = false }: { compact?: boolean }) {
   const pulse = useSkeletonPulse();
+  const theme = useMatchDetailTheme();
+  const block = theme.skeleton;
 
   return (
     <View
@@ -549,11 +598,11 @@ export function MatchTimelineSkeleton({ compact = false }: { compact?: boolean }
         const onHomeSide = index % 2 === 0;
         const incident = (
           <>
-            <SkeletonBlock width={112} height={11} color={DARK_BLOCK} pulse={pulse} />
+            <SkeletonBlock width={112} height={11} color={block} pulse={pulse} />
             <SkeletonBlock
               width={72}
               height={9}
-              color={DARK_BLOCK}
+              color={block}
               pulse={pulse}
               style={styles.timelineSubLine}
             />
@@ -565,18 +614,18 @@ export function MatchTimelineSkeleton({ compact = false }: { compact?: boolean }
               {onHomeSide ? incident : null}
             </View>
             <View style={styles.timelineCenter}>
-              <View style={styles.timelineRail} />
+              <View style={[styles.timelineRail, { backgroundColor: theme.faint }]} />
               <SkeletonBlock
                 width={28}
                 height={28}
                 borderRadius={14}
-                color={DARK_BLOCK}
+                color={block}
                 pulse={pulse}
               />
               <SkeletonBlock
                 width={22}
                 height={9}
-                color={DARK_BLOCK}
+                color={block}
                 pulse={pulse}
                 style={styles.timelineMinute}
               />
@@ -597,17 +646,18 @@ const H2H_ALIGNMENTS = ['flex-start', 'center', 'flex-end'] as const;
 /** The preview tab: the head-to-head block over the two form columns. */
 export function MatchPreviewSkeleton() {
   const pulse = useSkeletonPulse();
+  const block = useDetailBlock();
 
   return (
     <View testID="match-preview-skeleton" style={styles.previewContent}>
       <View style={styles.previewBlock}>
-        <SkeletonBlock width={112} height={12} color={DARK_BLOCK} pulse={pulse} />
+        <SkeletonBlock width={112} height={12} color={block} pulse={pulse} />
         <View style={styles.h2hCard}>
           <View style={styles.h2hCounts}>
             {H2H_ALIGNMENTS.map((align) => (
               <View key={align} style={[styles.h2hCount, { alignItems: align }]}>
-                <SkeletonBlock width={26} height={22} color={DARK_BLOCK} pulse={pulse} />
-                <SkeletonBlock width={38} height={9} color={DARK_BLOCK} pulse={pulse} />
+                <SkeletonBlock width={26} height={22} color={block} pulse={pulse} />
+                <SkeletonBlock width={38} height={9} color={block} pulse={pulse} />
               </View>
             ))}
           </View>
@@ -615,18 +665,18 @@ export function MatchPreviewSkeleton() {
             width="100%"
             height={8}
             borderRadius={4}
-            color={DARK_BLOCK}
+            color={block}
             pulse={pulse}
           />
           <View style={styles.h2hTeams}>
-            <SkeletonBlock width={84} height={10} color={DARK_BLOCK} pulse={pulse} />
-            <SkeletonBlock width={68} height={10} color={DARK_BLOCK} pulse={pulse} />
+            <SkeletonBlock width={84} height={10} color={block} pulse={pulse} />
+            <SkeletonBlock width={68} height={10} color={block} pulse={pulse} />
           </View>
         </View>
       </View>
 
       <View style={styles.previewBlock}>
-        <SkeletonBlock width={96} height={12} color={DARK_BLOCK} pulse={pulse} />
+        <SkeletonBlock width={96} height={12} color={block} pulse={pulse} />
         <View style={styles.formColumns}>
           <FormColumnSkeleton pulse={pulse} />
           <FormColumnSkeleton pulse={pulse} align="right" />
@@ -643,13 +693,14 @@ function FormColumnSkeleton({
   pulse: SkeletonPulse;
   align?: 'left' | 'right';
 }) {
+  const block = useDetailBlock();
   return (
     <View
       style={[styles.formColumn, { alignItems: align === 'right' ? 'flex-end' : 'flex-start' }]}
     >
       <View style={styles.formTeamRow}>
-        <SkeletonBlock width={9} height={9} borderRadius={4.5} color={DARK_BLOCK} pulse={pulse} />
-        <SkeletonBlock width={84} height={11} color={DARK_BLOCK} pulse={pulse} />
+        <SkeletonBlock width={9} height={9} borderRadius={4.5} color={block} pulse={pulse} />
+        <SkeletonBlock width={84} height={11} color={block} pulse={pulse} />
       </View>
       <View style={styles.formPills}>
         {Array.from({ length: FORM_PILLS }, (_, index) => (
@@ -658,14 +709,14 @@ function FormColumnSkeleton({
             width={20}
             height={20}
             borderRadius={5}
-            color={DARK_BLOCK}
+            color={block}
             pulse={pulse}
           />
         ))}
       </View>
       <View style={styles.formMeta}>
-        <SkeletonBlock width={116} height={9} color={DARK_BLOCK} pulse={pulse} />
-        <SkeletonBlock width={92} height={9} color={DARK_BLOCK} pulse={pulse} />
+        <SkeletonBlock width={116} height={9} color={block} pulse={pulse} />
+        <SkeletonBlock width={92} height={9} color={block} pulse={pulse} />
       </View>
     </View>
   );
@@ -676,27 +727,33 @@ const BROADCAST_ROWS = 2;
 /** Channel rows on the watch tab, below the country picker and mode toggle. */
 export function BroadcastRowsSkeleton() {
   const pulse = useSkeletonPulse();
+  const theme = useMatchDetailTheme();
+  const block = theme.skeleton;
 
   return (
     <>
       {Array.from({ length: BROADCAST_ROWS }, (_, index) => (
-        <View key={index} testID="sports-skeleton-broadcast-row" style={styles.broadcastRow}>
-          <SkeletonBlock width={32} height={32} borderRadius={6} color={DARK_BLOCK} pulse={pulse} />
+        <View
+          key={index}
+          testID="sports-skeleton-broadcast-row"
+          style={[styles.broadcastRow, { backgroundColor: theme.faint }]}
+        >
+          <SkeletonBlock width={32} height={32} borderRadius={6} color={block} pulse={pulse} />
           <View style={styles.broadcastInfo}>
             <SkeletonBlock
               width={index === 0 ? 132 : 108}
               height={12}
-              color={DARK_BLOCK}
+              color={block}
               pulse={pulse}
             />
             <SkeletonBlock
               width={index === 0 ? 96 : 84}
               height={10}
-              color={DARK_BLOCK}
+              color={block}
               pulse={pulse}
             />
           </View>
-          <SkeletonBlock width={26} height={26} borderRadius={13} color={DARK_BLOCK} pulse={pulse} />
+          <SkeletonBlock width={26} height={26} borderRadius={13} color={block} pulse={pulse} />
         </View>
       ))}
     </>
@@ -737,7 +794,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    height: TEXT_LINE,
+    height: Math.max(CREST, LINE.rowName),
   },
   matchTeamName: {
     flex: 1,
@@ -784,7 +841,7 @@ const styles = StyleSheet.create({
   },
   standingsPosition: {
     width: 28,
-    height: TEXT_LINE,
+    height: LINE.cell,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -792,12 +849,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     width: 140,
-    height: TEXT_LINE,
+    height: Math.max(CREST, LINE.cell),
     gap: 6,
   },
   standingsStat: {
     width: 32,
-    height: TEXT_LINE,
+    height: LINE.cell,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -809,7 +866,7 @@ const styles = StyleSheet.create({
   },
   scorerRank: {
     width: 28,
-    height: TEXT_LINE,
+    height: LINE.rowLabel,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -821,7 +878,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    height: TEXT_LINE,
+    height: Math.max(SMALL_CREST, LINE.meta),
   },
   scorerStats: {
     alignItems: 'flex-end',
@@ -979,7 +1036,6 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: 2,
-    backgroundColor: FAINT,
   },
   timelineMinute: {
     marginTop: 3,
@@ -1036,7 +1092,6 @@ const styles = StyleSheet.create({
     gap: 12,
     padding: 12,
     borderRadius: 12,
-    backgroundColor: FAINT,
   },
   broadcastInfo: {
     flex: 1,

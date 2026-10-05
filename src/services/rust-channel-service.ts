@@ -62,6 +62,7 @@ function rustChannelToJsChannel(rustChannel: RustChannel): Channel {
       country: rustChannel.tvgCountry || undefined,
       language: rustChannel.tvgLanguage || undefined,
       url: rustChannel.tvgUrl || undefined,
+      shift: rustChannel.tvgShift ?? undefined,
     },
     group: {
       title: rustChannel.group || undefined,

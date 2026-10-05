@@ -69,6 +69,12 @@ export interface UserSettings {
   sportsHideOtherLeagues: boolean;
   /** When sports data refreshes on its own. Absent = {@link DEFAULT_SPORTS_BACKGROUND_REFRESH}. */
   sportsBackgroundRefresh?: SportsBackgroundRefresh;
+  /**
+   * Whether the background playlist and guide sync may run on a metered
+   * (mobile data) connection. Off by default: a playlist is tens of MB and the
+   * download runs unseen. Syncing while the app is open is not affected.
+   */
+  backgroundSyncOnMobileData: boolean;
 }
 
 /**
@@ -245,4 +251,5 @@ export const DEFAULT_USER_SETTINGS: Omit<UserSettings, 'userId'> = {
   playlistSharingEnabled: true,
   shareUploadedBackgrounds: true,
   sportsHideOtherLeagues: false,
+  backgroundSyncOnMobileData: false,
 };

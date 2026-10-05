@@ -18,10 +18,9 @@ export const stateStyles = StyleSheet.create({
     marginTop: 16,
     marginBottom: 8,
   },
+  /** Paired with `ThemedText`'s `body` type, which sets the size and the line. */
   message: {
-    fontSize: 14,
     textAlign: 'center',
-    lineHeight: 20,
   },
   /** Takes over the title's spacing when there is no title above the message. */
   untitledMessage: {

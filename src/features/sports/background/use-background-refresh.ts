@@ -4,20 +4,15 @@ import {
   DEFAULT_SPORTS_BACKGROUND_REFRESH,
   type SportsBackgroundRefresh,
 } from '@/types/user.types';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { AppState, InteractionManager } from 'react-native';
 
-import { expoBackgroundScheduler } from './expo-scheduler';
 import {
   getSportsWarmPromise,
   runForegroundRefresh,
   warmAdjacentDays,
 } from './foreground-refresh';
 import { refreshStateStore } from './refresh-state-store';
-import { schedulerIntervalMinutes } from './refresh-policy';
-
-/** Warn once per launch — an unavailable OS scheduler stays unavailable. */
-let warnedUnavailable = false;
 
 /** The adjacent-day warm runs once per launch, not on every settings change. */
 let warmedAdjacentDays = false;
@@ -38,56 +33,22 @@ const LAUNCH_WARM_DELAY_MS = 3_000;
  */
 const DAY_VIEW_SETTLE_TIMEOUT_MS = 10_000;
 
-/**
- * Mirror the preference to the device-level store and (un)register the OS task
- * to match it.
- *
- * The preference always lands in the store, even when the OS refuses to run
- * background work: the "refresh when opening" half of the feature still reads
- * it, and it is what a later wake would run on if the restriction is lifted.
- */
-async function applyPreference(pref: SportsBackgroundRefresh): Promise<void> {
-  try {
-    await refreshStateStore.setPreference(pref);
-
-    const minutes = schedulerIntervalMinutes(pref);
-    if (minutes === 0) {
-      await expoBackgroundScheduler.unregister();
-      return;
-    }
-
-    if (!(await expoBackgroundScheduler.isAvailable())) {
-      if (!warnedUnavailable) {
-        warnedUnavailable = true;
-        console.warn('[sports-refresh] Background tasks are unavailable; refresh not scheduled.');
-      }
-      return;
-    }
-
-    await expoBackgroundScheduler.register(minutes);
-  } catch (err) {
-    console.warn('[sports-refresh] Could not apply the refresh schedule:', err);
-  }
+interface SportsRefreshSettings {
+  /** False until the user is loaded: the values below are only defaults until then. */
+  hasUser: boolean;
+  /** No sports tab, no sports traffic: every refresh is for that tab alone. */
+  sportsEnabled: boolean;
+  pref: SportsBackgroundRefresh;
 }
 
 /**
- * Keeps the sports background refresh in sync with the current user's
- * preference. Mount once, in the root layout.
+ * The current user's sports refresh settings.
  *
- * The schedule is re-applied on every mount and not just on change: Android
- * drops a registered task when the user force-stops the app, so a plain
- * "register on change" would silently stop refreshing until the setting was
- * touched again.
- *
- * Also drives the "refresh when opening" half of the preference: a cold launch
- * counts as the first open, so it is governed by the same `refreshOnOpen` flag
- * as every later foreground. Both run on the standard TTLs, which makes them a
- * no-op while the cache is fresh.
+ * Selects the primitives, never the user object: this lives in the root
+ * layout, and the object is replaced on every settings write — subscribing to
+ * it would re-render the whole app whenever any preference changes.
  */
-export function useBackgroundRefresh(): void {
-  // Select the primitives, never the user object: this hook lives in the root
-  // layout, and the object is replaced on every settings write — subscribing to
-  // it would re-render the whole app whenever any preference changes.
+function useSportsRefreshSettings(): SportsRefreshSettings {
   const mode = useUserStore(
     (s) =>
       s.currentUser?.settings?.sportsBackgroundRefresh?.mode ??
@@ -108,25 +69,67 @@ export function useBackgroundRefresh(): void {
       s.currentUser?.settings?.sportsBackgroundRefresh?.refreshOnOpen ??
       DEFAULT_SPORTS_BACKGROUND_REFRESH.refreshOnOpen
   );
-  // No sports tab, no sports traffic: every warm below is for that tab alone.
   const sportsEnabled = useUserStore((s) => s.currentUser?.settings?.showSportsTab ?? true);
-  // Until the user is loaded, the settings above are only defaults — acting on
-  // them would make a user who turned the sports tab off pay for it anyway.
   const hasUser = useUserStore((s) => s.currentUser !== null);
 
+  const pref = useMemo(
+    () => ({ mode, intervalHours, dailyTime, refreshOnOpen }),
+    [mode, intervalHours, dailyTime, refreshOnOpen]
+  );
+  return { hasUser, sportsEnabled, pref };
+}
+
+/**
+ * The sports refresh the background task should run on: the user's own
+ * preference, `off` while the sports tab is hidden, or `null` until the user is
+ * loaded (acting on the defaults would schedule a refresh for someone who
+ * turned it off).
+ */
+export function useEffectiveSportsRefresh(): SportsBackgroundRefresh | null {
+  return useEffective(useSportsRefreshSettings());
+}
+
+function useEffective({
+  hasUser,
+  sportsEnabled,
+  pref,
+}: SportsRefreshSettings): SportsBackgroundRefresh | null {
+  return useMemo(() => {
+    if (!hasUser) return null;
+    // A hidden sports tab means the whole feature is off: nothing displays the
+    // data a refresh would fetch. Turning the tab back on restores the mode.
+    return sportsEnabled ? pref : { ...pref, mode: 'off' };
+  }, [hasUser, sportsEnabled, pref]);
+}
+
+/**
+ * Keeps the device-level copy of the sports refresh preference in step with
+ * the current user's, and drives the "refresh when opening" half of it. Mount
+ * once, in the root layout.
+ *
+ * The copy is what the OS background task reads on a wake (see
+ * `refresh-state-store`). It lands even when the OS refuses background work:
+ * the "refresh when opening" half still reads it, and a later wake runs on it
+ * if the restriction is lifted. Registering the OS task itself is app-level
+ * (`src/background/use-background-task`), since it serves the playlist sync as
+ * much as this refresh.
+ *
+ * A cold launch counts as the first open, so it is governed by the same
+ * `refreshOnOpen` flag as every later foreground. Both run on the standard
+ * TTLs, which makes them a no-op while the cache is fresh.
+ */
+export function useBackgroundRefresh(): void {
+  const settings = useSportsRefreshSettings();
+  const effective = useEffective(settings);
+  const { hasUser, sportsEnabled } = settings;
+  const { refreshOnOpen } = settings.pref;
+
   useEffect(() => {
-    // Until the user is loaded these are the shipped defaults, and acting on
-    // them would register the default schedule for someone who turned it off.
-    if (!hasUser) return;
-    // A hidden sports tab means the whole feature is off: the OS task is
-    // unregistered rather than left waking the app for data nothing displays.
-    // Turning the tab back on re-applies the user's own mode from this effect.
-    void applyPreference(
-      sportsEnabled
-        ? { mode, intervalHours, dailyTime, refreshOnOpen }
-        : { mode: 'off', intervalHours, dailyTime, refreshOnOpen }
-    );
-  }, [hasUser, sportsEnabled, mode, intervalHours, dailyTime, refreshOnOpen]);
+    if (!effective) return;
+    refreshStateStore.setPreference(effective).catch((err: unknown) => {
+      console.warn('[sports-refresh] Could not store the refresh preference:', err);
+    });
+  }, [effective]);
 
   useEffect(() => {
     if (!hasUser || !refreshOnOpen || !sportsEnabled) return;

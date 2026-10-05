@@ -72,7 +72,7 @@ export function ErrorState({
       {title ? <ThemedText style={stateStyles.title}>{title}</ThemedText> : null}
       <ThemedText
         style={[stateStyles.message, !title && stateStyles.untitledMessage]}
-        type="subtitle"
+        type="body"
       >
         {message}
       </ThemedText>

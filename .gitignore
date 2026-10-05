@@ -54,6 +54,8 @@ coverage/
 
 # Local SQLite databases
 *.db
+*.db-shm
+*.db-wal
 
 # Claude Code local settings
 .claude/

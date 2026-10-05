@@ -7,7 +7,12 @@ import { COMPLETION_RATIO } from '@/lib/viewing-progress';
 import { executeQuery, executeStatement, getDatabase } from '@/db/sqlite-client';
 import { resetTestDatabases } from '@/test/helpers';
 
-const LATEST_VERSION = 21;
+/**
+ * Every schema migration version, in order. 22 is not among them: it belongs
+ * to the deferred channel-id remap (see the test below).
+ */
+const SCHEMA_VERSIONS = [...Array.from({ length: 21 }, (_, i) => i + 1), 23, 24];
+const LATEST_NAME = 'add_background_sync_on_mobile_data';
 
 const EXPECTED_TABLES = [
   'migrations',
@@ -75,12 +80,9 @@ describe('runMigrations', () => {
   it('records every migration version in order', async () => {
     const rows = await getMigrationRows();
 
-    expect(rows).toHaveLength(LATEST_VERSION);
-    expect(rows.map((row) => row.version)).toEqual(
-      Array.from({ length: LATEST_VERSION }, (_, i) => i + 1),
-    );
+    expect(rows.map((row) => row.version)).toEqual(SCHEMA_VERSIONS);
     expect(rows[0].name).toBe('initial_schema');
-    expect(rows[LATEST_VERSION - 1].name).toBe('add_user_content_reactions');
+    expect(rows[rows.length - 1].name).toBe(LATEST_NAME);
 
     for (const row of rows) {
       expect(row.name).toBeTruthy();
@@ -109,6 +111,54 @@ describe('runMigrations', () => {
         'createdByUserId',
       ]),
     );
+  });
+
+  it('adds the background mobile-data switch, off for existing users (migration 24)', async () => {
+    const columns = await executeQuery<{ name: string; dflt_value: string | null }>(
+      'PRAGMA table_info(user_settings)',
+    );
+    const column = columns.find((c) => c.name === 'backgroundSyncOnMobileData');
+    expect(column?.dflt_value).toBe('0');
+  });
+
+  describe('backfilling unset sync intervals (migration 23)', () => {
+    async function insertPlaylist(
+      id: string,
+      syncInterval: number | null,
+      epgSyncInterval: number | null,
+    ): Promise<void> {
+      const now = '2026-01-01T00:00:00.000Z';
+      await executeStatement(
+        `INSERT INTO playlists (id, name, url, syncInterval, epgSyncInterval, createdAt, updatedAt)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [id, id, `https://iptv.example.com/${id}.m3u`, syncInterval, epgSyncInterval, now, now],
+      );
+    }
+
+    async function intervals(id: string) {
+      const [row] = await executeQuery<{ syncInterval: number | null; epgSyncInterval: number | null }>(
+        'SELECT syncInterval, epgSyncInterval FROM playlists WHERE id = ?',
+        [id],
+      );
+      return row;
+    }
+
+    it('fills NULL with the defaults and leaves Off and explicit values alone', async () => {
+      await insertPlaylist('never-set', null, null);
+      await insertPlaylist('off', 0, 0);
+      await insertPlaylist('chosen', 60, 2880);
+      await insertPlaylist('half-set', 120, null);
+
+      // Rewind to just before migration 23 — the state of a device that last
+      // ran the previous build — and migrate again.
+      await executeStatement('DELETE FROM migrations WHERE version >= ?', [23]);
+      await runMigrations();
+
+      expect(await intervals('never-set')).toEqual({ syncInterval: 360, epgSyncInterval: 1440 });
+      expect(await intervals('off')).toEqual({ syncInterval: 0, epgSyncInterval: 0 });
+      expect(await intervals('chosen')).toEqual({ syncInterval: 60, epgSyncInterval: 2880 });
+      expect(await intervals('half-set')).toEqual({ syncInterval: 120, epgSyncInterval: 1440 });
+    });
   });
 
   it('keeps only the users foreign key on user channel tables (migration 18)', async () => {
@@ -163,7 +213,7 @@ describe('runMigrations', () => {
 
     const after = await getMigrationRows();
     expect(after).toEqual(before);
-    expect(after).toHaveLength(LATEST_VERSION);
+    expect(after).toHaveLength(SCHEMA_VERSIONS.length);
   });
 });
 
@@ -207,6 +257,6 @@ describe('addColumnIfMissing', () => {
     const columns = await columnNames('user_settings');
     expect(columns).toEqual(expect.arrayContaining(['sportsLeagueOrder', 'sportsHideOtherLeagues']));
     const rows = await getMigrationRows();
-    expect(rows).toHaveLength(LATEST_VERSION);
+    expect(rows).toHaveLength(SCHEMA_VERSIONS.length);
   });
 });

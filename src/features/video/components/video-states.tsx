@@ -68,12 +68,10 @@ export function VideoErrorState({ error, onRetry, onBack, isRetrying = false }: 
       </ThemedText>
 
       <ThemedText
-        type="subtitle"
+        type="body"
         style={{
-          fontSize: VIDEO_CONSTANTS.SUBTITLE_SIZE,
           color: VIDEO_COLORS.subtitle,
           textAlign: 'center',
-          lineHeight: VIDEO_CONSTANTS.SUBTITLE_LINE_HEIGHT,
           marginBottom: 12,
         }}
       >

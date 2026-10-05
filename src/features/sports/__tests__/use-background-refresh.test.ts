@@ -18,15 +18,6 @@ import {
 import { __resetSportsLaunchState, startSportsLaunchWarm } from '../background/foreground-refresh';
 import { useBackgroundRefresh } from '../background/use-background-refresh';
 
-// The OS scheduler is the one platform-aware piece here, and registering a real
-// background task says nothing about the warm under test.
-jest.mock('../background/expo-scheduler', () => ({
-  expoBackgroundScheduler: {
-    isAvailable: jest.fn(async () => false),
-    register: jest.fn(async () => undefined),
-    unregister: jest.fn(async () => undefined),
-  },
-}));
 jest.mock('../background/refresh-state-store', () => ({
   refreshStateStore: {
     getPreference: jest.fn(async () => null),

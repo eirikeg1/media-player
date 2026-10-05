@@ -16,7 +16,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBackClose } from '@/hooks/use-back-close';
 import { useLiveTick } from './hooks/use-live-tick';
 import { MatchDetailContent } from './match-detail/match-detail-content';
-import { DETAIL_BACKGROUND } from './match-detail/match-detail-shared';
+import {
+  DARK_MATCH_DETAIL_THEME,
+  MatchDetailThemeProvider,
+} from './match-detail/match-detail-theme';
 import { buildMatchTabs, getFixtureScoreDisplay, isMatchLive } from './match-widgets';
 
 interface MatchWidgetOverlayProps {
@@ -82,8 +85,11 @@ export const MatchWidgetOverlay = memo(function MatchWidgetOverlay({
     setOrientation((current) => (current === 'landscape' ? 'portrait' : 'landscape'));
   }, []);
 
-  // Hardware back closes the overlay first (listener is LIFO, so it runs before
-  // the player's back handler) instead of leaving the stream.
+  // Hardware back closes the overlay instead of leaving the stream. Still a
+  // `BackHandler` rather than a `Modal`: this card is drawn inside the player,
+  // over the video it belongs to. (Under predictive back, which is off — see
+  // `app.config.ts` — the press would still land here, but the system would
+  // first preview the pop it is about to refuse.)
   useBackClose(visible, onClose);
 
   if (!visible || !activeTab) return null;
@@ -105,14 +111,18 @@ export const MatchWidgetOverlay = memo(function MatchWidgetOverlay({
         transform: [{ rotate: '-90deg' as const }],
       };
 
+  // The card floats over video, so its tabs stay on the fixed dark surface they
+  // were designed against whatever the device scheme is.
   const content = (
-    <MatchDetailContent
-      fixture={fixture}
-      activeKey={activeTab.key}
-      homeLabel={score.home}
-      awayLabel={score.away}
-      compact={isLandscape}
-    />
+    <MatchDetailThemeProvider value={DARK_MATCH_DETAIL_THEME}>
+      <MatchDetailContent
+        fixture={fixture}
+        activeKey={activeTab.key}
+        homeLabel={score.home}
+        awayLabel={score.away}
+        compact={isLandscape}
+      />
+    </MatchDetailThemeProvider>
   );
 
   return (
@@ -262,8 +272,8 @@ function TabButton({
   );
 }
 
-// The tabs decide their own surface; the card just adopts it.
-const CARD_BACKGROUND = DETAIL_BACKGROUND;
+// The card is painted in the same surface its tabs are drawn on.
+const CARD_BACKGROUND = DARK_MATCH_DETAIL_THEME.background;
 const FAINT_BORDER = 'rgba(255, 255, 255, 0.12)';
 
 const styles = StyleSheet.create({

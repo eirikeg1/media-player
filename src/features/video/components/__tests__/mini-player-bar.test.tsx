@@ -74,7 +74,7 @@ const MOVIE_ORIGIN = {
  * A minimized session, without the native player a real one owns: the bar only
  * reads it, and its `VideoView` is the mocked one.
  */
-function minimize(origin: PlaybackSession['origin'] = null): void {
+function minimize(origin: PlaybackSession['origin'] = null, pip = false): void {
   usePlaybackSessionStore.setState({
     session: {
       player: { playing: true, pause: jest.fn(), play: jest.fn() },
@@ -90,6 +90,7 @@ function minimize(origin: PlaybackSession['origin'] = null): void {
       screenViewAttached: false,
       sourceAttached: true,
       error: null,
+      pip,
     } as unknown as PlaybackSession,
   });
 }
@@ -136,6 +137,16 @@ describe('MiniPlayerBar visibility', () => {
     await renderBar(<MiniPlayerBar />);
 
     expect(screen.getByText('BBC One HD')).toBeTruthy();
+  });
+
+  it('stands down while the session plays in a picture-in-picture window', async () => {
+    // That window is all the viewer sees of the app, and a second `VideoView`
+    // on the same player would take the picture out of it.
+    minimize(null, true);
+
+    await renderBar(<MiniPlayerBar />);
+
+    expect(screen.queryByText('BBC One HD')).toBeNull();
   });
 
   it('stays out of the way of the full-screen player', async () => {

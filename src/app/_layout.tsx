@@ -7,14 +7,15 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import 'react-native-reanimated';
 import '../global.css';
-// Side-effect import: defines the sports background-refresh task. The
-// definition has to run in global scope on every launch — including the
-// headless one the OS starts for a wake — or the OS finds no executor for the
-// registered task name.
-import '@/features/sports/background/expo-scheduler';
+// Side-effect import: defines the app's background task (playlist, guide and
+// sports sync). The definition has to run in global scope on every launch —
+// including the headless one the OS starts for a wake — or the OS finds no
+// executor for the registered task name.
+import '@/background/expo-background-task';
 
 import { useCallback, useEffect, useState } from 'react';
 
+import { useBackgroundTask } from '@/background/use-background-task';
 import { AnimatedSplashLoader } from '@/components/ui/display/animated-splash-loader';
 import { waitForSportsWarm } from '@/features/sports/background/foreground-refresh';
 import { useBackgroundRefresh } from '@/features/sports/background/use-background-refresh';
@@ -47,8 +48,11 @@ export default function RootLayout() {
   // Start periodic EPG sync scheduler
   useEpgSync();
 
-  // Keep the sports background refresh registered with the OS
+  // Keep the sports refresh preference mirrored and its open-time warm going
   useBackgroundRefresh();
+
+  // Keep the background task (playlists, guides, sports) registered with the OS
+  useBackgroundTask();
 
   // Low-priority startup work, held back until the UI is on screen
   useDeferredStartupWork();

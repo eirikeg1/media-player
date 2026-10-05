@@ -343,6 +343,57 @@ describe('sessionMatches', () => {
   });
 });
 
+describe('setPictureInPicture', () => {
+  it('tracks the picture-in-picture window on the session', () => {
+    start();
+    const player = usePlaybackSessionStore.getState().session!.player;
+    expect(usePlaybackSessionStore.getState().session?.pip).toBe(false);
+
+    usePlaybackSessionStore.getState().setPictureInPicture(player, true);
+    expect(usePlaybackSessionStore.getState().session?.pip).toBe(true);
+
+    usePlaybackSessionStore.getState().setPictureInPicture(player, false);
+    expect(usePlaybackSessionStore.getState().session?.pip).toBe(false);
+  });
+
+  it("ignores a player that is no longer the session's", () => {
+    start();
+    const oldPlayer = usePlaybackSessionStore.getState().session!.player;
+    start();
+
+    // The exit event of the stream that was replaced must not window the new one.
+    usePlaybackSessionStore.getState().setPictureInPicture(oldPlayer, true);
+
+    expect(usePlaybackSessionStore.getState().session?.pip).toBe(false);
+  });
+
+  it('ends with the window when the session minimizes', () => {
+    start();
+    const player = usePlaybackSessionStore.getState().session!.player;
+    usePlaybackSessionStore.getState().setPictureInPicture(player, true);
+
+    // No stop event: the screen left while the window was up. The mini bar
+    // must still appear, or the stream has no control left anywhere.
+    usePlaybackSessionStore.getState().minimize();
+
+    expect(usePlaybackSessionStore.getState().session).toMatchObject({ mode: 'mini', pip: false });
+  });
+
+  it("ends with the window when the screen's view detaches", () => {
+    start();
+    const player = usePlaybackSessionStore.getState().session!.player;
+    usePlaybackSessionStore.getState().setScreenViewAttached(true);
+    usePlaybackSessionStore.getState().setPictureInPicture(player, true);
+
+    usePlaybackSessionStore.getState().setScreenViewAttached(false);
+
+    expect(usePlaybackSessionStore.getState().session).toMatchObject({
+      screenViewAttached: false,
+      pip: false,
+    });
+  });
+});
+
 describe('setSessionError', () => {
   const ERROR: VideoError = {
     type: VideoErrorType.NETWORK_ERROR,

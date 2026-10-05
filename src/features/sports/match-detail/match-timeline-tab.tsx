@@ -4,7 +4,8 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import type { MatchSectionState } from '../hooks/use-match-detail';
 import { MatchTimelineSkeleton } from '../skeletons';
-import { FAINT, MUTED, SectionMessage, StaleNotice, TabScroller } from './match-detail-shared';
+import { SectionMessage, StaleNotice, TabScroller } from './match-detail-shared';
+import { createThemedStyles } from './match-detail-theme';
 
 interface TimelineTabProps {
   state: MatchSectionState<MatchTimeline>;
@@ -23,6 +24,7 @@ export const MatchTimelineTab = memo(function MatchTimelineTab({
   compact = false,
   scrollable = true,
 }: TimelineTabProps) {
+  const styles = useStyles();
   if (state.isLoading) return <MatchTimelineSkeleton compact={compact} />;
   if (state.error) return <SectionMessage text={state.error} />;
 
@@ -58,6 +60,7 @@ export const MatchTimelineTab = memo(function MatchTimelineTab({
 });
 
 function PeriodMarker({ incident }: { incident: MatchIncident }) {
+  const styles = useStyles();
   const score =
     incident.homeScore != null && incident.awayScore != null
       ? `${incident.homeScore} - ${incident.awayScore}`
@@ -77,6 +80,7 @@ function PeriodMarker({ incident }: { incident: MatchIncident }) {
 }
 
 function IncidentRow({ incident }: { incident: MatchIncident }) {
+  const styles = useStyles();
   // Home events sit on the right rail, away on the left; unknown defaults left.
   const isHome = incident.isHome === true;
   const content = <IncidentContent incident={incident} align={isHome ? 'right' : 'left'} />;
@@ -103,6 +107,7 @@ function IncidentContent({
   incident: MatchIncident;
   align: 'left' | 'right';
 }) {
+  const styles = useStyles();
   const alignStyle = align === 'right' ? styles.contentRight : styles.contentLeft;
 
   if (incident.type === 'substitution') {
@@ -186,7 +191,7 @@ function formatMinute(incident: MatchIncident): string {
   return incident.addedTime ? `${incident.time}+${incident.addedTime}'` : `${incident.time}'`;
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((theme) => ({
   content: {
     padding: 16,
     paddingBottom: 28,
@@ -224,26 +229,26 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: 2,
-    backgroundColor: FAINT,
+    backgroundColor: theme.faint,
   },
   node: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#1F1F24',
+    backgroundColor: theme.card,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.2)',
+    borderColor: theme.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
   nodeIcon: {
     fontSize: 14,
-    color: '#FFFFFF',
+    color: theme.text,
     fontWeight: '700',
   },
   minute: {
     marginTop: 3,
-    color: MUTED,
+    color: theme.muted,
     fontSize: 11,
     fontWeight: '600',
   },
@@ -254,26 +259,26 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   primaryText: {
-    color: '#FFFFFF',
+    color: theme.text,
     fontSize: 14,
     fontWeight: '600',
   },
   scoreText: {
-    color: '#1FB66B',
+    color: theme.positive,
     fontWeight: '800',
   },
   secondaryText: {
-    color: MUTED,
+    color: theme.muted,
     fontSize: 12,
     marginTop: 1,
   },
   subIn: {
-    color: '#1FB66B',
+    color: theme.positive,
     fontSize: 13,
     fontWeight: '600',
   },
   subOut: {
-    color: '#D85A4A',
+    color: theme.negative,
     fontSize: 13,
     fontWeight: '600',
     marginTop: 1,
@@ -287,17 +292,17 @@ const styles = StyleSheet.create({
   periodLine: {
     flex: 1,
     height: StyleSheet.hairlineWidth,
-    backgroundColor: FAINT,
+    backgroundColor: theme.border,
   },
   periodChip: {
-    backgroundColor: FAINT,
+    backgroundColor: theme.faint,
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 4,
   },
   periodText: {
-    color: '#FFFFFF',
+    color: theme.text,
     fontSize: 12,
     fontWeight: '700',
   },
-});
+}));

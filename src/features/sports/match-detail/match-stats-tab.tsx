@@ -4,16 +4,8 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import type { MatchSectionState } from '../hooks/use-match-detail';
 import { MatchStatsSkeleton } from '../skeletons';
-import {
-  AWAY_COLOR,
-  ComparisonBar,
-  FAINT,
-  HOME_COLOR,
-  MUTED,
-  SectionMessage,
-  StaleNotice,
-  TabScroller,
-} from './match-detail-shared';
+import { ComparisonBar, SectionMessage, StaleNotice, TabScroller } from './match-detail-shared';
+import { createThemedStyles, useMatchDetailTheme } from './match-detail-theme';
 
 const MOMENTUM_HEIGHT = 72;
 
@@ -31,6 +23,7 @@ export const MatchStatsTab = memo(function MatchStatsTab({
   awayLabel,
   scrollable = true,
 }: StatsTabProps) {
+  const styles = useStyles();
   if (state.isLoading) return <MatchStatsSkeleton />;
   if (state.error) return <SectionMessage text={state.error} />;
 
@@ -82,6 +75,7 @@ export const MatchStatsTab = memo(function MatchStatsTab({
 });
 
 function MatchFactsStrip({ facts }: { facts: MatchStatistics['facts'] }) {
+  const styles = useStyles();
   const parts: string[] = [];
   if (facts.round) parts.push(`Round ${facts.round}`);
   if (facts.venue) parts.push(facts.city ? `${facts.venue}, ${facts.city}` : facts.venue);
@@ -96,16 +90,18 @@ function MatchFactsStrip({ facts }: { facts: MatchStatistics['facts'] }) {
 }
 
 function Legend({ homeLabel, awayLabel }: { homeLabel: string; awayLabel: string }) {
+  const styles = useStyles();
+  const theme = useMatchDetailTheme();
   return (
     <View style={styles.legend}>
       <View style={styles.legendItem}>
-        <View style={[styles.legendDot, { backgroundColor: HOME_COLOR }]} />
+        <View style={[styles.legendDot, { backgroundColor: theme.homeColor }]} />
         <Text style={styles.legendText} numberOfLines={1}>
           {homeLabel}
         </Text>
       </View>
       <View style={styles.legendItem}>
-        <View style={[styles.legendDot, { backgroundColor: AWAY_COLOR }]} />
+        <View style={[styles.legendDot, { backgroundColor: theme.awayColor }]} />
         <Text style={styles.legendText} numberOfLines={1}>
           {awayLabel}
         </Text>
@@ -121,6 +117,8 @@ function Legend({ homeLabel, awayLabel }: { homeLabel: string; awayLabel: string
  * minute so the shape of the game reads at a glance.
  */
 function MomentumGraph({ points }: { points: MomentumPoint[] }) {
+  const styles = useStyles();
+  const theme = useMatchDetailTheme();
   const maxAbs = Math.max(1, ...points.map((p) => Math.abs(p.value)));
   const half = MOMENTUM_HEIGHT / 2;
 
@@ -136,14 +134,14 @@ function MomentumGraph({ points }: { points: MomentumPoint[] }) {
               <View style={styles.momentumTopHalf}>
                 {isHome && (
                   <View
-                    style={[styles.momentumBar, { height: magnitude, backgroundColor: HOME_COLOR }]}
+                    style={[styles.momentumBar, { height: magnitude, backgroundColor: theme.homeColor }]}
                   />
                 )}
               </View>
               <View style={styles.momentumBottomHalf}>
                 {!isHome && (
                   <View
-                    style={[styles.momentumBar, { height: magnitude, backgroundColor: AWAY_COLOR }]}
+                    style={[styles.momentumBar, { height: magnitude, backgroundColor: theme.awayColor }]}
                   />
                 )}
               </View>
@@ -155,20 +153,20 @@ function MomentumGraph({ points }: { points: MomentumPoint[] }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((theme) => ({
   content: {
     padding: 16,
     gap: 20,
     paddingBottom: 28,
   },
   factsStrip: {
-    backgroundColor: FAINT,
+    backgroundColor: theme.faint,
     borderRadius: 10,
     paddingVertical: 8,
     paddingHorizontal: 12,
   },
   factsText: {
-    color: MUTED,
+    color: theme.muted,
     fontSize: 12,
     textAlign: 'center',
     lineHeight: 17,
@@ -183,7 +181,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   blockTitle: {
-    color: '#FFFFFF',
+    color: theme.text,
     fontSize: 14,
     fontWeight: '700',
   },
@@ -207,7 +205,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   legendText: {
-    color: MUTED,
+    color: theme.muted,
     fontSize: 11,
     fontWeight: '600',
     maxWidth: 90,
@@ -217,7 +215,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: theme.border,
   },
   momentumRow: {
     flexDirection: 'row',
@@ -239,4 +237,4 @@ const styles = StyleSheet.create({
   momentumBar: {
     borderRadius: 1,
   },
-});
+}));

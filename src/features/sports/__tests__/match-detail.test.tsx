@@ -7,6 +7,7 @@
  * along with the chrome the surface renders from the fixture it was handed.
  */
 import { formatTime } from '@/lib/format-time';
+import { THEME } from '@/lib/theme';
 import { parseFixtureParam } from '@/features/sports/fixture-param';
 import { teamRefParam } from '@/lib/route-params';
 import { getSportsDatabase } from '@/services/sports-service';
@@ -101,11 +102,26 @@ describe('MatchDetail', () => {
 
     await renderDetail(detail(fixture()));
 
-    // The chrome is themed; only the detail body below it stays fixed-dark.
     await waitFor(() => expect(screen.getByText('Arsenal')).toBeOnTheScreen());
     expect(screen.getByText('Chelsea')).toBeOnTheScreen();
     expect(screen.getAllByText('Premier League · England').length).toBeGreaterThan(0);
   });
+
+  it.each(['dark', 'light'] as const)(
+    'paints the tab body in the %s scheme rather than a fixed dark slab',
+    async (scheme) => {
+      mockedColorScheme.mockReturnValue(scheme);
+
+      await renderDetail(detail(fixture()));
+
+      await waitFor(() => expect(screen.getByText('Arsenal')).toBeOnTheScreen());
+      // The tabs used to be fixed-dark whatever the chrome around them was, which
+      // left a black slab under a light header.
+      expect(screen.getByTestId('match-detail-body')).toHaveStyle({
+        backgroundColor: THEME[scheme].background,
+      });
+    }
+  );
 
   it('says how old a section is when the provider refused to refresh it', async () => {
     const db = (await getSportsDatabase()) as FakeSportsDatabase;

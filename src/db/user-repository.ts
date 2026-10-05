@@ -189,6 +189,7 @@ interface UserSettingsRow {
   sportsLeagueOrder: string | null;
   sportsHideOtherLeagues: number;
   sportsBackgroundRefresh: string | null;
+  backgroundSyncOnMobileData: number;
 }
 
 /**
@@ -259,6 +260,7 @@ const SETTINGS_COLUMN_WRITERS: {
   sportsLeagueOrder: toJsonOrNull,
   sportsHideOtherLeagues: toInteger,
   sportsBackgroundRefresh: toJsonOrNull,
+  backgroundSyncOnMobileData: toInteger,
 };
 
 type SettingsColumn = keyof typeof SETTINGS_COLUMN_WRITERS;
@@ -397,6 +399,7 @@ class SQLiteUserRepository implements IUserRepository {
       sportsLeagueOrder: parseLeagueOrder(row.sportsLeagueOrder),
       sportsHideOtherLeagues: row.sportsHideOtherLeagues === 1,
       sportsBackgroundRefresh: parseBackgroundRefresh(row.sportsBackgroundRefresh),
+      backgroundSyncOnMobileData: row.backgroundSyncOnMobileData === 1,
     };
   }
 
@@ -462,8 +465,8 @@ class SQLiteUserRepository implements IUserRepository {
 
       // Insert default settings
       await tx.runAsync(
-        `INSERT INTO user_settings (userId, theme, language, defaultQuality, defaultSubtitles, activePlaylistId, channelSortBy, parentalControlEnabled, parentalControlPin, showHomeTab, showLiveTab, showVideosTab, showSportsTab, playlistSharingEnabled, privateModeExpiresAt, shareUploadedBackgrounds, sportsCountry, sportsLeagueOrder, sportsHideOtherLeagues, sportsBackgroundRefresh)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO user_settings (userId, theme, language, defaultQuality, defaultSubtitles, activePlaylistId, channelSortBy, parentalControlEnabled, parentalControlPin, showHomeTab, showLiveTab, showVideosTab, showSportsTab, playlistSharingEnabled, privateModeExpiresAt, shareUploadedBackgrounds, sportsCountry, sportsLeagueOrder, sportsHideOtherLeagues, sportsBackgroundRefresh, backgroundSyncOnMobileData)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           userId,
           DEFAULT_USER_SETTINGS.theme,
@@ -485,6 +488,7 @@ class SQLiteUserRepository implements IUserRepository {
           null,
           DEFAULT_USER_SETTINGS.sportsHideOtherLeagues ? 1 : 0,
           null,
+          DEFAULT_USER_SETTINGS.backgroundSyncOnMobileData ? 1 : 0,
         ]
       );
     });

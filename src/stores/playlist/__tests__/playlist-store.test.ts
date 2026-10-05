@@ -4,6 +4,8 @@
  * channel import. Remote playlist/EPG content is served from registered
  * fixtures; only the native file-system boundary is mocked.
  */
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { playlistRepository } from '@/db/playlist-repository';
 import { userRepository } from '@/db/user-repository';
 import { EpgService } from '@/services/epg-service';
@@ -12,6 +14,11 @@ import { useFirstPageCacheStore } from '@/stores/cache/first-page-cache-store';
 import { useImportProgressStore } from '@/stores/playlist/import-progress-store';
 import { usePlaylistStore } from '@/stores/playlist/playlist-store';
 import { useUserStore } from '@/stores/user/user-store';
+import {
+  DEFAULT_EPG_SYNC_MINUTES,
+  DEFAULT_PLAYLIST_SYNC_MINUTES,
+  SYNC_OFF,
+} from '@/lib/sync-intervals';
 import { makePlaylist } from '@/test/factories';
 import {
   M3uParserError,
@@ -202,6 +209,31 @@ describe('addPlaylist', () => {
     // trying again, so the guide would stay missing all day.
     const playlistId = usePlaylistStore.getState().playlists[0].id;
     expect((await playlistRepository.getById(playlistId))?.lastEpgFetchedAt).toBeUndefined();
+  });
+
+  it('stores the default sync intervals, so a new playlist syncs on its own', async () => {
+    await useUserStore.getState().createUser({ username: 'Owner' });
+
+    await usePlaylistStore.getState().addPlaylist({ name: 'My IPTV', url: PLAYLIST_URL });
+
+    const stored = await playlistRepository.getById(usePlaylistStore.getState().playlists[0].id);
+    expect(stored?.syncInterval).toBe(DEFAULT_PLAYLIST_SYNC_MINUTES);
+    expect(stored?.epgSyncInterval).toBe(DEFAULT_EPG_SYNC_MINUTES);
+  });
+
+  it('stores the intervals the form chose, Off included', async () => {
+    await useUserStore.getState().createUser({ username: 'Owner' });
+
+    await usePlaylistStore.getState().addPlaylist({
+      name: 'My IPTV',
+      url: PLAYLIST_URL,
+      syncInterval: SYNC_OFF,
+      epgSyncInterval: 720,
+    });
+
+    const stored = await playlistRepository.getById(usePlaylistStore.getState().playlists[0].id);
+    expect(stored?.syncInterval).toBe(SYNC_OFF);
+    expect(stored?.epgSyncInterval).toBe(720);
   });
 
   it('imports under the id the caller supplied, so it can follow the progress', async () => {
@@ -577,5 +609,22 @@ describe('removePlaylist', () => {
     // deleting the channels first would leave a playlist on screen whose content
     // is already gone.
     expect(order).toEqual(['js', 'rust']);
+  });
+});
+
+describe('module graph', () => {
+  it('does not import the user store, statically or dynamically', () => {
+    const source = readFileSync(
+      join(__dirname, '..', 'playlist-store.ts'),
+      'utf-8',
+    );
+
+    // The dependency runs user store -> playlist store. Reaching back the other
+    // way is the cycle `current-user-context` exists to break: it came back once
+    // as a lazy `await import()`, which a static-import lint rule cannot catch.
+    // Comments are stripped first so a note explaining this rule cannot trip it.
+    const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+    expect(code).not.toMatch(/from\s+['"][^'"]*user-store/);
+    expect(code).not.toMatch(/\bimport\s*\(/);
   });
 });

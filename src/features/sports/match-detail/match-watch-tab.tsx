@@ -4,7 +4,7 @@ import { useUserStore } from '@/stores/user/user-store';
 import { Image } from 'expo-image';
 import type { Fixture, RankedBroadcast } from 'expo-m3u-parser';
 import { memo, useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Text, TouchableOpacity, View } from 'react-native';
 
 import { catchupBroadcasts, catchupWindow, type CatchupWindow } from '../catchup';
 import { formatKickoffTime } from '../fixture-status';
@@ -12,7 +12,9 @@ import { useLiveTick } from '../hooks/use-live-tick';
 import { isMatchConcluded, isMatchLive } from '../match-widgets';
 import { BroadcastRowsSkeleton } from '../skeletons';
 import { SportsCountryPicker } from '../sports-country-picker';
-import { FAINT, MUTED, SectionMessage } from './match-detail-shared';
+import { withAlpha } from '../sports-theme';
+import { SectionMessage } from './match-detail-shared';
+import { createThemedStyles, useMatchDetailTheme } from './match-detail-theme';
 import { WatchModeToggle, type WatchMode } from './watch-mode-toggle';
 
 interface MatchWatchTabProps {
@@ -58,6 +60,7 @@ export const MatchWatchTab = memo(function MatchWatchTab({
   onRetry,
   onPlay,
 }: MatchWatchTabProps) {
+  const styles = useStyles();
   const sportsCountry = useUserStore((s) => s.currentUser?.settings?.sportsCountry ?? '');
   const country = getEffectiveSportsCountry(sportsCountry || undefined);
 
@@ -153,6 +156,8 @@ const BroadcastRow = memo(function BroadcastRow({
   catchup: CatchupWindow | null;
   onPlay: (channelId: string, catchup: CatchupWindow | null) => void;
 }) {
+  const styles = useStyles();
+  const theme = useMatchDetailTheme();
   const start = broadcast.programmeStart ? formatKickoffTime(broadcast.programmeStart) : null;
   const confidence = Math.round(broadcast.confidence * 100);
   const channelName = broadcast.tvgName || broadcast.title;
@@ -169,7 +174,7 @@ const BroadcastRow = memo(function BroadcastRow({
         <Image source={{ uri: broadcast.tvgLogo }} style={styles.channelLogo} contentFit="contain" />
       ) : (
         <View style={styles.channelLogoFallback}>
-          <IconSymbol name="tv.fill" size={16} color="#FFFFFF" />
+          <IconSymbol name="tv.fill" size={16} color={theme.text} />
         </View>
       )}
       <View style={styles.channelInfo}>
@@ -189,12 +194,12 @@ const BroadcastRow = memo(function BroadcastRow({
           <Text style={styles.bestText}>BEST</Text>
         </View>
       )}
-      <IconSymbol name={catchup ? 'gobackward' : 'play.circle.fill'} size={26} color="#34C759" />
+      <IconSymbol name={catchup ? 'gobackward' : 'play.circle.fill'} size={26} color={theme.positive} />
     </TouchableOpacity>
   );
 });
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((theme) => ({
   container: {
     gap: 10,
     padding: 16,
@@ -206,7 +211,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   errorText: {
-    color: MUTED,
+    color: theme.muted,
     fontSize: 14,
     textAlign: 'center',
   },
@@ -214,10 +219,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 9,
     borderRadius: 10,
-    backgroundColor: FAINT,
+    backgroundColor: theme.faint,
   },
   retryText: {
-    color: '#FFFFFF',
+    color: theme.text,
     fontSize: 14,
     fontWeight: '700',
   },
@@ -226,7 +231,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sectionTitle: {
-    color: '#FFFFFF',
+    color: theme.text,
     fontSize: 15,
     fontWeight: '700',
   },
@@ -236,7 +241,7 @@ const styles = StyleSheet.create({
     gap: 12,
     padding: 12,
     borderRadius: 12,
-    backgroundColor: FAINT,
+    backgroundColor: theme.faint,
   },
   channelRowBest: {
     borderWidth: 1,
@@ -253,31 +258,31 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: theme.faint,
   },
   channelInfo: {
     flex: 1,
     gap: 2,
   },
   channelName: {
-    color: '#FFFFFF',
+    color: theme.text,
     fontSize: 15,
     fontWeight: '600',
   },
   channelMeta: {
-    color: MUTED,
+    color: theme.muted,
     fontSize: 12,
   },
   bestPill: {
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 6,
-    backgroundColor: 'rgba(52, 199, 89, 0.2)',
+    backgroundColor: withAlpha(theme.positive, 0.2),
   },
   bestText: {
-    color: '#34C759',
+    color: theme.positive,
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 0.5,
   },
-});
+}));

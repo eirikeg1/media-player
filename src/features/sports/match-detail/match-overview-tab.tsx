@@ -4,7 +4,7 @@ import { memo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { formatKickoffTime } from '../fixture-status';
-import { FAINT, MUTED } from './match-detail-shared';
+import { createThemedStyles, useMatchDetailTheme } from './match-detail-theme';
 
 interface MatchOverviewTabProps {
   fixture: Fixture;
@@ -18,6 +18,8 @@ interface Fact {
 
 /** Match facts: kickoff, competition, round and venue. */
 export const MatchOverviewTab = memo(function MatchOverviewTab({ fixture }: MatchOverviewTabProps) {
+  const styles = useStyles();
+  const theme = useMatchDetailTheme();
   const kickoff = new Date(fixture.kickoffTime * 1000);
   const facts: Fact[] = [
     {
@@ -47,7 +49,7 @@ export const MatchOverviewTab = memo(function MatchOverviewTab({ fixture }: Matc
       <View style={styles.card}>
         {facts.map((fact, index) => (
           <View key={fact.label} style={[styles.row, index < facts.length - 1 && styles.rowDivider]}>
-            <IconSymbol name={fact.icon} size={16} color={MUTED} />
+            <IconSymbol name={fact.icon} size={16} color={theme.muted} />
             <Text style={styles.label}>{fact.label}</Text>
             <Text style={styles.value} numberOfLines={2}>
               {fact.value}
@@ -59,20 +61,20 @@ export const MatchOverviewTab = memo(function MatchOverviewTab({ fixture }: Matc
   );
 });
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((theme) => ({
   container: {
     gap: 10,
     paddingHorizontal: 16,
     paddingTop: 16,
   },
   title: {
-    color: '#FFFFFF',
+    color: theme.text,
     fontSize: 15,
     fontWeight: '700',
   },
   card: {
     borderRadius: 12,
-    backgroundColor: FAINT,
+    backgroundColor: theme.faint,
     paddingHorizontal: 12,
   },
   row: {
@@ -83,18 +85,18 @@ const styles = StyleSheet.create({
   },
   rowDivider: {
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255,255,255,0.12)',
+    borderBottomColor: theme.border,
   },
   label: {
-    color: MUTED,
+    color: theme.muted,
     fontSize: 13,
     width: 92,
   },
   value: {
     flex: 1,
-    color: '#FFFFFF',
+    color: theme.text,
     fontSize: 14,
     fontWeight: '500',
     textAlign: 'right',
   },
-});
+}));

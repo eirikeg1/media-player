@@ -1,7 +1,7 @@
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Text, TouchableOpacity, View } from 'react-native';
 
 import { SPORTS_ACCENT } from '../sports-theme';
-import { FAINT, MUTED } from './match-detail-shared';
+import { createThemedStyles } from './match-detail-theme';
 
 /** Which stream the Watch tab lists: the live channel or the panel's archive. */
 export type WatchMode = 'live' | 'catchup';
@@ -22,6 +22,7 @@ export function WatchModeToggle({
   catchupDisabled,
   catchupDisabledReason,
 }: WatchModeToggleProps) {
+  const styles = useStyles();
   return (
     <View style={styles.container}>
       <View style={styles.segments}>
@@ -49,6 +50,7 @@ function Segment({
   disabled?: boolean;
   onPress: () => void;
 }) {
+  const styles = useStyles();
   return (
     <TouchableOpacity
       style={[styles.segment, selected && styles.segmentSelected]}
@@ -71,7 +73,7 @@ function Segment({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((theme) => ({
   container: {
     gap: 6,
   },
@@ -80,7 +82,7 @@ const styles = StyleSheet.create({
     gap: 4,
     padding: 3,
     borderRadius: 10,
-    backgroundColor: FAINT,
+    backgroundColor: theme.faint,
   },
   segment: {
     flex: 1,
@@ -92,19 +94,21 @@ const styles = StyleSheet.create({
     backgroundColor: SPORTS_ACCENT.tint,
   },
   segmentLabel: {
-    color: MUTED,
+    color: theme.muted,
     fontSize: 13,
     fontWeight: '600',
   },
   segmentLabelSelected: {
+    // On the tint, which is the same colour in either scheme.
     color: '#FFFFFF',
     fontWeight: '700',
   },
+  // Dimmed rather than recoloured: one value reads as "off" on either surface.
   segmentLabelDisabled: {
-    color: 'rgba(255, 255, 255, 0.28)',
+    opacity: 0.45,
   },
   reason: {
-    color: MUTED,
+    color: theme.muted,
     fontSize: 12,
   },
-});
+}));

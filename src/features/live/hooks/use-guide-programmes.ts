@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { channelShiftKey, sameChannelShifts, toChannelShifts } from '@/features/live/hooks/channel-shifts';
 import { EpgService } from '@/services/epg-service';
 import type { Channel } from '@/types/playlist.types';
-import type { EpgProgramme } from 'expo-m3u-parser';
+import type { ChannelShift, EpgProgramme } from 'expo-m3u-parser';
 
 interface UseGuideProgrammesReturn {
   programmesByChannel: Map<string, EpgProgramme[]>;
@@ -16,8 +17,12 @@ interface UseGuideProgrammesReturn {
 
 /**
  * Bulk-fetches programmes for a set of channels within a day's time range.
- * Incrementally fetches only NEW channel IDs when `loadMore` appends channels,
+ * Incrementally fetches only NEW channels when `loadMore` appends channels,
  * merging results into the existing Map. On date change, clears and re-fetches all.
+ *
+ * Each channel is asked about with its `tvg-shift` (see `toChannelShifts`), so a
+ * shifted channel's row is the day the grid is showing rather than the day its
+ * guide was published in.
  */
 export function useGuideProgrammes(
   channels: Channel[],
@@ -31,19 +36,14 @@ export function useGuideProgrammes(
   const fetchGenerationRef = useRef(0);
   const fetchedIdsRef = useRef<Set<string>>(new Set());
 
-  // Extract and stabilize channel IDs
-  const channelIdsRef = useRef<string[]>([]);
-  const currentIds = channels
-    .map((c) => c.tvg?.id)
-    .filter((id): id is string => !!id && id.trim().length > 0);
+  // Extract and stabilize the channels to ask about, each with its own shift
+  const channelsRef = useRef<ChannelShift[]>([]);
+  const currentChannels = toChannelShifts(channels);
 
-  if (
-    currentIds.length !== channelIdsRef.current.length ||
-    currentIds.some((id, i) => id !== channelIdsRef.current[i])
-  ) {
-    channelIdsRef.current = currentIds;
+  if (!sameChannelShifts(currentChannels, channelsRef.current)) {
+    channelsRef.current = currentChannels;
   }
-  const stableChannelIds = channelIdsRef.current;
+  const stableChannels = channelsRef.current;
 
   // Stabilize date to just the day (ignore time component)
   const dateKey = `${selectedDate.getFullYear()}-${selectedDate.getMonth()}-${selectedDate.getDate()}`;
@@ -60,16 +60,18 @@ export function useGuideProgrammes(
   }
 
   useEffect(() => {
-    if (!enabled || stableChannelIds.length === 0) {
+    if (!enabled || stableChannels.length === 0) {
       setProgrammesByChannel(new Map());
       setIsLoading(false);
       fetchedIdsRef.current = new Set();
       return;
     }
 
-    // Compute which IDs are new (not yet fetched)
-    const newIds = stableChannelIds.filter((id) => !fetchedIdsRef.current.has(id));
-    if (newIds.length === 0) return;
+    // Compute which channels are new (not yet fetched)
+    const newChannels = stableChannels.filter(
+      (channel) => !fetchedIdsRef.current.has(channelShiftKey(channel))
+    );
+    if (newChannels.length === 0) return;
 
     const generation = ++fetchGenerationRef.current;
     const isFullFetch = fetchedIdsRef.current.size === 0;
@@ -89,17 +91,13 @@ export function useGuideProgrammes(
         const from = Math.floor(dayStart.getTime() / 1000);
         const to = Math.floor(dayEnd.getTime() / 1000);
 
-        const result = await EpgService.getProgrammesForChannels(
-          newIds,
-          from,
-          to
-        );
+        const result = await EpgService.getProgrammesForChannels(newChannels, from, to);
 
         if (generation !== fetchGenerationRef.current) return;
 
-        // Mark these IDs as fetched
-        for (const id of newIds) {
-          fetchedIdsRef.current.add(id);
+        // Mark these channels as fetched
+        for (const channel of newChannels) {
+          fetchedIdsRef.current.add(channelShiftKey(channel));
         }
 
         if (isFullFetch) {
@@ -130,7 +128,7 @@ export function useGuideProgrammes(
     };
 
     fetchProgrammes();
-  }, [stableChannelIds, dateKey, enabled, reloadToken]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [stableChannels, dateKey, enabled, reloadToken]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const refresh = useCallback(() => {
     fetchGenerationRef.current++;

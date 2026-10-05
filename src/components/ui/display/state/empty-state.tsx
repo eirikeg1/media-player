@@ -58,7 +58,7 @@ export function EmptyState({
       <IconSymbol name={icon} size={64} color={iconColor} />
       <ThemedText style={stateStyles.title}>{title}</ThemedText>
       {message ? (
-        <ThemedText style={stateStyles.message} type="subtitle">
+        <ThemedText style={stateStyles.message} type="body">
           {message}
         </ThemedText>
       ) : null}

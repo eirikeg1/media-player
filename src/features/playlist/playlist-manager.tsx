@@ -9,12 +9,18 @@ import { SWITCH_TRACK, TINT } from '@/lib/theme';
 import { usePlaylistStore } from '@/stores/playlist/playlist-store';
 import { selectExcludeAdult, useUserStore } from '@/stores/user/user-store';
 import { memo, useCallback, useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Switch, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Switch, View } from 'react-native';
 import { PlaylistList } from './playlist-list';
 import { PlaylistModal } from './playlist-modal';
 
 /** How long a playlist error stays on screen before it clears itself. */
 const ERROR_VISIBLE_MS = 8000;
+
+/**
+ * Background work is Android-only (see the sports refresh settings), so the
+ * control for what it may download is not offered on iOS.
+ */
+const SHOWS_BACKGROUND_SYNC = Platform.OS !== 'ios';
 
 /**
  * Manages IPTV playlists with add, view, and error handling.
@@ -45,6 +51,9 @@ export const PlaylistManager = memo(function PlaylistManager() {
   // The switch reads the same selector the content queries do, so it can never
   // claim filtering is off while the queries filter (or the reverse).
   const parentalControlEnabled = useUserStore((state) => selectExcludeAdult(state.currentUser));
+  const backgroundSyncOnMobileData = useUserStore(
+    (state) => state.currentUser?.settings?.backgroundSyncOnMobileData ?? false,
+  );
 
   const handleCloseModal = useCallback(() => {
     setShowModal(false);
@@ -60,6 +69,10 @@ export const PlaylistManager = memo(function PlaylistManager() {
 
   const handleToggleParentalControl = useCallback((value: boolean) => {
     void saveSetting({ parentalControlEnabled: value }, 'adult content filtering');
+  }, []);
+
+  const handleToggleBackgroundSyncOnMobileData = useCallback((value: boolean) => {
+    void saveSetting({ backgroundSyncOnMobileData: value }, 'mobile data sync');
   }, []);
 
   return (
@@ -92,6 +105,24 @@ export const PlaylistManager = memo(function PlaylistManager() {
             accessibilityLabel="Share playlists with other users"
           />
         </View>
+
+        {SHOWS_BACKGROUND_SYNC && (
+          <View style={styles.preferenceRow}>
+            <View style={styles.labelContainer}>
+              <ThemedText style={styles.label}>Sync on Mobile Data</ThemedText>
+              <ThemedText style={styles.helpText}>
+                Let the background sync download playlists and guides over mobile data. A playlist
+                sync can be tens of MB. Syncing while the app is open is not affected.
+              </ThemedText>
+            </View>
+            <Switch
+              value={backgroundSyncOnMobileData}
+              onValueChange={handleToggleBackgroundSyncOnMobileData}
+              trackColor={{ false: SWITCH_TRACK, true: TINT }}
+              accessibilityLabel="Sync playlists and guides in the background on mobile data"
+            />
+          </View>
+        )}
       </View>
 
       {error && (
@@ -162,6 +193,11 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 16,
     fontWeight: '500',
+  },
+  helpText: {
+    fontSize: 12,
+    opacity: 0.6,
+    marginTop: 4,
   },
   addButton: {
     alignItems: 'center',

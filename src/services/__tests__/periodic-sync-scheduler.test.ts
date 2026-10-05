@@ -4,7 +4,7 @@
  * foreground ticking).
  *
  * The scheduler polls the playlist store every 60 seconds and triggers the
- * store's real `refreshPlaylist`, which re-imports the playlist through the
+ * shared `syncPlaylistChannels`, which re-imports the playlist through the
  * Rust-backend fake and persists metadata in the (real-SQLite) repository.
  * Timers are faked; the observable outcomes are imported channels and
  * updated `lastFetchedAt` / `channelCount` values.
@@ -16,6 +16,7 @@ import { RustChannelService } from '../rust-channel-service';
 import { playlistRepository } from '@/db/playlist-repository';
 import { usePlaylistStore } from '@/stores/playlist/playlist-store';
 import { useImportProgressStore } from '@/stores/playlist/import-progress-store';
+import { syncPlaylistGuide } from '@/stores/playlist/playlist-sync';
 import { __registerRemoteM3u, __registerRemoteXmltv } from '@/test/fakes/m3u-database-fake';
 import { makePlaylist } from '@/test/factories';
 import { BASIC_M3U, BASIC_M3U_COUNTS, BASIC_XMLTV } from '@/test/fixtures';
@@ -297,5 +298,30 @@ describe('the shared "a sync is running" gate', () => {
     } finally {
       epgSyncScheduler.stop();
     }
+  });
+
+  it('stands down while a sync started outside the schedulers is running', async () => {
+    // The OS background task runs in the live process when the app was only
+    // backgrounded; its guide download reports no import progress either.
+    const playlist = await seedPlaylist();
+    let releaseEpg = () => {};
+    jest.spyOn(EpgService, 'detectAndFetchEpgSources').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          releaseEpg = () => resolve({ sources: [], succeeded: 0, failed: 0 });
+        }),
+    );
+    const outside = syncPlaylistGuide(playlist.id);
+
+    playlistSyncScheduler.start();
+    await jest.advanceTimersByTimeAsync(MINUTE);
+    expect(await RustChannelService.countChannelsByPlaylist(playlist.id)).toBe(0);
+
+    releaseEpg();
+    await outside;
+    await jest.advanceTimersByTimeAsync(MINUTE);
+    expect(await RustChannelService.countChannelsByPlaylist(playlist.id)).toBe(
+      BASIC_M3U_COUNTS.total,
+    );
   });
 });

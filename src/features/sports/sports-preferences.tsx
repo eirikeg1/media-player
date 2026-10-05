@@ -170,7 +170,7 @@ export const SportsPreferences = memo(function SportsPreferences() {
         <ThemedText style={styles.helpText}>
           {IS_IOS
             ? 'Background refresh is not yet supported on iOS \u2014 data refreshes when you open the app.'
-            : `Keeps today\u2019s matches and your favorite teams up to date while the app is closed. Current: ${describePreference(backgroundRefresh)}`}
+            : `Keeps today\u2019s matches and your favorite teams up to date while the app is closed. Each run first syncs your playlists and guides (on their own intervals; Wi\u2011Fi only unless mobile data is allowed), so matches are found on current channels. Current: ${describePreference(backgroundRefresh)}`}
         </ThemedText>
 
         <View style={styles.dropdown}>

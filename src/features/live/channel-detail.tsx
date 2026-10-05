@@ -59,10 +59,16 @@ export function ChannelDetail({ channel, playlistId, onClose }: ChannelDetailPro
   const ringColor = THEME[colorScheme].ring;
 
   const channelTvgId = channel.tvg?.id ?? null;
+  // `tvg-shift`: both reads apply it, so the "on now" strip and the schedule
+  // under it agree about what this channel is showing.
+  const channelShiftHours = channel.tvg?.shift ?? 0;
 
   const { schedule, isLoading: isScheduleLoading, selectedDate, setSelectedDate } =
-    useChannelSchedule(channelTvgId);
-  const { currentProgramme, nextProgramme } = useNowNextProgrammes(channelTvgId);
+    useChannelSchedule(channelTvgId, channelShiftHours);
+  const { currentProgramme, nextProgramme } = useNowNextProgrammes(
+    channelTvgId,
+    channelShiftHours
+  );
 
   // Shared clock: the progress bar and the "on now" highlight advance with it.
   const now = useNowSeconds();

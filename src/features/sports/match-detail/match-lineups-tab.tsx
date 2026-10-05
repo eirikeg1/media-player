@@ -5,10 +5,8 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import type { MatchSectionState } from '../hooks/use-match-detail';
 import { MatchLineupsSkeleton } from '../skeletons';
+import { withAlpha } from '../sports-theme';
 import {
-  AWAY_COLOR,
-  HOME_COLOR,
-  MUTED,
   playerImageUrl,
   playerInitials,
   PlayerStatsSheet,
@@ -18,6 +16,7 @@ import {
   StaleNotice,
   TabScroller,
 } from './match-detail-shared';
+import { createThemedStyles, useMatchDetailTheme } from './match-detail-theme';
 
 interface SelectedPlayer {
   player: PlayerEntry;
@@ -25,8 +24,15 @@ interface SelectedPlayer {
   accent: string;
 }
 
+/**
+ * The pitch and everything drawn on it. A pitch is green and its markings and
+ * player labels are light in either scheme, so these do not follow the surface —
+ * the labels carry a drop shadow for the same reason.
+ */
 const PITCH_GREEN = '#1f7a40';
 const LINE_COLOR = 'rgba(255, 255, 255, 0.25)';
+const ON_PITCH_TEXT = '#FFFFFF';
+const ON_PITCH_MUTED = 'rgba(255, 255, 255, 0.75)';
 
 interface LineupsTabProps {
   state: MatchSectionState<MatchPlayers>;
@@ -46,6 +52,8 @@ export const MatchLineupsTab = memo(function MatchLineupsTab({
   compact = false,
   scrollable = true,
 }: LineupsTabProps) {
+  const styles = useStyles();
+  const theme = useMatchDetailTheme();
   const [selected, setSelected] = useState<SelectedPlayer | null>(null);
 
   if (state.isLoading) return <MatchLineupsSkeleton compact={compact} />;
@@ -59,7 +67,7 @@ export const MatchLineupsTab = memo(function MatchLineupsTab({
   const onSelect = (player: PlayerEntry, label: string, accent: string) =>
     setSelected({ player, label, accent });
 
-  const motm = bestPlayer(players, homeLabel, awayLabel);
+  const motm = bestPlayer(players, homeLabel, awayLabel, theme.homeColor, theme.awayColor);
 
   return (
     <View style={scrollable ? styles.fill : undefined}>
@@ -121,7 +129,9 @@ interface BestPlayer {
 function bestPlayer(
   players: MatchPlayers,
   homeLabel: string,
-  awayLabel: string
+  awayLabel: string,
+  homeAccent: string,
+  awayAccent: string
 ): BestPlayer | null {
   let best: BestPlayer | null = null;
   let bestRating = -Infinity;
@@ -132,12 +142,13 @@ function bestPlayer(
       bestRating = player.rating;
     }
   };
-  consider(players.home.players, homeLabel, HOME_COLOR);
-  consider(players.away.players, awayLabel, AWAY_COLOR);
+  consider(players.home.players, homeLabel, homeAccent);
+  consider(players.away.players, awayLabel, awayAccent);
   return best;
 }
 
 function PlayerOfTheMatch({ best, onPress }: { best: BestPlayer; onPress: () => void }) {
+  const styles = useStyles();
   const { player } = best;
   return (
     <TouchableOpacity
@@ -176,10 +187,17 @@ function FormationHeader({
   homeLabel: string;
   awayLabel: string;
 }) {
+  const styles = useStyles();
+  const theme = useMatchDetailTheme();
   return (
     <View style={styles.formationRow}>
-      <TeamTag label={homeLabel} formation={home.formation} accent={HOME_COLOR} />
-      <TeamTag label={awayLabel} formation={away.formation} accent={AWAY_COLOR} align="right" />
+      <TeamTag label={homeLabel} formation={home.formation} accent={theme.homeColor} />
+      <TeamTag
+        label={awayLabel}
+        formation={away.formation}
+        accent={theme.awayColor}
+        align="right"
+      />
     </View>
   );
 }
@@ -195,6 +213,7 @@ function TeamTag({
   accent: string;
   align?: 'left' | 'right';
 }) {
+  const styles = useStyles();
   return (
     <View style={[styles.teamTag, align === 'right' && styles.teamTagRight]}>
       <View style={[styles.teamDot, { backgroundColor: accent }]} />
@@ -227,6 +246,8 @@ function Pitch({
   awayLabel: string;
   onSelect: (player: PlayerEntry, label: string, accent: string) => void;
 }) {
+  const styles = useStyles();
+  const theme = useMatchDetailTheme();
   const homeRows = formationRows(home); // [GK, …, FWD]
   const awayRows = formationRows(away);
 
@@ -236,16 +257,16 @@ function Pitch({
       {/* Home half first: GK first → at the outer edge, forwards toward centre. */}
       <TeamHalf
         rows={homeRows}
-        accent={HOME_COLOR}
+        accent={theme.homeColor}
         horizontal={horizontal}
-        onSelect={(player) => onSelect(player, homeLabel, HOME_COLOR)}
+        onSelect={(player) => onSelect(player, homeLabel, theme.homeColor)}
       />
       {/* Away half second: rows reversed so the GK lands on the outer far edge. */}
       <TeamHalf
         rows={[...awayRows].reverse()}
-        accent={AWAY_COLOR}
+        accent={theme.awayColor}
         horizontal={horizontal}
-        onSelect={(player) => onSelect(player, awayLabel, AWAY_COLOR)}
+        onSelect={(player) => onSelect(player, awayLabel, theme.awayColor)}
       />
     </View>
   );
@@ -262,6 +283,7 @@ function TeamHalf({
   horizontal: boolean;
   onSelect: (player: PlayerEntry) => void;
 }) {
+  const styles = useStyles();
   return (
     <View style={[styles.half, { flexDirection: horizontal ? 'row' : 'column' }]}>
       {/* The landscape pitch is the portrait one rotated 90° CCW (top → left),
@@ -295,6 +317,7 @@ function PlayerNode({
   accent: string;
   onPress: () => void;
 }) {
+  const styles = useStyles();
   // The portrait is layered over the initials, so the accent circle shows while
   // the photo loads and stays put if SofaScore has no headshot for the player.
   const [imageFailed, setImageFailed] = useState(false);
@@ -342,6 +365,7 @@ function PlayerNode({
 }
 
 function PitchMarkings({ horizontal }: { horizontal: boolean }) {
+  const styles = useStyles();
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       <View style={horizontal ? styles.centerLineHorizontal : styles.centerLineVertical} />
@@ -363,6 +387,8 @@ function Substitutes({
   awayLabel: string;
   onSelect: (player: PlayerEntry, label: string, accent: string) => void;
 }) {
+  const styles = useStyles();
+  const theme = useMatchDetailTheme();
   const homeSubs = home.players.filter((p) => p.substitute);
   const awaySubs = away.players.filter((p) => p.substitute);
   if (!homeSubs.length && !awaySubs.length) return null;
@@ -374,14 +400,14 @@ function Substitutes({
         <SubColumn
           label={homeLabel}
           subs={homeSubs}
-          accent={HOME_COLOR}
-          onSelect={(player) => onSelect(player, homeLabel, HOME_COLOR)}
+          accent={theme.homeColor}
+          onSelect={(player) => onSelect(player, homeLabel, theme.homeColor)}
         />
         <SubColumn
           label={awayLabel}
           subs={awaySubs}
-          accent={AWAY_COLOR}
-          onSelect={(player) => onSelect(player, awayLabel, AWAY_COLOR)}
+          accent={theme.awayColor}
+          onSelect={(player) => onSelect(player, awayLabel, theme.awayColor)}
         />
       </View>
     </View>
@@ -399,6 +425,7 @@ function SubColumn({
   accent: string;
   onSelect: (player: PlayerEntry) => void;
 }) {
+  const styles = useStyles();
   return (
     <View style={styles.subColumn}>
       <View style={styles.subTeamRow}>
@@ -464,7 +491,7 @@ function displayName(player: PlayerEntry): string {
   return parts[parts.length - 1] || player.name;
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((theme) => ({
   fill: {
     flex: 1,
   },
@@ -477,14 +504,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: 'rgba(255, 200, 0, 0.10)',
-    borderColor: 'rgba(255, 200, 0, 0.35)',
+    backgroundColor: withAlpha(theme.gold, 0.1),
+    borderColor: withAlpha(theme.gold, 0.35),
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 12,
     padding: 12,
   },
   motmStar: {
-    color: '#FFC800',
+    color: theme.gold,
     fontSize: 24,
   },
   motmInfo: {
@@ -492,14 +519,14 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   motmCaption: {
-    color: '#FFC800',
+    color: theme.gold,
     fontSize: 11,
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.4,
   },
   motmName: {
-    color: '#FFFFFF',
+    color: theme.text,
     fontSize: 16,
     fontWeight: '700',
   },
@@ -509,7 +536,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   motmTeam: {
-    color: MUTED,
+    color: theme.muted,
     fontSize: 12,
   },
   formationRow: {
@@ -532,13 +559,13 @@ const styles = StyleSheet.create({
     borderRadius: 4.5,
   },
   teamTagName: {
-    color: '#FFFFFF',
+    color: theme.text,
     fontSize: 13,
     fontWeight: '700',
     flexShrink: 1,
   },
   teamTagFormation: {
-    color: MUTED,
+    color: theme.muted,
     fontSize: 12,
     fontWeight: '600',
   },
@@ -581,7 +608,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.6)',
   },
   jerseyInitials: {
-    color: '#FFFFFF',
+    color: ON_PITCH_TEXT,
     fontSize: 12,
     fontWeight: '800',
   },
@@ -619,7 +646,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   ratingTagText: {
-    color: '#FFFFFF',
+    color: ON_PITCH_TEXT,
     fontSize: 9,
     fontWeight: '800',
   },
@@ -633,7 +660,7 @@ const styles = StyleSheet.create({
   },
   nodeNumber: {
     minWidth: 10,
-    color: MUTED,
+    color: ON_PITCH_MUTED,
     fontSize: 10,
     fontWeight: '700',
     fontVariant: ['tabular-nums'],
@@ -643,7 +670,7 @@ const styles = StyleSheet.create({
   },
   nodeName: {
     flexShrink: 1,
-    color: '#FFFFFF',
+    color: ON_PITCH_TEXT,
     fontSize: 10,
     fontWeight: '600',
     textAlign: 'center',
@@ -682,7 +709,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   subsTitle: {
-    color: '#FFFFFF',
+    color: theme.text,
     fontSize: 14,
     fontWeight: '700',
   },
@@ -701,7 +728,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   subTeamName: {
-    color: '#FFFFFF',
+    color: theme.text,
     fontSize: 12,
     fontWeight: '700',
     flexShrink: 1,
@@ -714,7 +741,7 @@ const styles = StyleSheet.create({
   },
   subNumber: {
     width: 20,
-    color: MUTED,
+    color: theme.muted,
     fontSize: 12,
     fontWeight: '600',
     fontVariant: ['tabular-nums'],
@@ -722,7 +749,7 @@ const styles = StyleSheet.create({
   },
   subName: {
     flex: 1,
-    color: '#FFFFFF',
+    color: theme.text,
     fontSize: 13,
   },
-});
+}));

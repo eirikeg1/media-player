@@ -5,16 +5,21 @@ import type {
   PlaylistCredentials,
   UpdatePlaylistInput,
 } from '@/types/playlist.types';
-import { EpgService, isEpgFetchComplete } from '@/services/epg-service';
 import { RustChannelService } from '@/services/rust-channel-service';
 import { playlistRepository } from '@/db/playlist-repository';
 import { generatePlaylistId, sanitizePlaylistName } from '@/lib/playlist-utils';
+import { DEFAULT_EPG_SYNC_MINUTES, DEFAULT_PLAYLIST_SYNC_MINUTES } from '@/lib/sync-intervals';
 import { isValidUrl, redactCredentials } from '@/lib/url-utils';
-import { M3uParserError, addImportProgressListener } from 'expo-m3u-parser';
 import { useFirstPageCacheStore } from '@/stores/cache/first-page-cache-store';
-import { isImportRunning, useImportProgressStore } from './import-progress-store';
-
-const NO_CHANNELS_MESSAGE = 'No channels found in playlist. Please verify the M3U format.';
+import { publishCatalogueRefresh, subscribeToCatalogueRefreshes } from './catalogue-events';
+import {
+  getCurrentUserContext,
+  getCurrentUserId,
+  persistActivePlaylist,
+} from './current-user-context';
+import { isImportRunning } from './import-progress-store';
+import { syncPlaylistChannels, syncPlaylistGuide } from './playlist-sync';
+import { ImportAlreadyRunningError, runImport } from './run-import';
 
 /**
  * The message to store in `error` and log for a failure.
@@ -25,98 +30,6 @@ const NO_CHANNELS_MESSAGE = 'No channels found in playlist. Please verify the M3
  */
 function toErrorMessage(error: unknown, fallback: string): string {
   return redactCredentials(error instanceof Error ? error.message : fallback);
-}
-
-/**
- * Raised when the native backend is already importing the playlist we asked it
- * to import — a duplicate request, not a failure of the running import.
- */
-export class ImportAlreadyRunningError extends Error {
-  constructor() {
-    super('This playlist is already being imported. Please wait for it to finish.');
-    this.name = 'ImportAlreadyRunningError';
-  }
-}
-
-/**
- * Whether an error is the native backend refusing a duplicate import.
- *
- * The module classifies its own failures, so the code decides it. The message
- * match stays as a fallback for an error that reached us without one — an older
- * native build, or a rejection raised before the coded path.
- */
-function isAlreadyInProgress(error: unknown): boolean {
-  if (error instanceof M3uParserError && error.code) return error.code === 'ALREADY_IN_PROGRESS';
-  const message = error instanceof Error ? error.message : String(error);
-  return /already in progress|already running|AlreadyInProgress/i.test(message);
-}
-
-/** Everything a fetch-and-import needs, whether it adds, refreshes or edits. */
-interface ImportRequest {
-  playlistId: string;
-  name: string;
-  url: string;
-  credentials?: PlaylistCredentials;
-}
-
-/**
- * Run one playlist import, owning its progress lifecycle end to end.
- *
- * The progress entry is started before the native call and removed once the
- * import settles — including on failure, so a broken import can never leave a
- * card stuck "importing" and make the scheduler skip it forever.
- *
- * A call that finds an entry already there joins a run someone else is tracking:
- * it neither resets that run's progress nor removes its entry, because the entry
- * belongs to the caller that created it.
- *
- * @throws ImportAlreadyRunningError when an import for this playlist is already running
- * @throws Error when the download fails or the playlist yields no channels
- */
-async function runImport({ playlistId, name, url, credentials }: ImportRequest): Promise<number> {
-  const progress = () => useImportProgressStore.getState();
-
-  console.log('[PlaylistStore] Importing playlist:', playlistId, redactCredentials(url));
-  const importStart = Date.now();
-  const ownsProgress = progress().startImport(playlistId);
-  if (ownsProgress) {
-    progress().updateProgress(playlistId, 'downloading', 0, 1);
-  }
-
-  const progressSubscription = addImportProgressListener((event) => {
-    progress().updateProgress(event.playlistId, event.phase, event.current, event.total);
-  });
-
-  try {
-    const channelCount = await RustChannelService.fetchAndImportPlaylist(
-      playlistId,
-      name,
-      url,
-      credentials,
-    );
-    if (channelCount === 0) {
-      throw new Error(NO_CHANNELS_MESSAGE);
-    }
-
-    console.log(
-      `[PlaylistStore] Imported ${channelCount} channels (${Date.now() - importStart}ms)`,
-    );
-    progress().updateProgress(playlistId, 'complete', 1, 1);
-    if (ownsProgress) progress().finishImport(playlistId);
-    return channelCount;
-  } catch (error) {
-    // A duplicate rejection means someone else's run is still going: its entry
-    // describes that run, so only an entry this call created may be removed —
-    // otherwise the running import's progress would vanish from the UI and every
-    // gate that reads it would think nothing is importing.
-    if (ownsProgress) progress().finishImport(playlistId);
-    if (isAlreadyInProgress(error)) {
-      throw new ImportAlreadyRunningError();
-    }
-    throw error;
-  } finally {
-    progressSubscription.remove();
-  }
 }
 
 /** Drop the cached first page so the next read reflects the new channels. */
@@ -145,7 +58,6 @@ interface PlaylistState {
   refreshPlaylist: (id: string, options?: { silent?: boolean }) => Promise<void>;
   updatePlaylist: (id: string, updates: UpdatePlaylistInput) => Promise<void>;
   loadPlaylists: () => Promise<void>;
-  markEpgFetched: (id: string) => Promise<void>;
   clearError: () => void;
 
   getActivePlaylist: () => Playlist | null;
@@ -181,8 +93,7 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
         throw new Error('Invalid URL format');
       }
 
-      const { useUserStore } = await import('../user/user-store');
-      const currentUserId = useUserStore.getState().currentUser?.id;
+      const currentUserId = getCurrentUserId() ?? undefined;
       const existingPlaylist = get().playlists.find(
         (p) =>
           p.url.toLowerCase() === input.url.toLowerCase() && p.createdByUserId === currentUserId,
@@ -217,18 +128,22 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
         // lastEpgFetchedAt is stamped by the EPG fetch below, once it succeeds:
         // claiming it here would make the EPG scheduler skip a playlist whose
         // guide never downloaded.
+        // Stored explicitly: a playlist without intervals would never sync on
+        // its own, and "unset" is not a choice the user can see or make.
+        syncInterval: input.syncInterval ?? DEFAULT_PLAYLIST_SYNC_MINUTES,
+        epgSyncInterval: input.epgSyncInterval ?? DEFAULT_EPG_SYNC_MINUTES,
       };
 
       await playlistRepository.create(playlist);
-      invalidateFirstPageCache(playlistId);
 
       set((state) => ({
         playlists: [...state.playlists, playlist],
         error: null,
         activePlaylistId: state.playlists.length === 0 ? playlist.id : state.activePlaylistId,
       }));
+      publishCatalogueRefresh({ part: 'channels', playlist });
 
-      fetchEpgInBackground(playlistId, playlist.epgUrl);
+      fetchEpgInBackground(playlistId);
     } catch (error) {
       const errorMessage = toErrorMessage(error, 'Failed to add playlist');
       console.error('[PlaylistStore] addPlaylist failed:', errorMessage);
@@ -313,13 +228,10 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
     set({ activePlaylistId: id, error: null });
 
     // Also save to current user's settings
-    const { useUserStore } = await import('../user/user-store');
-    const currentUser = useUserStore.getState().currentUser;
-    if (currentUser) {
+    const currentUserId = getCurrentUserId();
+    if (currentUserId) {
       try {
-        await useUserStore
-          .getState()
-          .updateSettings(currentUser.id, { activePlaylistId: id || undefined });
+        await persistActivePlaylist(currentUserId, id);
       } catch (error) {
         console.warn('[PlaylistStore] Failed to save active playlist to user settings:', error);
       }
@@ -332,31 +244,14 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
       set({ error: null });
     }
 
-    const playlist = get().getPlaylistById(id);
-    if (!playlist) {
-      const error = new Error('Playlist not found');
-      if (!silent) set({ error: error.message });
-      throw error;
-    }
-
     try {
-      const channelCount = await runImport({
-        playlistId: id,
-        name: playlist.name,
-        url: playlist.url,
-        credentials: playlist.credentials,
-      });
+      // The shared sync records the import and announces it; the store's copy
+      // is patched by the listener at the bottom of this module.
+      await syncPlaylistChannels(id);
 
-      const updated = await playlistRepository.update(id, {
-        channelCount,
-        lastFetchedAt: new Date(),
-      });
-      set((state) => ({
-        playlists: state.playlists.map((p) => (p.id === id ? updated : p)),
-      }));
-      invalidateFirstPageCache(id);
-
-      fetchEpgInBackground(id, playlist.epgUrl);
+      // A refresh the user asked for means the whole playlist, guide included —
+      // a re-import can also bring guide sources the last download did not know.
+      fetchEpgInBackground(id);
     } catch (error) {
       // The original import is still progressing — not a failure to surface.
       if (error instanceof ImportAlreadyRunningError) {
@@ -436,7 +331,7 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
     }
 
     if (!sourceChanged) {
-      if (epgUrlChanged) fetchEpgInBackground(id, nextEpgUrl);
+      if (epgUrlChanged) fetchEpgInBackground(id);
       return;
     }
 
@@ -452,17 +347,15 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
       // before its import succeeded would describe channels the database does
       // not have, and every later refresh would fetch from a server the user
       // never got a working import from.
-      applyUpdated(
-        await playlistRepository.update(id, {
-          url: nextUrl,
-          ...(credentialsProvided && { credentials: updates.credentials }),
-          channelCount,
-          lastFetchedAt: new Date(),
-        }),
-      );
-      invalidateFirstPageCache(id);
+      const updated = await playlistRepository.update(id, {
+        url: nextUrl,
+        ...(credentialsProvided && { credentials: updates.credentials }),
+        channelCount,
+        lastFetchedAt: new Date(),
+      });
+      publishCatalogueRefresh({ part: 'channels', playlist: updated });
 
-      fetchEpgInBackground(id, nextEpgUrl);
+      fetchEpgInBackground(id);
     } catch (error) {
       const errorMessage = toErrorMessage(error, 'Failed to update playlist');
       set({ error: errorMessage });
@@ -475,16 +368,17 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
 
     try {
       // Load playlists visible to the current user based on sharing settings
-      const { useUserStore } = await import('../user/user-store');
-      const currentUser = useUserStore.getState().currentUser;
-      const sharingEnabled = currentUser?.settings?.playlistSharingEnabled ?? true;
+      const currentUser = await getCurrentUserContext();
       const playlists = currentUser
-        ? await playlistRepository.getVisiblePlaylists(currentUser.id, sharingEnabled)
+        ? await playlistRepository.getVisiblePlaylists(
+            currentUser.userId,
+            currentUser.playlistSharingEnabled,
+          )
         : await playlistRepository.getAll();
 
       // Load active playlist from current user's settings: only keep the saved
       // selection while the playlist it names is still visible.
-      const savedId = currentUser?.settings?.activePlaylistId;
+      const savedId = currentUser?.activePlaylistId;
       let activePlaylistId: string | null =
         savedId && playlists.some((p) => p.id === savedId) ? savedId : null;
 
@@ -506,14 +400,6 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
     }
   },
 
-  markEpgFetched: async (id: string) => {
-    const lastEpgFetchedAt = new Date();
-    await playlistRepository.update(id, { lastEpgFetchedAt });
-    set((state) => ({
-      playlists: state.playlists.map((p) => (p.id === id ? { ...p, lastEpgFetchedAt } : p)),
-    }));
-  },
-
   clearError: () => set({ error: null }),
 
   getActivePlaylist: () => {
@@ -529,29 +415,30 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
 }));
 
 /**
- * Fetch EPG data for a playlist without blocking the caller, stamping
- * `lastEpgFetchedAt` only once the guide is as current as its sources allow — a
- * stamp after a failed download would tell the EPG scheduler to wait a full
- * interval before trying again. Every failure is reported: a silently missing
+ * Fetch EPG data for a playlist without blocking the caller. The shared guide
+ * sync stamps `lastEpgFetchedAt` only once the guide is as current as its
+ * sources allow; every failure is reported here, because a silently missing
  * guide looks like a bug in the EPG screens instead of a failed download.
  */
-function fetchEpgInBackground(playlistId: string, epgUrl?: string): void {
-  EpgService.detectAndFetchEpgSources(playlistId, epgUrl)
-    .then((result) => {
-      if (!isEpgFetchComplete(result)) {
-        console.warn(
-          `[PlaylistStore] ${result.failed} EPG source(s) failed for ${playlistId}; not recording a fetch time`,
-        );
-        return;
-      }
-      return usePlaylistStore
-        .getState()
-        .markEpgFetched(playlistId)
-        .catch((err: unknown) => {
-          console.warn('[PlaylistStore] Failed to record lastEpgFetchedAt:', err);
-        });
-    })
-    .catch((err: unknown) => {
-      console.warn('[PlaylistStore] EPG auto-import failed:', err);
-    });
+function fetchEpgInBackground(playlistId: string): void {
+  syncPlaylistGuide(playlistId).catch((err: unknown) => {
+    console.warn(`[PlaylistStore] EPG auto-import failed for ${playlistId}; not recording a fetch time:`, err);
+  });
 }
+
+/**
+ * Keep the store's copy of a playlist in step with every catalogue refresh,
+ * whichever path made it — the store's own actions, the schedulers or the OS
+ * background task — and drop the first page cached from the old channels.
+ *
+ * A process with no initialised store (a headless background launch) has no
+ * copy to patch; the next `loadPlaylists` reads the stamps from the row.
+ */
+subscribeToCatalogueRefreshes(({ part, playlist }) => {
+  if (part === 'channels') invalidateFirstPageCache(playlist.id);
+  const { playlists } = usePlaylistStore.getState();
+  if (!playlists.some((p) => p.id === playlist.id)) return;
+  usePlaylistStore.setState({
+    playlists: playlists.map((p) => (p.id === playlist.id ? playlist : p)),
+  });
+});
