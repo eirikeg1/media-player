@@ -16,29 +16,15 @@
     * Other useful components?
 
 ## Features
-* **EPG Guide** - Electronic Program Guide with schedule data. Should include filtering, search, etc.
-* **VOD Library** - Separate Movie and Series browsing with genre filtering, search, season/episode grouping
-* **Sports/Football Schedule** - Match schedules and dedicated sports tracking
-* **Catch-up TV** - Watch previously aired content. *Partially done*: football matches play from the panel's archive via the match surface's Watch tab (see `docs/catchup.md`)
-* Catch-up from the live EPG programme list (play any past programme, not just matches)
-* **User Show Tracking** - Track watch progress per show/movie
-* **Favorite Sports Team Tracking** - Track schedule, results and channels for favorite team
-* **Likes & Recommendations** - User likes feed recommendations for shows, movies, and sports
+* Catch-up from the live EPG programme list (play any past programme, not just matches — football catch-up is done, see `docs/catchup.md`)
 * **Multi-user Profiles** - Expand existing partial home page
-* View history. For tv shows: show a "continue watching" link to next episode on
-* When opening match stream through sports schedule: show lineups and match info on screen, either through gui button press, or as main view on phone while casting
 * Skip intro/recap/trailer
-* Playback-speed control and general playback control (choose where to play from a bottom bar/line which tells you where in the video you are)
+* Playback-speed control
 * Catch up feature; show highlights/similar if starting to what from middle of game
-* More detailed status feedback on fetching/parsing playlist 
 
 ## React Native App
-* VOD UI for movies and TV series browsing
-* EPG grid/timeline component
-* Sports schedule views
 * Add profile picture support
 * Enhance error messages in GUI
-* Allow data processing (playlist parsing etc.) happen in the background (perhaps show the status message the same place as the mini player?)
 * Select colors for theme
 * Make more advanced parallax scroll functionalty, will randomly generated collages of video images
 * Custom bitrate (quality)
@@ -47,16 +33,7 @@
 
 ## Rust Backend
 * Infinite scroll: evict old items when exceeding window size
-* Pagination and advanced filtering on playlists
-* Recommendation engine
-* EPG data ingestion and storage
-* VOD catalog indexing (movies, series, seasons, episodes)
 * Advanced filtering
 
 ## Both
-* Recommendations fetched from backend, displayed to the user
 * Watch history sync between app and backend
-
-## Bugs
-* When a video fails to load you get an error up, then an infinite loading spinner
-* Brightness changes lags behind slider in GUI. So the brightness slowly fades into the correct value after adjusting it.
