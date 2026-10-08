@@ -2,9 +2,10 @@
 #
 # Prerequisites (one-time setup):
 #   1. The native/rust-backend submodule pointer must reference a pushed
-#      commit of github.com/eirikeg1/m3u-parser.
-#   2. Because that repo is private, add a read-only deploy key for it and
-#      store the private key as the RUST_BACKEND_DEPLOY_KEY repo secret.
+#      commit of github.com/eirikeg1/media-player-backend.
+#   2. Because that repo is private, it is fetched with a read-only deploy
+#      key stored as the RUST_BACKEND_DEPLOY_KEY repo secret
+#      (see .github/actions/fetch-backend).
 name: test
 
 on:
@@ -17,9 +18,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/fetch-backend
         with:
-          submodules: recursive
-          ssh-key: ${{ secrets.RUST_BACKEND_DEPLOY_KEY }}
+          deploy-key: ${{ secrets.RUST_BACKEND_DEPLOY_KEY }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -33,9 +34,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/fetch-backend
         with:
-          submodules: recursive
-          ssh-key: ${{ secrets.RUST_BACKEND_DEPLOY_KEY }}
+          deploy-key: ${{ secrets.RUST_BACKEND_DEPLOY_KEY }}
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:

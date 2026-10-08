@@ -1,0 +1,35 @@
+# Fetch the private Rust backend submodule after the app has been checked out.
+#
+# The backend is reachable only through a read-only deploy key, and a deploy
+# key grants access to exactly one repository. actions/checkout's `ssh-key`
+# input would switch the *app* fetch to SSH as well, which that key cannot
+# serve, so the app is checked out with the workflow token and only the
+# submodule is fetched with the key.
+name: Fetch backend submodule
+description: Fetch the private native/rust-backend submodule with a read-only deploy key.
+
+inputs:
+  deploy-key:
+    description: Private half of a read-only deploy key registered on the backend repository.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Fetch native/rust-backend
+      shell: bash
+      env:
+        DEPLOY_KEY: ${{ inputs.deploy-key }}
+      run: |
+        set -euo pipefail
+        if [ -z "$DEPLOY_KEY" ]; then
+          echo "::error::RUST_BACKEND_DEPLOY_KEY secret is not set"
+          exit 1
+        fi
+        key_file="$(mktemp)"
+        printf '%s\n' "$DEPLOY_KEY" > "$key_file"
+        mkdir -p ~/.ssh
+        ssh-keyscan -H github.com >> ~/.ssh/known_hosts 2>/dev/null
+        GIT_SSH_COMMAND="ssh -i $key_file -o IdentitiesOnly=yes" \
+          git submodule update --init --recursive
+        rm -f "$key_file"
