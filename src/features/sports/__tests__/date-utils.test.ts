@@ -23,16 +23,12 @@ describe('date utils', () => {
  * A DST day is 23 or 25 hours long. Deriving the window's end by adding a fixed
  * 24 h either cut an hour of fixtures off the end of the day or pulled the next
  * day's first hour into it.
+ *
+ * Relies on the Europe/Oslo zone pinned by `src/test/global-setup.js`; the
+ * dates below are that zone's 2026 transitions.
  */
 describe('dayWindow across a DST transition', () => {
-  const originalTz = process.env.TZ;
-
-  afterEach(() => {
-    process.env.TZ = originalTz;
-  });
-
   it('covers the whole 23-hour spring-forward day', () => {
-    process.env.TZ = 'Europe/Oslo';
     const window = dayWindow(new Date(2026, 2, 29, 12));
 
     expect(window.key).toBe('2026-03-29');
@@ -44,7 +40,6 @@ describe('dayWindow across a DST transition', () => {
   });
 
   it('covers the whole 25-hour fall-back day', () => {
-    process.env.TZ = 'Europe/Oslo';
     const window = dayWindow(new Date(2026, 9, 25, 12));
 
     expect(window.key).toBe('2026-10-25');

@@ -1,6 +1,9 @@
 module.exports = {
   preset: 'jest-expo',
   setupFiles: ['<rootDir>/src/test/setup.ts'],
+  // Pins the process timezone before workers spawn; see the file for why a
+  // test cannot do this itself.
+  globalSetup: '<rootDir>/src/test/global-setup.js',
   testMatch: ['<rootDir>/src/**/__tests__/**/*.test.@(ts|tsx)'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
@@ -18,4 +21,8 @@ module.exports = {
   testPathIgnorePatterns: ['/node_modules/', '<rootDir>/native/', '<rootDir>/.claude/'],
   watchPathIgnorePatterns: ['<rootDir>/native/rust-backend/target', '<rootDir>/.claude/'],
   clearMocks: true,
+  // On a cold transform cache (every CI run) the first render in a suite pays
+  // for transpiling its whole component tree inside the test's own clock,
+  // which overruns the 5 s default. The tests themselves are quick.
+  testTimeout: 30000,
 };
